@@ -12,6 +12,7 @@ let shelves = [];     // Zeilen aus public.shelves für viewedProfile
 let categories = [];  // Zeilen aus public.categories für viewedProfile: {id, name}
 
 let selectedId = null;
+let editingBookId = null;
 let activeCategory = null;
 let searchQuery = '';
 
@@ -547,6 +548,7 @@ function render(){
     el.addEventListener('click', ()=>{
       const id = el.getAttribute('data-id');
       selectedId = (selectedId === id) ? null : id;
+      editingBookId = null;
       closeToc();
       render();
     });
@@ -568,6 +570,7 @@ function buildDetailCard(book, group, owner){
   const wrap = document.createElement('div');
   wrap.className = 'detail-card';
   const meta = [book.author, group.items.length > 1 ? `Band ${book.series_order} · ${group.label}` : null].filter(Boolean).join(' — ');
+  const isEditing = owner && editingBookId === book.id;
 
   const starsHtml = owner
     ? [1,2,3,4,5].map(i=>`<button type="button" class="star-btn" data-star="${i}">${starsSVG(i<=book.rating)}</button>`).join('')
@@ -592,13 +595,27 @@ function buildDetailCard(book, group, owner){
     ? `<div class="detail-actions"><button type="button" class="btn-ghost remove-btn">Aus dem Regal entfernen</button></div>`
     : '';
 
+  const titleBlockHtml = isEditing
+    ? `<div class="detail-edit-fields">
+         <label class="field"><span>Titel</span><input type="text" class="f-edit-title" value="${escapeHtml(book.title)}"></label>
+         <label class="field"><span>Autor:in</span><input type="text" class="f-edit-author" value="${escapeHtml(book.author||'')}"></label>
+         <div class="detail-edit-actions">
+           <button type="button" class="btn-ghost cancel-edit-btn">Abbrechen</button>
+           <button type="button" class="btn-primary save-edit-btn">Speichern</button>
+         </div>
+       </div>`
+    : `<div>
+         <p class="detail-title">${escapeHtml(book.title)}</p>
+         <p class="detail-meta">${escapeHtml(meta)}</p>
+       </div>`;
+
   wrap.innerHTML = `
     <div class="detail-top">
-      <div>
-        <p class="detail-title">${escapeHtml(book.title)}</p>
-        <p class="detail-meta">${escapeHtml(meta)}</p>
+      ${titleBlockHtml}
+      <div class="detail-top-actions">
+        ${owner && !isEditing ? '<button type="button" class="edit-btn" aria-label="Bearbeiten" title="Bearbeiten">✎</button>' : ''}
+        <button class="close-x" aria-label="Schließen">&times;</button>
       </div>
-      <button class="close-x" aria-label="Schließen">&times;</button>
     </div>
     <div class="rating-row">
       <span class="rating-label">Bewertung</span>
@@ -610,10 +627,28 @@ function buildDetailCard(book, group, owner){
     ${actionsHtml}
   `;
 
-  wrap.querySelector('.close-x').addEventListener('click', ()=>{ selectedId=null; render(); });
+  wrap.querySelector('.close-x').addEventListener('click', ()=>{ selectedId=null; editingBookId=null; render(); });
 
   if(owner){
     renderCategoryToggleList(wrap.querySelector('.f-shelf-category-list'), group.key, group.categoryIds);
+
+    if(isEditing){
+      wrap.querySelector('.cancel-edit-btn').addEventListener('click', ()=>{ editingBookId = null; render(); });
+      wrap.querySelector('.save-edit-btn').addEventListener('click', async ()=>{
+        const titleInput = wrap.querySelector('.f-edit-title');
+        const authorInput = wrap.querySelector('.f-edit-author');
+        const newTitle = titleInput.value.trim();
+        if(!newTitle){ showToast('Bitte einen Titel eingeben'); titleInput.focus(); return; }
+        const newAuthor = authorInput.value.trim();
+        const { error } = await supabaseClient.from('books').update({ title: newTitle, author: newAuthor }).eq('id', book.id);
+        if(error){ showToast('Fehler beim Speichern'); return; }
+        editingBookId = null;
+        await refreshAndRender();
+        showToast('Änderungen gespeichert');
+      });
+    } else {
+      wrap.querySelector('.edit-btn').addEventListener('click', ()=>{ editingBookId = book.id; render(); });
+    }
 
     wrap.querySelectorAll('.star-btn').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
@@ -642,6 +677,7 @@ function buildDetailCard(book, group, owner){
         await supabaseClient.from('shelves').delete().eq('id', book.shelf_id);
       }
       selectedId = null;
+      editingBookId = null;
       await refreshAndRender();
       showToast('Buch entfernt');
     });
@@ -913,7 +949,7 @@ function closeBookDetail(){
   bookDetailOverlay.classList.remove('open');
   bookDetailPanel.classList.remove('open');
 }
-bookDetailOverlay.addEventListener('click', ()=>{ selectedId = null; render(); });
+bookDetailOverlay.addEventListener('click', ()=>{ selectedId = null; editingBookId = null; render(); });
 
 function updateBookDetailPanel(groups, owner){
   let selBook = null, selGroup = null;

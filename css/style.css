@@ -365,11 +365,26 @@ h1{
 .detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
 .detail-title{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;margin:0 0 4px;color:var(--cream);}
 .detail-meta{color:var(--cream-dim);font-size:15px;font-style:italic;margin:0 0 14px;}
+.detail-top-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
 .close-x{
   background:none;border:none;color:var(--cream-dim);font-size:22px;
   cursor:pointer;line-height:1;padding:2px;
 }
 .close-x:hover{color:var(--cream);}
+.edit-btn{
+  background:none;border:none;color:var(--cream-dim);font-size:16px;
+  cursor:pointer;line-height:1;padding:2px;
+}
+.edit-btn:hover{color:var(--brass-light);}
+
+.detail-edit-fields{flex:1;}
+.detail-edit-fields .field{margin-top:0;}
+.detail-edit-fields .field + .field{margin-top:10px;}
+.detail-edit-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px;}
+.detail-card input[type=text]{
+  width:100%;background:#1a120b;border:1px solid #4a3420;border-radius:4px;
+  color:var(--cream);font-family:'EB Garamond',serif;font-size:16px;padding:9px 11px;
+}
 
 .rating-row{display:flex;align-items:center;gap:10px;margin:14px 0;}
 .rating-label{font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:var(--brass-light);}
