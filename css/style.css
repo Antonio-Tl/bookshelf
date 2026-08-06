@@ -153,6 +153,10 @@ h1{
   0%, 100% { transform:translateX(-50%) translateY(0); }
   50% { transform:translateX(-50%) translateY(-7px); }
 }
+@keyframes hint-float-mobile{
+  0%, 100% { transform:translateY(0); }
+  50% { transform:translateY(-7px); }
+}
 
 .user-chip{position:relative;}
 .user-chip-trigger{
@@ -478,5 +482,17 @@ textarea:focus, input:focus, select:focus{outline:1px solid var(--brass-light);}
   .user-chip-trigger .chip-name{display:none;}
   .user-chip-trigger{padding:5px;}
   .profile-panel{width:190px;right:-4px;}
-  .login-hint{width:170px;font-size:13px;}
+
+  .login-hint{
+    position:fixed;top:64px;left:10px;right:10px;
+    width:auto;transform:none;
+    font-size:13px;z-index:41;
+    animation:hint-float-mobile 2s ease-in-out infinite;
+  }
+  /* Pfeilspitze soll bei right:17px von der Blasenkante liegen (Button-Mitte).
+     right positioniert die Boxkante, nicht die Spitze - die Box ist durch den
+     Border-Trick 2x so breit wie der jeweilige border-left/right-Wert, daher
+     Korrektur um die halbe Boxbreite. */
+  .login-hint::before{left:auto;right:7px;transform:none;}
+  .login-hint::after{left:auto;right:9px;transform:none;}
 }
