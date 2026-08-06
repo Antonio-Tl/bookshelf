@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Mein Bücherregal</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,500&display=swap');
+
+:root{
+  --bg-deep:#1b140f;
+  --bg-deep-2:#251a12;
+  --wood:#3f2a1c;
+  --wood-light:#5a3c27;
+  --wood-dark:#281a10;
+  --brass:#b8934f;
+  --brass-light:#e0bd7a;
+  --cream:#ece1c8;
+  --cream-dim:#b7a88c;
+  --rr-1:#7c2233; --rr-2:#932c40; --rr-3:#671b28; --rr-4:#a63a4d;
+  --wm-1:#155e52; --wm-2:#1d7568;
+  --fw-1:#4a2f7a; --fw-2:#603b98;
+  --fallback-1:#8a5a1e; --fallback-2:#1e4a7a; --fallback-3:#5c1e5c; --fallback-4:#2e6b3e;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(ellipse at 50% -10%, #2c2016 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-deep-2) 100%);
+  font-family:'EB Garamond', serif;
+  color:var(--cream);
+  min-height:100vh;
+  padding:40px 20px 80px;
+}
+
+.library{max-width:900px;margin:0 auto;}
+
+header{text-align:center;margin-bottom:32px;position:relative;}
+.eyebrow{
+  font-size:12px;letter-spacing:0.32em;text-transform:uppercase;
+  color:var(--brass-light);margin:0 0 10px;font-weight:600;
+}
+h1{
+  font-family:'Playfair Display',serif;font-weight:800;
+  font-size:clamp(32px,6vw,52px);margin:0;color:var(--cream);
+  letter-spacing:0.01em;
+}
+.sub{color:var(--cream-dim);font-size:17px;margin:10px 0 26px;font-style:italic;}
+
+.header-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;}
+
+.add-btn{
+  background:linear-gradient(180deg,var(--brass-light),var(--brass));
+  color:#251a10;border:none;padding:11px 24px;border-radius:3px;
+  font-family:'EB Garamond',serif;font-size:16px;font-weight:600;
+  letter-spacing:0.03em;cursor:pointer;
+  box-shadow:0 2px 0 #6b4f26, 0 6px 14px rgba(0,0,0,0.4);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.add-btn:hover{transform:translateY(-1px);box-shadow:0 3px 0 #6b4f26,0 8px 18px rgba(0,0,0,0.45);}
+.add-btn:active{transform:translateY(1px);box-shadow:0 1px 0 #6b4f26;}
+
+.manage-btn{
+  background:none;border:1px solid #4a3420;color:var(--cream-dim);
+  padding:10px 20px;border-radius:3px;cursor:pointer;
+  font-family:'EB Garamond',serif;font-size:15px;letter-spacing:0.02em;
+  transition:all .15s ease;
+}
+.manage-btn:hover{border-color:var(--brass);color:var(--cream);}
+
+.filter-bar{
+  display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:26px 0 40px;
+}
+
+.search-row{display:flex;justify-content:center;margin-top:24px;}
+.search-box{
+  position:relative;width:100%;max-width:380px;
+}
+.search-box svg{
+  position:absolute;left:13px;top:50%;transform:translateY(-50%);
+  width:16px;height:16px;color:var(--cream-dim);pointer-events:none;
+}
+.search-box input{
+  width:100%;background:#1a120b;border:1px solid #4a3420;border-radius:20px;
+  color:var(--cream);font-family:'EB Garamond',serif;font-size:15px;
+  padding:9px 16px 9px 38px;
+}
+.search-box input:focus{outline:1px solid var(--brass-light);}
+.search-box input::placeholder{color:var(--cream-dim);}
+.search-box .clear-btn{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:var(--cream-dim);cursor:pointer;
+  font-size:18px;line-height:1;padding:2px 6px;display:none;
+}
+.search-box .clear-btn.show{display:block;}
+.search-box .clear-btn:hover{color:var(--cream);}
+.filter-pill{
+  background:#241a10;border:1px solid #4a3420;color:var(--cream-dim);
+  padding:6px 16px;border-radius:20px;font-size:14px;letter-spacing:0.02em;
+  cursor:pointer;font-family:'EB Garamond',serif;transition:all .15s ease;
+}
+.filter-pill:hover{border-color:var(--brass);color:var(--cream);}
+.filter-pill.active{
+  background:linear-gradient(180deg,var(--brass-light),var(--brass));
+  color:#251a10;border-color:var(--brass);font-weight:600;
+}
+
+#shelves{display:flex;flex-direction:column;gap:8px;}
+
+.shelf-group{position:relative;}
+.shelf-label{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:14px;cursor:pointer;padding:4px;border-radius:6px;}
+.shelf-label:hover .plate{background:linear-gradient(180deg,#3a2818,#291c0f);border-color:var(--brass);color:var(--brass-light);}
+.plate{
+  background:linear-gradient(180deg,#2a1c12,#1c1209);
+  border:1px solid #52381f;
+  color:var(--brass-light);
+  padding:6px 22px;border-radius:2px;
+  font-size:13px;letter-spacing:0.18em;text-transform:uppercase;
+  font-weight:600;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.05), 0 3px 6px rgba(0,0,0,0.4);
+  transition:background .15s ease, border-color .15s ease, color .15s ease;
+}
+.cat-tag{
+  font-size:11px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--cream-dim);border:1px solid #4a3420;border-radius:12px;
+  padding:2px 12px;background:rgba(0,0,0,0.2);
+}
+
+.shelf-row{
+  display:flex;align-items:flex-end;justify-content:center;
+  gap:3px;flex-wrap:wrap;padding:0 14px 0;min-height:200px;position:relative;
+}
+
+.bookend{
+  width:14px;height:150px;align-self:flex-end;
+  background:linear-gradient(180deg,var(--brass-light),var(--brass) 60%,#8a6a35);
+  border-radius:3px 3px 1px 1px;
+  box-shadow:0 4px 8px rgba(0,0,0,0.5);
+}
+
+.spine{
+  height:190px;border-radius:4px 4px 2px 2px;
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:14px 0 10px;cursor:pointer;position:relative;
+  box-shadow:inset -6px 0 10px rgba(0,0,0,0.25), inset 3px 0 4px rgba(255,255,255,0.08), 0 6px 10px rgba(0,0,0,0.35);
+  transition:transform .18s ease, box-shadow .18s ease;
+  border-top:2px solid rgba(255,255,255,0.15);
+}
+.spine:hover{transform:translateY(-8px);box-shadow:inset -6px 0 10px rgba(0,0,0,0.25), inset 3px 0 4px rgba(255,255,255,0.1), 0 12px 18px rgba(0,0,0,0.5);}
+.spine.selected{transform:translateY(-10px);}
+
+.spine-title{
+  writing-mode:vertical-rl;text-orientation:mixed;
+  font-family:'Playfair Display',serif;font-weight:700;
+  font-size:15px;color:var(--cream);letter-spacing:0.01em;
+  max-height:140px;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,0.4);
+}
+
+.spine-badge{
+  width:22px;height:22px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,var(--brass-light),var(--brass));
+  color:#241a0e;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'EB Garamond',serif;box-shadow:0 1px 3px rgba(0,0,0,0.5);
+}
+
+.spine-stars{display:flex;gap:1px;}
+.spine-stars svg{width:8px;height:8px;}
+
+.shelf-plank{
+  height:26px;margin-top:-2px;border-radius:2px;
+  background:linear-gradient(180deg,var(--wood-light) 0%,var(--wood) 45%,var(--wood-dark) 100%);
+  box-shadow:0 8px 14px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+  position:relative;margin-bottom:38px;
+}
+.shelf-plank::after{
+  content:'';position:absolute;left:0;right:0;top:100%;height:10px;
+  background:linear-gradient(180deg, rgba(0,0,0,0.35), transparent);
+}
+
+.detail-card{
+  max-width:620px;margin:-14px auto 30px;
+  background:linear-gradient(180deg,#2b1f15,#211710);
+  border:1px solid #4a3420;border-radius:6px;
+  padding:24px 28px;box-shadow:0 16px 30px rgba(0,0,0,0.5);
+  position:relative;
+}
+.detail-card::before{
+  content:'';position:absolute;top:0;left:24px;right:24px;height:3px;
+  background:linear-gradient(90deg,transparent,var(--brass),transparent);
+}
+.detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+.detail-title{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;margin:0 0 4px;color:var(--cream);}
+.detail-meta{color:var(--cream-dim);font-size:15px;font-style:italic;margin:0 0 14px;}
+.close-x{
+  background:none;border:none;color:var(--cream-dim);font-size:22px;
+  cursor:pointer;line-height:1;padding:2px;
+}
+.close-x:hover{color:var(--cream);}
+
+.rating-row{display:flex;align-items:center;gap:10px;margin:14px 0;}
+.rating-label{font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:var(--brass-light);}
+.stars{display:flex;gap:4px;}
+.star-btn{background:none;border:none;cursor:pointer;padding:0;}
+.star-btn svg{width:22px;height:22px;transition:transform .1s ease;}
+.star-btn:hover svg{transform:scale(1.15);}
+
+label.field{display:block;margin-top:14px;}
+label.field span{display:block;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:var(--brass-light);margin-bottom:6px;}
+label.field small{display:block;color:var(--cream-dim);font-size:12px;font-style:italic;margin-top:4px;}
+textarea, input[type=date], select{
+  width:100%;background:#1a120b;border:1px solid #4a3420;border-radius:4px;
+  color:var(--cream);font-family:'EB Garamond',serif;font-size:16px;padding:9px 11px;
+  resize:vertical;
+}
+select{appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23e0bd7a'><path d='M5 7l5 5 5-5z'/></svg>");
+  background-repeat:no-repeat;background-position:right 10px center;padding-right:32px;
+}
+select:disabled{opacity:0.55;cursor:not-allowed;}
+textarea:focus, input:focus, select:focus{outline:1px solid var(--brass-light);}
+
+.detail-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+.btn-ghost{
+  background:none;border:1px solid #4a3420;color:var(--cream-dim);
+  padding:8px 16px;border-radius:4px;cursor:pointer;font-family:'EB Garamond',serif;font-size:15px;
+}
+.btn-ghost:hover{border-color:#7a4a4a;color:#d98a8a;}
+
+.empty-msg{text-align:center;color:var(--cream-dim);font-style:italic;padding:60px 20px;}
+
+/* modal */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(10,7,4,0.72);
+  display:flex;align-items:center;justify-content:center;z-index:50;
+  padding:20px;
+}
+.modal-overlay.hidden{display:none;}
+.modal{
+  background:linear-gradient(180deg,#2b1f15,#1e150e);
+  border:1px solid #4a3420;border-radius:8px;
+  padding:28px 30px;max-width:440px;width:100%;
+  box-shadow:0 24px 50px rgba(0,0,0,0.6);
+  max-height:88vh;overflow-y:auto;
+}
+.modal h2{font-family:'Playfair Display',serif;margin:0 0 18px;color:var(--cream);font-size:24px;}
+.modal input[type=text], .modal input[type=number]{
+  width:100%;background:#1a120b;border:1px solid #4a3420;border-radius:4px;
+  color:var(--cream);font-family:'EB Garamond',serif;font-size:16px;padding:9px 11px;
+}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+.btn-primary{
+  background:linear-gradient(180deg,var(--brass-light),var(--brass));
+  color:#251a10;border:none;padding:9px 20px;border-radius:4px;
+  font-family:'EB Garamond',serif;font-size:15px;font-weight:600;cursor:pointer;
+}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;}
+
+/* category management */
+.cat-chip-list{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px;}
+.cat-chip{
+  display:flex;align-items:center;gap:8px;
+  background:#241a10;border:1px solid #4a3420;border-radius:16px;
+  padding:5px 8px 5px 14px;font-size:14px;color:var(--cream);
+}
+.cat-chip button{
+  background:none;border:none;color:#c98080;cursor:pointer;
+  font-size:15px;line-height:1;padding:0 4px;
+}
+.cat-chip button:hover{color:#ff9a9a;}
+.add-cat-row{display:flex;gap:8px;margin-top:6px;}
+.add-cat-row input{flex:1;}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:#251a10;border:1px solid var(--brass);color:var(--cream);
+  padding:9px 18px;border-radius:5px;font-size:14px;opacity:0;
+  transition:opacity .3s ease;pointer-events:none;z-index:80;
+}
+.toast.show{opacity:1;}
+
+@media (max-width:600px){
+  .spine{height:150px;}
+  .spine-title{font-size:12px;max-height:100px;}
+  .bookend{height:120px;}
+}
+</style>
+</head>
+<body>
+
+<div class="library">
+  <header>
+    <p class="eyebrow">Privatsammlung</p>
+    <h1>Mein Bücherregal</h1>
+    <p class="sub">Gelesene Bücher, nach Reihe geordnet</p>
+    <div class="header-actions">
+      <button class="add-btn" id="openAddBtn">+ Buch hinzufügen</button>
+      <button class="manage-btn" id="openCatBtn">Kategorien verwalten</button>
+    </div>
+  </header>
+  <div class="search-row">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="Reihe oder Buchtitel suchen...">
+      <button type="button" class="clear-btn" id="clearSearchBtn" aria-label="Suche löschen">&times;</button>
+    </div>
+  </div>
+  <div class="filter-bar" id="filterBar"></div>
+  <div id="shelves"></div>
+</div>
+
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal">
+    <h2>Neues Buch</h2>
+    <form id="bookForm">
+      <label class="field"><span>Titel</span>
+        <input type="text" id="f-title">
+      </label>
+      <label class="field"><span>Autor</span>
+        <input type="text" id="f-author">
+      </label>
+      <label class="field"><span>Reihe (leer lassen, falls Einzelband)</span>
+        <input type="text" id="f-series" list="series-list" placeholder="z. B. Red Rising">
+        <datalist id="series-list"></datalist>
+      </label>
+      <label class="field"><span>Kategorie</span>
+        <select id="f-category"></select>
+        <small id="f-category-hint"></small>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="cancelAddBtn">Abbrechen</button>
+        <button type="submit" class="btn-primary">Ins Regal stellen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="catModalOverlay">
+  <div class="modal">
+    <h2>Kategorien verwalten</h2>
+    <div class="cat-chip-list" id="catChipList"></div>
+    <div class="add-cat-row">
+      <input type="text" id="newCatInput" placeholder="Neue Kategorie...">
+      <button type="button" class="btn-primary" id="addCatBtn">Hinzufügen</button>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="closeCatBtn">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="shelfCatModalOverlay">
+  <div class="modal">
+    <h2 id="shelfCatTitle">Kategorie</h2>
+    <label class="field"><span>Kategorie dieser Reihe</span>
+      <select id="shelfCatSelect"></select>
+    </label>
+    <div class="cat-chip-list" id="shelfCatChipList" style="margin-top:22px;"></div>
+    <label class="field"><span>Neue Kategorie anlegen</span>
+      <div class="add-cat-row">
+        <input type="text" id="shelfNewCatInput" placeholder="Neue Kategorie...">
+        <button type="button" class="btn-primary" id="shelfAddCatBtn">Hinzufügen</button>
+      </div>
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="closeShelfCatBtn">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'buecherregal-data';
+
+const seedBooks = [
+  {id:'1', title:'Red Rising', author:'Pierce Brown', series:'Red Rising', order:1, rating:0, notes:'', dateRead:''},
+  {id:'2', title:'Im Haus der Feinde', author:'Pierce Brown', series:'Red Rising', order:2, rating:0, notes:'', dateRead:''},
+  {id:'3', title:'Tag der Entscheidung', author:'Pierce Brown', series:'Red Rising', order:3, rating:0, notes:'', dateRead:''},
+  {id:'4', title:'Asche zu Asche', author:'Pierce Brown', series:'Red Rising', order:4, rating:0, notes:'', dateRead:''},
+  {id:'5', title:'The Will of the Many', author:'James Islington', series:'The Will of the Many', order:1, rating:0, notes:'', dateRead:''},
+  {id:'6', title:'The Strength of the Few', author:'James Islington', series:'The Will of the Many', order:2, rating:0, notes:'', dateRead:''},
+  {id:'7', title:'Fourth Wing', author:'Rebecca Yarros', series:'Fourth Wing', order:1, rating:0, notes:'', dateRead:''},
+  {id:'8', title:'Iron Flame', author:'Rebecca Yarros', series:'Fourth Wing', order:2, rating:0, notes:'', dateRead:''},
+];
+
+const seedCategories = ['Sci-Fi','Fantasy','Romantasy','Thriller','Krimi','Sachbuch'];
+
+const seedShelfCategories = {
+  'Red Rising': 'Sci-Fi',
+  'The Will of the Many': 'Fantasy',
+  'Fourth Wing': 'Romantasy',
+};
+
+let books = [];
+let categories = [];
+let shelfCategories = {};
+let selectedId = null;
+let activeCategory = null;
+let searchQuery = '';
+
+const seriesPalettes = {
+  'Red Rising': ['var(--rr-1)','var(--rr-2)','var(--rr-3)','var(--rr-4)'],
+  'The Will of the Many': ['var(--wm-1)','var(--wm-2)'],
+  'Fourth Wing': ['var(--fw-1)','var(--fw-2)'],
+};
+const fallbackPalette = ['var(--fallback-1)','var(--fallback-2)','var(--fallback-3)','var(--fallback-4)'];
+
+function hashStr(s){
+  let h = 0;
+  for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) >>> 0; }
+  return h;
+}
+
+function colorFor(book){
+  const key = book.series || '__none__';
+  if(seriesPalettes[key]){
+    return seriesPalettes[key][(book.order-1) % seriesPalettes[key].length];
+  }
+  const base = fallbackPalette[hashStr(key) % fallbackPalette.length];
+  return base;
+}
+
+function romanize(num){
+  const map=[[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+  let n=num, out='';
+  for(const [v,s] of map){ while(n>=v){ out+=s; n-=v; } }
+  return out || String(num);
+}
+
+function groupKey(book){
+  return (book.series && book.series.trim()) ? book.series.trim() : ('__single__' + book.id);
+}
+function groupLabel(book){
+  return (book.series && book.series.trim()) ? book.series.trim() : book.title;
+}
+function categoryForKey(key){
+  return shelfCategories[key] || 'Unkategorisiert';
+}
+
+async function loadData(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      books = parsed.books || seedBooks;
+      categories = parsed.categories || seedCategories.slice();
+      shelfCategories = parsed.shelfCategories || Object.assign({}, seedShelfCategories);
+    } else {
+      books = seedBooks;
+      categories = seedCategories.slice();
+      shelfCategories = Object.assign({}, seedShelfCategories);
+      await saveData();
+    }
+  }catch(e){
+    books = seedBooks;
+    categories = seedCategories.slice();
+    shelfCategories = Object.assign({}, seedShelfCategories);
+    await saveData();
+  }
+  render();
+}
+
+async function saveData(){
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify({books, categories, shelfCategories}), false);
+  }catch(e){
+    showToast('Speichern fehlgeschlagen');
+  }
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+function starsSVG(filled){
+  const c = filled ? 'var(--brass-light)' : '#4a3d2c';
+  return `<svg viewBox="0 0 24 24" fill="${c}"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7-6.3-3.9L5.7 21l1.7-7L2 9.2l7.1-.6z"/></svg>`;
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : s;
+  return d.innerHTML;
+}
+
+function buildGroups(bookList){
+  const groups = [];
+  const groupIndex = {};
+  bookList.forEach(b=>{
+    const key = groupKey(b);
+    if(!(key in groupIndex)){
+      groupIndex[key] = groups.length;
+      groups.push({ key, label: groupLabel(b), items: [] });
+    }
+    groups[groupIndex[key]].items.push(b);
+  });
+  groups.forEach(g=>{
+    g.category = categoryForKey(g.key);
+    g.items.sort((a,b)=>(a.order||0)-(b.order||0));
+  });
+  return groups;
+}
+
+function renderFilterBar(){
+  const bar = document.getElementById('filterBar');
+  const allGroups = buildGroups(books);
+  const cats = [...new Set(allGroups.map(g=>g.category))].sort();
+  if(cats.length === 0){ bar.innerHTML = ''; return; }
+  const pills = ['<button class="filter-pill '+(activeCategory===null?'active':'')+'" data-cat="">Alle</button>']
+    .concat(cats.map(c=>`<button class="filter-pill ${activeCategory===c?'active':''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`));
+  bar.innerHTML = pills.join('');
+  bar.querySelectorAll('.filter-pill').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = btn.getAttribute('data-cat');
+      activeCategory = cat === '' ? null : cat;
+      selectedId = null;
+      render();
+    });
+  });
+}
+
+function render(){
+  renderFilterBar();
+  const container = document.getElementById('shelves');
+  container.innerHTML = '';
+
+  if(books.length === 0){
+    container.innerHTML = '<p class="empty-msg">Das Regal ist noch leer. Stell dein erstes Buch hinein.</p>';
+    return;
+  }
+
+  let groups = buildGroups(books);
+  if(activeCategory){
+    groups = groups.filter(g=>g.category===activeCategory);
+  }
+  const q = searchQuery.trim().toLowerCase();
+  if(q){
+    groups = groups.filter(g=>
+      g.label.toLowerCase().includes(q) ||
+      g.items.some(b=>b.title.toLowerCase().includes(q))
+    );
+  }
+
+  if(groups.length === 0){
+    container.innerHTML = q
+      ? '<p class="empty-msg">Keine Treffer für „' + escapeHtml(searchQuery.trim()) + '“.</p>'
+      : '<p class="empty-msg">Keine Bücher in dieser Kategorie.</p>';
+    return;
+  }
+
+  groups.forEach(group=>{
+    const section = document.createElement('section');
+    section.className = 'shelf-group';
+
+    const labelHtml = `<div class="shelf-label" data-key="${escapeHtml(group.key)}" data-label="${escapeHtml(group.label)}"><span class="plate">${escapeHtml(group.label)}</span><span class="cat-tag">${escapeHtml(group.category)}</span></div>`;
+
+    const spinesHtml = group.items.map(b=>{
+      const width = Math.max(46, Math.min(66, 44 + b.title.length*1.1));
+      const isSel = b.id === selectedId;
+      const badge = group.items.length > 1 ? `<div class="spine-badge">${romanize(b.order)}</div>` : `<div class="spine-badge">&nbsp;</div>`;
+      const starsRow = `<div class="spine-stars">${[1,2,3,4,5].map(i=>starsSVG(i<=b.rating)).join('')}</div>`;
+      return `<div class="spine ${isSel?'selected':''}" style="width:${width}px;background:linear-gradient(180deg, ${colorFor(b)}, ${colorFor(b)} 85%, rgba(0,0,0,0.3));" data-id="${b.id}">
+        <div class="spine-title">${escapeHtml(b.title)}</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+          ${starsRow}
+          ${badge}
+        </div>
+      </div>`;
+    }).join('');
+
+    section.innerHTML = `
+      ${labelHtml}
+      <div class="shelf-row">
+        <div class="bookend"></div>
+        ${spinesHtml}
+        <div class="bookend"></div>
+      </div>
+      <div class="shelf-plank"></div>
+    `;
+
+    container.appendChild(section);
+
+    const selBook = group.items.find(b=>b.id===selectedId);
+    if(selBook){
+      container.appendChild(buildDetailCard(selBook, group));
+    }
+  });
+
+  container.querySelectorAll('.spine').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.getAttribute('data-id');
+      selectedId = (selectedId === id) ? null : id;
+      render();
+    });
+  });
+
+  container.querySelectorAll('.shelf-label').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      openShelfCatModal(el.getAttribute('data-key'), el.getAttribute('data-label'));
+    });
+  });
+}
+
+function buildDetailCard(book, group){
+  const wrap = document.createElement('div');
+  wrap.className = 'detail-card';
+  const meta = [book.author, book.series ? `Band ${book.order} · ${book.series}` : null].filter(Boolean).join(' — ');
+  wrap.innerHTML = `
+    <div class="detail-top">
+      <div>
+        <p class="detail-title">${escapeHtml(book.title)}</p>
+        <p class="detail-meta">${escapeHtml(meta)}</p>
+      </div>
+      <button class="close-x" aria-label="Schließen">&times;</button>
+    </div>
+    <div class="rating-row">
+      <span class="rating-label">Bewertung</span>
+      <div class="stars">
+        ${[1,2,3,4,5].map(i=>`<button type="button" class="star-btn" data-star="${i}">${starsSVG(i<=book.rating)}</button>`).join('')}
+      </div>
+    </div>
+    <label class="field"><span>Kategorie der Reihe</span>
+      <select class="f-shelf-category"></select>
+      <small>Gilt für alle Bände von "${escapeHtml(group.label)}".</small>
+    </label>
+    <label class="field"><span>Gelesen am</span>
+      <input type="date" class="f-date" value="${book.dateRead||''}">
+    </label>
+    <label class="field"><span>Notizen</span>
+      <textarea class="f-notes" rows="3" placeholder="Deine Gedanken zum Buch...">${escapeHtml(book.notes||'')}</textarea>
+    </label>
+    <div class="detail-actions">
+      <button type="button" class="btn-ghost remove-btn">Aus dem Regal entfernen</button>
+    </div>
+  `;
+
+  const catSelect = wrap.querySelector('.f-shelf-category');
+  catSelect.innerHTML = categories.map(c=>`<option value="${escapeHtml(c)}" ${c===group.category?'selected':''}>${escapeHtml(c)}</option>`).join('');
+  catSelect.addEventListener('change', (e)=>{
+    shelfCategories[group.key] = e.target.value;
+    saveData();
+    render();
+  });
+
+  wrap.querySelector('.close-x').addEventListener('click', ()=>{ selectedId=null; render(); });
+  wrap.querySelectorAll('.star-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const val = parseInt(btn.getAttribute('data-star'),10);
+      book.rating = (book.rating === val) ? 0 : val;
+      saveData();
+      render();
+    });
+  });
+  wrap.querySelector('.f-date').addEventListener('change', (e)=>{
+    book.dateRead = e.target.value;
+    saveData();
+  });
+  wrap.querySelector('.f-notes').addEventListener('change', (e)=>{
+    book.notes = e.target.value;
+    saveData();
+  });
+  wrap.querySelector('.remove-btn').addEventListener('click', ()=>{
+    books = books.filter(b=>b.id!==book.id);
+    selectedId = null;
+    saveData();
+    render();
+    showToast('Buch entfernt');
+  });
+
+  return wrap;
+}
+
+// ---- Add-book modal ----
+const overlay = document.getElementById('modalOverlay');
+const seriesInput = document.getElementById('f-series');
+const categorySelect = document.getElementById('f-category');
+const categoryHint = document.getElementById('f-category-hint');
+
+function refreshCategorySelectOptions(){
+  categorySelect.innerHTML = categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+}
+
+function updateCategoryFieldForSeries(){
+  const seriesVal = seriesInput.value.trim();
+  const key = seriesVal || null;
+  const existingGroup = buildGroups(books).find(g=> g.label === seriesVal && seriesVal !== '');
+  if(existingGroup){
+    categorySelect.value = existingGroup.category;
+    categorySelect.disabled = true;
+    categoryHint.textContent = 'Übernommen von der bestehenden Reihe "' + seriesVal + '".';
+  } else {
+    categorySelect.disabled = false;
+    categoryHint.textContent = '';
+  }
+}
+
+document.getElementById('openAddBtn').addEventListener('click', ()=>{
+  document.getElementById('f-title').value='';
+  document.getElementById('f-author').value='';
+  seriesInput.value='';
+  const dl = document.getElementById('series-list');
+  const uniqueSeries = [...new Set(books.map(b=>b.series).filter(Boolean))];
+  dl.innerHTML = uniqueSeries.map(s=>`<option value="${escapeHtml(s)}">`).join('');
+  refreshCategorySelectOptions();
+  updateCategoryFieldForSeries();
+  overlay.classList.remove('hidden');
+  document.getElementById('f-title').focus();
+});
+seriesInput.addEventListener('input', updateCategoryFieldForSeries);
+
+document.getElementById('cancelAddBtn').addEventListener('click', ()=>overlay.classList.add('hidden'));
+overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.classList.add('hidden'); });
+
+document.getElementById('bookForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const title = document.getElementById('f-title').value.trim();
+  const author = document.getElementById('f-author').value.trim();
+  const series = seriesInput.value.trim();
+  const category = categorySelect.value;
+
+  if(!title){
+    showToast('Bitte einen Titel eingeben');
+    document.getElementById('f-title').focus();
+    return;
+  }
+  if(!category){
+    showToast('Bitte zuerst eine Kategorie anlegen');
+    return;
+  }
+
+  const sameSeries = series ? books.filter(b=>b.series===series) : [];
+  const order = sameSeries.length ? Math.max(...sameSeries.map(b=>b.order||0)) + 1 : 1;
+  const newBook = {
+    id: 'b' + Date.now(),
+    title, author, series, order,
+    rating:0, notes:'', dateRead:''
+  };
+  const key = groupKey(newBook);
+  if(!(key in shelfCategories)){
+    shelfCategories[key] = category;
+  }
+  books.push(newBook);
+  selectedId = newBook.id;
+  saveData();
+  render();
+  overlay.classList.add('hidden');
+  showToast('„' + title + '" wurde ins Regal gestellt');
+});
+
+// ---- Category management modal ----
+const catOverlay = document.getElementById('catModalOverlay');
+
+function renderCatChips(containerId, afterDelete){
+  const list = document.getElementById(containerId);
+  if(categories.length === 0){
+    list.innerHTML = '<p style="color:var(--cream-dim);font-style:italic;margin:0;">Noch keine Kategorien angelegt.</p>';
+    return;
+  }
+  list.innerHTML = categories.map(c=>`<span class="cat-chip">${escapeHtml(c)}<button type="button" data-cat="${escapeHtml(c)}" aria-label="Entfernen">&times;</button></span>`).join('');
+  list.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = btn.getAttribute('data-cat');
+      categories = categories.filter(c=>c!==cat);
+      Object.keys(shelfCategories).forEach(k=>{
+        if(shelfCategories[k] === cat) delete shelfCategories[k];
+      });
+      if(activeCategory === cat) activeCategory = null;
+      saveData();
+      renderCatChips(containerId);
+      render();
+      if(afterDelete) afterDelete();
+    });
+  });
+}
+
+document.getElementById('openCatBtn').addEventListener('click', ()=>{
+  renderCatChips('catChipList');
+  document.getElementById('newCatInput').value='';
+  catOverlay.classList.remove('hidden');
+});
+document.getElementById('closeCatBtn').addEventListener('click', ()=>catOverlay.classList.add('hidden'));
+catOverlay.addEventListener('click', (e)=>{ if(e.target===catOverlay) catOverlay.classList.add('hidden'); });
+
+document.getElementById('addCatBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('newCatInput');
+  const val = input.value.trim();
+  if(!val) return;
+  if(categories.some(c=>c.toLowerCase()===val.toLowerCase())){
+    showToast('Kategorie existiert bereits');
+    return;
+  }
+  categories.push(val);
+  input.value='';
+  saveData();
+  renderCatChips('catChipList');
+});
+document.getElementById('newCatInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('addCatBtn').click(); }
+});
+
+// ---- Shelf (series) category modal — opened by clicking a shelf label ----
+const shelfCatOverlay = document.getElementById('shelfCatModalOverlay');
+const shelfCatSelect = document.getElementById('shelfCatSelect');
+let currentShelfKey = null;
+
+function openShelfCatModal(key, label){
+  currentShelfKey = key;
+  document.getElementById('shelfCatTitle').textContent = 'Kategorie für „' + label + '“';
+  refreshShelfCatSelect();
+  renderCatChips('shelfCatChipList', refreshShelfCatSelect);
+  document.getElementById('shelfNewCatInput').value = '';
+  shelfCatOverlay.classList.remove('hidden');
+}
+
+function refreshShelfCatSelect(){
+  const current = shelfCategories[currentShelfKey] || categories[0] || '';
+  shelfCatSelect.innerHTML = categories.map(c=>`<option value="${escapeHtml(c)}" ${c===current?'selected':''}>${escapeHtml(c)}</option>`).join('');
+}
+
+shelfCatSelect.addEventListener('change', (e)=>{
+  shelfCategories[currentShelfKey] = e.target.value;
+  saveData();
+  render();
+});
+
+document.getElementById('closeShelfCatBtn').addEventListener('click', ()=>shelfCatOverlay.classList.add('hidden'));
+shelfCatOverlay.addEventListener('click', (e)=>{ if(e.target===shelfCatOverlay) shelfCatOverlay.classList.add('hidden'); });
+
+document.getElementById('shelfAddCatBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('shelfNewCatInput');
+  const val = input.value.trim();
+  if(!val) return;
+  if(categories.some(c=>c.toLowerCase()===val.toLowerCase())){
+    showToast('Kategorie existiert bereits');
+    return;
+  }
+  categories.push(val);
+  input.value='';
+  saveData();
+  renderCatChips('shelfCatChipList', refreshShelfCatSelect);
+  refreshShelfCatSelect();
+});
+document.getElementById('shelfNewCatInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('shelfAddCatBtn').click(); }
+});
+
+
+// ---- Search ----
+const searchInput = document.getElementById('searchInput');
+const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+searchInput.addEventListener('input', (e)=>{
+  searchQuery = e.target.value;
+  clearSearchBtn.classList.toggle('show', searchQuery.trim().length > 0);
+  render();
+});
+clearSearchBtn.addEventListener('click', ()=>{
+  searchQuery = '';
+  searchInput.value = '';
+  clearSearchBtn.classList.remove('show');
+  searchInput.focus();
+  render();
+});
+
+loadData();
+</script>
+</body>
+</html>
