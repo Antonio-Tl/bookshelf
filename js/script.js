@@ -440,17 +440,20 @@ function renderHeader(owner){
   const h1 = document.getElementById('pageTitle');
   const sub = document.getElementById('pageSub');
   const banner = document.getElementById('viewingBanner');
+  const shareBtn = document.getElementById('shareBtn');
 
   if(!viewedProfile){
     h1.textContent = 'Nutzer nicht gefunden';
     sub.textContent = 'Prüf die Schreibweise oder nutze die Suche oben.';
     banner.classList.add('hidden');
+    shareBtn.classList.add('hidden');
     return;
   }
 
   const displayName = viewedProfile.username.charAt(0).toUpperCase() + viewedProfile.username.slice(1);
   h1.textContent = owner ? 'Mein Bücherregal' : `${displayName}'s Bücherregal`;
   sub.textContent = 'Gelesene Bücher, nach Reihe geordnet';
+  shareBtn.classList.remove('hidden');
 
   if(owner){
     banner.classList.add('hidden');
@@ -459,6 +462,26 @@ function renderHeader(owner){
     banner.classList.remove('hidden');
   }
 }
+
+async function shareShelf(){
+  if(!viewedProfile) return;
+  const url = new URL(window.location.origin + window.location.pathname);
+  url.searchParams.set('u', viewedProfile.username);
+  const shareUrl = url.toString();
+
+  if(navigator.share){
+    try { await navigator.share({ title: 'Bücherregal von @' + viewedProfile.username, url: shareUrl }); }
+    catch(e){ /* Nutzer hat den Teilen-Dialog abgebrochen */ }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(shareUrl);
+    showToast('Link kopiert!');
+  } catch(e){
+    showToast(shareUrl);
+  }
+}
+document.getElementById('shareBtn').addEventListener('click', shareShelf);
 
 function render(){
   const owner = isOwnerView();
