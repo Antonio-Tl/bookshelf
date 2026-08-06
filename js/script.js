@@ -165,9 +165,16 @@ function renderAuthUI(){
   const myShelfBtn = document.getElementById('myShelfBtn');
   const loginHint = document.getElementById('loginHint');
 
-  if(currentUser && currentProfile){
+  if(currentUser){
+    // Sobald currentUser gesetzt ist, NIE wieder den Login-Button zeigen -
+    // auch nicht kurzzeitig, während loadProfile() noch lädt.
     loginBtn.classList.add('hidden');
     loginHint.classList.add('hidden');
+
+    if(!currentProfile){
+      userChip.classList.add('hidden');
+      return;
+    }
     userChip.classList.remove('hidden');
 
     const handle = currentProfile.username ? '@' + currentProfile.username : '…';
@@ -208,9 +215,13 @@ document.getElementById('loginHintClose').addEventListener('click', (e)=>{
 });
 
 async function signInWithGoogle(){
+  // Feste URL ohne Query-String (z.B. ?u=irgendwer), damit die Redirect-URL
+  // immer exakt zu einem Eintrag in Supabase -> Authentication -> Redirect URLs
+  // passt, egal von welcher Profilansicht aus man sich anmeldet.
+  const stableRedirect = window.location.origin + window.location.pathname;
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.href }
+    options: { redirectTo: stableRedirect }
   });
   if(error) showToast('Anmeldung fehlgeschlagen');
 }
