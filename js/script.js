@@ -614,6 +614,10 @@ function buildDetailCard(book, group, owner){
     ? `<label class="field"><span>Seitenzahl</span><input type="number" class="f-pages" min="1" placeholder="optional" value="${book.page_count||''}"></label>`
     : (book.page_count ? `<p class="detail-readonly-row"><span class="rating-label">Seitenzahl</span> ${escapeHtml(String(book.page_count))}</p>` : '');
 
+  const summaryBlockHtml = owner
+    ? `<label class="field"><span>Klappentext</span><textarea class="f-summary" rows="3" placeholder="Worum geht's? (optional)">${escapeHtml(book.summary||'')}</textarea></label>`
+    : (book.summary ? `<label class="field"><span>Klappentext</span><p class="detail-notes-readonly">${escapeHtml(book.summary)}</p></label>` : '');
+
   const notesBlockHtml = owner
     ? `<label class="field"><span>Notizen</span><textarea class="f-notes" rows="3" placeholder="Deine Gedanken zum Buch...">${escapeHtml(book.notes||'')}</textarea></label>`
     : (book.notes ? `<label class="field"><span>Notizen</span><p class="detail-notes-readonly">${escapeHtml(book.notes)}</p></label>` : '');
@@ -651,6 +655,7 @@ function buildDetailCard(book, group, owner){
     ${categoryBlockHtml}
     ${dateBlockHtml}
     ${pagesBlockHtml}
+    ${summaryBlockHtml}
     ${notesBlockHtml}
     ${actionsHtml}
   `;
@@ -699,6 +704,11 @@ function buildDetailCard(book, group, owner){
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
     });
+    wrap.querySelector('.f-summary').addEventListener('change', async (e)=>{
+      const { error } = await supabaseClient.from('books').update({summary: e.target.value.trim() || null}).eq('id', book.id);
+      if(error){ showToast('Fehler beim Speichern'); return; }
+      await refreshAndRender();
+    });
     wrap.querySelector('.f-notes').addEventListener('change', async (e)=>{
       const { error } = await supabaseClient.from('books').update({notes: e.target.value}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
@@ -744,6 +754,7 @@ document.getElementById('openAddBtn').addEventListener('click', ()=>{
   document.getElementById('f-title').value='';
   document.getElementById('f-author').value='';
   document.getElementById('f-pages').value='';
+  document.getElementById('f-summary').value='';
   seriesInput.value='';
   addBookSelectedCategoryIds = new Set();
   const dl = document.getElementById('series-list');
@@ -765,6 +776,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
   const author = document.getElementById('f-author').value.trim();
   const pagesVal = document.getElementById('f-pages').value.trim();
   const pageCount = pagesVal ? parseInt(pagesVal, 10) : null;
+  const summary = document.getElementById('f-summary').value.trim() || null;
   const series = seriesInput.value.trim();
 
   if(!title){
@@ -795,7 +807,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
 
   const { data: newBook, error: bookErr } = await supabaseClient
     .from('books')
-    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', date_read:null, page_count: pageCount })
+    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', summary, date_read:null, page_count: pageCount })
     .select().single();
   if(bookErr){ showToast('Fehler beim Speichern des Buchs'); return; }
 
