@@ -279,7 +279,18 @@ document.getElementById('f-username').addEventListener('keydown', (e)=>{
 // ---- Nutzer suchen ----
 const userSearchInput = document.getElementById('userSearchInput');
 const userSearchResults = document.getElementById('userSearchResults');
+const userSearchBox = document.getElementById('userSearchBox');
 let userSearchTimer = null;
+
+const isMobileSearch = () => window.matchMedia('(max-width:600px)').matches;
+
+userSearchBox.addEventListener('click', (e)=>{
+  if(isMobileSearch() && !userSearchBox.classList.contains('expanded')){
+    e.preventDefault();
+    userSearchBox.classList.add('expanded');
+    userSearchInput.focus();
+  }
+});
 
 userSearchInput.addEventListener('input', (e)=>{
   clearTimeout(userSearchTimer);
@@ -318,8 +329,11 @@ async function runUserSearch(q){
 }
 
 document.addEventListener('click', (e)=>{
-  if(!document.querySelector('.user-search-box').contains(e.target)){
+  if(!userSearchBox.contains(e.target)){
     userSearchResults.classList.add('hidden');
+    if(isMobileSearch() && !userSearchInput.value.trim()){
+      userSearchBox.classList.remove('expanded');
+    }
   }
 });
 

@@ -44,10 +44,16 @@ h1{
 
 .hidden{display:none !important;}
 
+.top-navbar{
+  position:fixed;top:0;left:0;right:0;z-index:30;
+  display:flex;align-items:center;
+  padding:16px;background:transparent;pointer-events:none;
+}
+.top-navbar > *{pointer-events:auto;}
+
 .menu-btn{
-  position:fixed;top:16px;left:16px;z-index:30;
   display:flex;align-items:center;justify-content:center;
-  width:38px;height:38px;border-radius:50%;
+  width:38px;height:38px;border-radius:50%;flex:none;
   background:#241a10;border:1px solid #4a3420;color:var(--cream);
   cursor:pointer;padding:0;
 }
@@ -106,7 +112,7 @@ h1{
 .book-detail-panel .detail-card::before{display:none;}
 
 .auth-bar{
-  position:fixed;top:16px;right:16px;z-index:30;
+  margin-left:auto;
   display:flex;justify-content:flex-end;align-items:center;gap:10px;
 }
 .google-btn{
@@ -447,8 +453,21 @@ textarea:focus, input:focus, select:focus{outline:1px solid var(--brass-light);}
   .spine-title{font-size:12px;max-height:100px;}
   .bookend{height:120px;}
 
-  .auth-bar{top:10px;right:10px;justify-content:flex-end;}
-  .auth-bar .user-search-box{width:120px;}
+  .top-navbar{padding:10px;}
+
+  .auth-bar .user-search-box{
+    width:38px;height:38px;overflow:hidden;
+    background:#241a10;border:1px solid #4a3420;border-radius:19px;
+    transition:width .2s ease;
+    flex:none;cursor:pointer;
+  }
+  .auth-bar .user-search-box.expanded{cursor:text;}
+  .auth-bar .user-search-box input{
+    opacity:0;pointer-events:none;
+    transition:opacity .15s ease;
+  }
+  .auth-bar .user-search-box.expanded{width:150px;}
+  .auth-bar .user-search-box.expanded input{opacity:1;pointer-events:auto;}
   .user-search-results{width:200px;}
   .google-btn span{display:none;}
   .google-btn{padding:9px;border-radius:50%;}
