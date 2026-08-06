@@ -610,6 +610,10 @@ function buildDetailCard(book, group, owner){
     ? `<label class="field"><span>Gelesen am</span><input type="date" class="f-date" value="${book.date_read||''}"></label>`
     : (book.date_read ? `<p class="detail-readonly-row"><span class="rating-label">Gelesen am</span> ${escapeHtml(book.date_read)}</p>` : '');
 
+  const pagesBlockHtml = owner
+    ? `<label class="field"><span>Seitenzahl</span><input type="number" class="f-pages" min="1" placeholder="optional" value="${book.page_count||''}"></label>`
+    : (book.page_count ? `<p class="detail-readonly-row"><span class="rating-label">Seitenzahl</span> ${escapeHtml(String(book.page_count))}</p>` : '');
+
   const notesBlockHtml = owner
     ? `<label class="field"><span>Notizen</span><textarea class="f-notes" rows="3" placeholder="Deine Gedanken zum Buch...">${escapeHtml(book.notes||'')}</textarea></label>`
     : (book.notes ? `<label class="field"><span>Notizen</span><p class="detail-notes-readonly">${escapeHtml(book.notes)}</p></label>` : '');
@@ -646,6 +650,7 @@ function buildDetailCard(book, group, owner){
     </div>
     ${categoryBlockHtml}
     ${dateBlockHtml}
+    ${pagesBlockHtml}
     ${notesBlockHtml}
     ${actionsHtml}
   `;
@@ -684,6 +689,13 @@ function buildDetailCard(book, group, owner){
     });
     wrap.querySelector('.f-date').addEventListener('change', async (e)=>{
       const { error } = await supabaseClient.from('books').update({date_read: e.target.value || null}).eq('id', book.id);
+      if(error){ showToast('Fehler beim Speichern'); return; }
+      await refreshAndRender();
+    });
+    wrap.querySelector('.f-pages').addEventListener('change', async (e)=>{
+      const val = e.target.value.trim();
+      const pageCount = val ? parseInt(val, 10) : null;
+      const { error } = await supabaseClient.from('books').update({page_count: pageCount}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
     });
@@ -731,6 +743,7 @@ function updateCategoryFieldForSeries(){
 document.getElementById('openAddBtn').addEventListener('click', ()=>{
   document.getElementById('f-title').value='';
   document.getElementById('f-author').value='';
+  document.getElementById('f-pages').value='';
   seriesInput.value='';
   addBookSelectedCategoryIds = new Set();
   const dl = document.getElementById('series-list');
@@ -750,6 +763,8 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
   if(!isOwnerView()) return;
   const title = document.getElementById('f-title').value.trim();
   const author = document.getElementById('f-author').value.trim();
+  const pagesVal = document.getElementById('f-pages').value.trim();
+  const pageCount = pagesVal ? parseInt(pagesVal, 10) : null;
   const series = seriesInput.value.trim();
 
   if(!title){
@@ -780,7 +795,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
 
   const { data: newBook, error: bookErr } = await supabaseClient
     .from('books')
-    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', date_read:null })
+    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', date_read:null, page_count: pageCount })
     .select().single();
   if(bookErr){ showToast('Fehler beim Speichern des Buchs'); return; }
 

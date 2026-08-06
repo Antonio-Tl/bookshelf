@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,500&display=swap');
 
 :root{
+  color-scheme:dark;
   --bg-deep:#1b140f;
   --bg-deep-2:#251a12;
   --wood:#3f2a1c;
@@ -396,11 +397,12 @@ h1{
 label.field{display:block;margin-top:14px;}
 label.field span{display:block;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:var(--brass-light);margin-bottom:6px;}
 label.field small{display:block;color:var(--cream-dim);font-size:12px;font-style:italic;margin-top:4px;}
-textarea, input[type=date], select{
+textarea, input[type=date], input[type=number], select{
   width:100%;background:#1a120b;border:1px solid #4a3420;border-radius:4px;
   color:var(--cream);font-family:'EB Garamond',serif;font-size:16px;padding:9px 11px;
   resize:vertical;
 }
+input[type=number]{-webkit-appearance:textfield;-moz-appearance:textfield;appearance:textfield;}
 select{appearance:none;-webkit-appearance:none;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23e0bd7a'><path d='M5 7l5 5 5-5z'/></svg>");
   background-repeat:no-repeat;background-position:right 10px center;padding-right:32px;
