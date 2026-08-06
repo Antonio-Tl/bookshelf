@@ -432,6 +432,8 @@ textarea:focus, input:focus, select:focus{outline:1px solid var(--brass-light);}
   max-height:88vh;overflow-y:auto;
 }
 .modal h2{font-family:'Playfair Display',serif;margin:0 0 18px;color:var(--cream);font-size:24px;}
+.modal-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.modal-title-row h2{flex:1;}
 .modal input[type=text], .modal input[type=number]{
   width:100%;background:#1a120b;border:1px solid #4a3420;border-radius:4px;
   color:var(--cream);font-family:'EB Garamond',serif;font-size:16px;padding:9px 11px;

@@ -132,7 +132,17 @@
 
 <div class="modal-overlay hidden" id="shelfCatModalOverlay">
   <div class="modal">
-    <h2 id="shelfCatTitle">Kategorie</h2>
+    <div class="modal-title-row">
+      <h2 id="shelfCatTitle">Kategorie</h2>
+      <button type="button" class="edit-btn" id="shelfEditTitleBtn" aria-label="Titel bearbeiten" title="Titel bearbeiten">✎</button>
+    </div>
+    <label class="field hidden" id="shelfRenameField"><span>Titel der Reihe</span>
+      <input type="text" id="shelfRenameInput">
+    </label>
+    <div class="detail-edit-actions hidden" id="shelfRenameActions">
+      <button type="button" class="btn-ghost" id="shelfRenameCancelBtn">Abbrechen</button>
+      <button type="button" class="btn-primary" id="shelfRenameSaveBtn">Speichern</button>
+    </div>
     <label class="field"><span>Kategorien dieser Reihe</span>
       <div class="cat-toggle-list" id="shelfCatToggleList"></div>
     </label>

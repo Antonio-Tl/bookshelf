@@ -823,11 +823,23 @@ document.getElementById('newCatInput').addEventListener('keydown', (e)=>{
 // ---- Shelf (series) category modal — opened by clicking a shelf label ----
 const shelfCatOverlay = document.getElementById('shelfCatModalOverlay');
 const shelfCatToggleList = document.getElementById('shelfCatToggleList');
+const shelfCatTitleEl = document.getElementById('shelfCatTitle');
+const shelfEditTitleBtn = document.getElementById('shelfEditTitleBtn');
+const shelfRenameField = document.getElementById('shelfRenameField');
+const shelfRenameActions = document.getElementById('shelfRenameActions');
+const shelfRenameInput = document.getElementById('shelfRenameInput');
 let currentShelfKey = null;
+let currentShelfLabel = null;
+
+function setShelfCatTitle(label){
+  currentShelfLabel = label;
+  shelfCatTitleEl.textContent = 'Kategorien für „' + label + '“';
+}
 
 function openShelfCatModal(key, label){
   currentShelfKey = key;
-  document.getElementById('shelfCatTitle').textContent = 'Kategorien für „' + label + '“';
+  setShelfCatTitle(label);
+  closeShelfRenameMode();
   refreshShelfCatToggleList();
   renderCatChips('shelfCatChipList', refreshShelfCatToggleList);
   document.getElementById('shelfNewCatInput').value = '';
@@ -838,6 +850,39 @@ function refreshShelfCatToggleList(){
   const shelf = shelves.find(s=>s.id===currentShelfKey);
   renderCategoryToggleList(shelfCatToggleList, currentShelfKey, shelf ? shelf.categoryIds : []);
 }
+
+function openShelfRenameMode(){
+  shelfCatTitleEl.classList.add('hidden');
+  shelfEditTitleBtn.classList.add('hidden');
+  shelfRenameField.classList.remove('hidden');
+  shelfRenameActions.classList.remove('hidden');
+  shelfRenameInput.value = currentShelfLabel || '';
+  shelfRenameInput.focus();
+}
+
+function closeShelfRenameMode(){
+  shelfCatTitleEl.classList.remove('hidden');
+  shelfEditTitleBtn.classList.remove('hidden');
+  shelfRenameField.classList.add('hidden');
+  shelfRenameActions.classList.add('hidden');
+}
+
+shelfEditTitleBtn.addEventListener('click', openShelfRenameMode);
+document.getElementById('shelfRenameCancelBtn').addEventListener('click', closeShelfRenameMode);
+document.getElementById('shelfRenameSaveBtn').addEventListener('click', async ()=>{
+  const newLabel = shelfRenameInput.value.trim();
+  if(!newLabel){ showToast('Bitte einen Titel eingeben'); shelfRenameInput.focus(); return; }
+  const { error } = await supabaseClient.from('shelves').update({ label: newLabel }).eq('id', currentShelfKey);
+  if(error){ showToast('Fehler beim Speichern'); return; }
+  setShelfCatTitle(newLabel);
+  closeShelfRenameMode();
+  await refreshAndRender();
+  showToast('Titel gespeichert');
+});
+shelfRenameInput.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('shelfRenameSaveBtn').click(); }
+  if(e.key === 'Escape'){ e.preventDefault(); closeShelfRenameMode(); }
+});
 
 document.getElementById('closeShelfCatBtn').addEventListener('click', ()=>shelfCatOverlay.classList.add('hidden'));
 shelfCatOverlay.addEventListener('click', (e)=>{ if(e.target===shelfCatOverlay) shelfCatOverlay.classList.add('hidden'); });
