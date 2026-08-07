@@ -261,7 +261,7 @@ document.getElementById('saveUsernameBtn').addEventListener('click', async ()=>{
   const input = document.getElementById('f-username');
   const val = input.value.trim().toLowerCase();
   if(!/^[a-z0-9_]{3,20}$/.test(val)){
-    showToast('3–20 Zeichen: a-z, 0-9, _');
+    showToast('3-20 Zeichen: a-z, 0-9, _');
     return;
   }
   const { error } = await supabaseClient.from('profiles').update({ username: val }).eq('id', currentUser.id);
@@ -592,7 +592,7 @@ function render(){
 function buildDetailCard(book, group, owner){
   const wrap = document.createElement('div');
   wrap.className = 'detail-card';
-  const meta = [book.author, group.items.length > 1 ? `Band ${book.series_order} · ${group.label}` : null].filter(Boolean).join(' — ');
+  const meta = [book.author, group.items.length > 1 ? `Band ${book.series_order} · ${group.label}` : null].filter(Boolean).join(', ');
   const isEditing = owner && editingBookId === book.id;
 
   const starsHtml = owner

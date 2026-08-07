@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /buecherregal.html
+
+Sitemap: https://bookshelf.antonio-tl.com/sitemap.xml
