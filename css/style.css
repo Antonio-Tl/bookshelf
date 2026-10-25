@@ -1456,6 +1456,120 @@ h1 {
 .toc-item:focus-visible {
   outline-offset: -2px;
 }
+.toc-list {
+  flex: 1;
+  min-height: 0;
+}
+.toc-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.toc-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+}
+.toc-action:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.toc-action svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.toc-action span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.toc-action b {
+  font-size: 14px;
+  font-weight: 600;
+}
+.toc-action small {
+  color: var(--dim);
+  font-size: 12px;
+}
+#installBtn svg {
+  color: var(--red);
+}
+
+/* Einstellungen */
+.settings-modal {
+  max-width: 520px;
+}
+.settings-group {
+  margin-top: 22px;
+}
+.settings-group h3 {
+  margin: 0 0 4px;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.setting-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.setting-row b {
+  font-size: 15px;
+  font-weight: 600;
+}
+.setting-row small {
+  color: var(--dim);
+  font-size: 13px;
+}
+.setting-row select {
+  width: auto;
+  min-width: 170px;
+  flex: none;
+}
+.setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 2px;
+}
+.install-steps {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+html select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  cursor: pointer;
+}
 
 .drawer {
   right: 0;
@@ -2198,6 +2312,12 @@ select:focus {
   .field-row {
     grid-template-columns: 1fr;
     gap: 0;
+  }
+  .setting-row {
+    flex-wrap: wrap;
+  }
+  .setting-row select {
+    width: 100%;
   }
   .modal {
     padding: 24px 20px;

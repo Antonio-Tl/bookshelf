@@ -1,0 +1,17 @@
+{
+  "name": "Bücherregal",
+  "short_name": "Bücherregal",
+  "description": "Deine gelesenen Bücher in einem virtuellen Bücherregal, sortiert nach Reihen.",
+  "lang": "de",
+  "start_url": "./?source=app",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ece6dc",
+  "theme_color": "#ece6dc",
+  "icons": [
+    { "src": "img/favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/favicon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "img/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

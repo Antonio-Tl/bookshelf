@@ -21,6 +21,11 @@
 <link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16.png?v=3">
 <link rel="icon" type="image/png" sizes="192x192" href="img/favicon-192.png?v=3">
 <link rel="apple-touch-icon" sizes="180x180" href="img/apple-touch-icon.png?v=3">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bücherregal">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://covers.openlibrary.org">
@@ -95,6 +100,16 @@
     <button class="icon-btn" id="tocCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
   </div>
   <ul class="toc-list" id="tocList"></ul>
+  <div class="toc-footer">
+    <button type="button" class="toc-action hidden" id="installBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 7v7"/><path d="M9 11l3 3 3-3"/></svg>
+      <span><b>App installieren</b><small>Auf dem Startbildschirm, ohne Browserleiste</small></span>
+    </button>
+    <button type="button" class="toc-action" id="settingsBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      <span><b>Einstellungen</b></span>
+    </button>
+  </div>
 </nav>
 
 <div class="drawer-overlay" id="bookDetailOverlay"></div>
@@ -197,6 +212,75 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="settingsOverlay">
+  <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-title-row">
+      <h2 id="settingsTitle">Einstellungen</h2>
+      <button type="button" class="icon-btn" id="settingsCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    </div>
+
+    <section class="settings-group">
+      <h3>Darstellung</h3>
+      <label class="setting-row"><span><b>Design</b><small>Farben und Material des Regals</small></span>
+        <select id="setTheme"></select>
+      </label>
+      <div class="setting-row"><span><b>Ansicht</b><small>Wie Bücher angezeigt werden</small></span>
+        <div class="seg" role="group" aria-label="Ansicht">
+          <button type="button" data-set-view="shelf" aria-pressed="false">Regal</button>
+          <button type="button" data-set-view="grid" aria-pressed="false">Cover</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <h3>Regal</h3>
+      <label class="setting-row"><span><b>Reihen sortieren</b><small>Reihenfolge der Regalbretter</small></span>
+        <select id="setSort">
+          <option value="alpha">Alphabetisch</option>
+          <option value="recent">Zuletzt gelesen zuerst</option>
+          <option value="count">Meiste Bände zuerst</option>
+        </select>
+      </label>
+      <label class="setting-row"><span><b>Frontal stehender Band</b><small>Welches Cover vorne steht, bis du ein anderes wählst</small></span>
+        <select id="setFace">
+          <option value="first">Erster Band</option>
+          <option value="latest">Neuester Band</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="settings-group hidden" id="ownerSettings">
+      <h3>Mein Regal</h3>
+      <div class="setting-actions">
+        <button type="button" class="btn btn-secondary" id="setCategoriesBtn">Kategorien verwalten</button>
+        <button type="button" class="btn btn-secondary hidden" id="setUsernameBtn">Nutzernamen ändern</button>
+        <button type="button" class="btn btn-secondary" id="setShareBtn">Regal-Link teilen</button>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <h3>Speicher</h3>
+      <div class="setting-row"><span><b>Cover neu laden</b><small>Hilft, wenn Cover falsch oder veraltet angezeigt werden</small></span>
+        <button type="button" class="btn btn-secondary" id="setReloadCoversBtn">Neu laden</button>
+      </div>
+      <div class="setting-row hidden" id="setDevRow"><span><b>Testdaten zurücksetzen</b><small>Lokaler Testmodus: Kopie auf den echten Stand bringen</small></span>
+        <button type="button" class="btn btn-secondary" id="setDevResetBtn">Zurücksetzen</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="installHelpOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="installHelpTitle">
+    <h2 id="installHelpTitle">App installieren</h2>
+    <p class="modal-lede" id="installHelpText"></p>
+    <ol class="install-steps" id="installHelpSteps"></ol>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="installHelpClose">Verstanden</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="coverModalOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="coverModalTitle">
     <h2 id="coverModalTitle">Cover ändern</h2>
@@ -266,6 +350,7 @@
       <small>3–20 Zeichen: Kleinbuchstaben, Zahlen, Unterstrich.</small>
     </label>
     <div class="modal-actions">
+      <button type="button" class="btn btn-ghost hidden" id="cancelUsernameBtn">Abbrechen</button>
       <button type="button" class="btn btn-primary" id="saveUsernameBtn">Speichern</button>
     </div>
   </div>

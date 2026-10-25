@@ -21,6 +21,15 @@ let searchQuery = '';
 let lastGroups = [];
 
 const VIEW_KEY = 'bookshelf-view';
+const SORT_KEY = 'bookshelf-sort';
+const FACE_KEY = 'bookshelf-faceout';
+const LAST_USER_KEY = 'bookshelf-last-user';
+function getPref(key, fallback){
+  try { return localStorage.getItem(key) || fallback; } catch(e){ return fallback; }
+}
+function setPref(key, value){
+  try { localStorage.setItem(key, value); } catch(e){}
+}
 // Ohne gespeicherte Wahl: auf dem Handy das Cover-Raster, auf größeren Screens das Regal.
 let viewMode = window.matchMedia('(max-width: 640px)').matches ? 'grid' : 'shelf';
 try {
@@ -1010,10 +1019,13 @@ document.addEventListener('click', (e)=>{
 // ---- Nutzername-Pflicht ----
 const usernameModalOverlay = document.getElementById('usernameModalOverlay');
 
-function openUsernameModal(){
-  document.getElementById('f-username').value = '';
+// optional=true: Umbenennen aus den Einstellungen (abbrechbar); sonst Pflicht-Auswahl nach dem ersten Login.
+function openUsernameModal(optional){
+  document.getElementById('f-username').value = optional && currentProfile ? (currentProfile.username || '') : '';
+  document.getElementById('cancelUsernameBtn').classList.toggle('hidden', !optional);
   usernameModalOverlay.classList.remove('hidden');
 }
+document.getElementById('cancelUsernameBtn').addEventListener('click', ()=>usernameModalOverlay.classList.add('hidden'));
 
 document.getElementById('saveUsernameBtn').addEventListener('click', async ()=>{
   const input = document.getElementById('f-username');
@@ -1100,7 +1112,8 @@ document.addEventListener('click', (e)=>{
 // ---- Regal-Routing (welches Profil wird angezeigt) ----
 function usernameFromURL(){
   const params = new URLSearchParams(window.location.search);
-  return (params.get('u') || DEFAULT_USERNAME).toLowerCase();
+  // Ohne ?u= (z. B. beim Start der installierten App) das zuletzt angesehene Regal öffnen.
+  return (params.get('u') || getPref(LAST_USER_KEY, DEFAULT_USERNAME)).toLowerCase();
 }
 
 async function loadViewedUserByUsername(username){
@@ -1126,6 +1139,7 @@ async function loadViewedUserByUsername(username){
     return;
   }
   viewedProfile = data;
+  setPref(LAST_USER_KEY, data.username);
   await loadShelfData(viewedProfile.id);
   shelfLoading = false;
   render();
@@ -1191,7 +1205,18 @@ function buildGroups(){
       };
     })
     .filter(g=>g.items.length>0)
-    .sort((a,b)=>a.label.localeCompare(b.label, 'de'));
+    .sort(seriesComparator());
+}
+
+function seriesComparator(){
+  const byName = (a, b)=>a.label.localeCompare(b.label, 'de');
+  const pref = getPref(SORT_KEY, 'alpha');
+  if(pref === 'count') return (a, b)=>b.items.length - a.items.length || byName(a, b);
+  if(pref === 'recent'){
+    const last = g=>g.items.reduce((m, b)=>(b.date_read && b.date_read > m ? b.date_read : m), '');
+    return (a, b)=>last(b).localeCompare(last(a)) || byName(a, b);
+  }
+  return byName;
 }
 
 function groupAuthor(group){
@@ -1320,7 +1345,8 @@ function seriesHeadHtml(group, owner){
 // Pro Reihe steht genau ein Band frontal: der zuletzt gewählte dieser Reihe, sonst der erste.
 function faceOutId(group){
   if(displayedId != null && group.items.some(b=>String(b.id) === String(displayedId))) return String(displayedId);
-  return String(group.items[0].id);
+  const lead = getPref(FACE_KEY, 'first') === 'latest' ? group.items[group.items.length - 1] : group.items[0];
+  return String(lead.id);
 }
 
 function bookHtml(b, group){
@@ -2056,14 +2082,12 @@ document.getElementById('tocCloseBtn').addEventListener('click', closeToc);
 function updateToc(groups){
   if(tocObserver){ tocObserver.disconnect(); tocObserver = null; }
 
+  // Die Seitenleiste enthält auch Installation und Einstellungen, deshalb bleibt sie immer erreichbar.
+  tocMenuBtn.classList.remove('hidden');
   if(!groups || groups.length === 0){
-    tocMenuBtn.classList.add('hidden');
-    closeToc();
-    tocList.innerHTML = '';
+    tocList.innerHTML = '<li class="toc-empty">Keine Reihen in dieser Ansicht.</li>';
     return;
   }
-
-  tocMenuBtn.classList.remove('hidden');
   tocList.innerHTML = groups.map(g=>`
     <li><button type="button" class="toc-item" data-target="shelf-${escapeHtml(g.key)}">${escapeHtml(g.label)}<em>${g.items.length}</em></button></li>
   `).join('');
@@ -2141,6 +2165,107 @@ document.addEventListener('keydown', (e)=>{
   if(tocPanel.classList.contains('open')){ closeToc(); return; }
   if(selectedId != null) closeDetail();
 });
+
+// ---- Einstellungen ----
+const settingsOverlay = document.getElementById('settingsOverlay');
+const setTheme = document.getElementById('setTheme');
+const setSort = document.getElementById('setSort');
+const setFace = document.getElementById('setFace');
+
+function openSettings(){
+  closeToc();
+  setTheme.innerHTML = THEMES.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  setTheme.value = savedTheme();
+  setSort.value = getPref(SORT_KEY, 'alpha');
+  setFace.value = getPref(FACE_KEY, 'first');
+  settingsOverlay.querySelectorAll('[data-set-view]').forEach(b=>b.setAttribute('aria-pressed', b.getAttribute('data-set-view') === viewMode));
+  const owner = isOwnerView();
+  document.getElementById('ownerSettings').classList.toggle('hidden', !owner);
+  document.getElementById('setUsernameBtn').classList.toggle('hidden', !(owner && currentProfile));
+  document.getElementById('setDevRow').classList.toggle('hidden', !devSandboxActive());
+  settingsOverlay.classList.remove('hidden');
+}
+document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('settingsCloseBtn').addEventListener('click', ()=>settingsOverlay.classList.add('hidden'));
+settingsOverlay.addEventListener('click', e=>{ if(e.target === settingsOverlay) settingsOverlay.classList.add('hidden'); });
+
+setTheme.addEventListener('change', ()=>{ setPref(THEME_KEY, setTheme.value); applyTheme(setTheme.value); });
+setSort.addEventListener('change', ()=>{ setPref(SORT_KEY, setSort.value); render(); });
+setFace.addEventListener('change', ()=>{ setPref(FACE_KEY, setFace.value); displayedId = null; render(); });
+settingsOverlay.querySelectorAll('[data-set-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    viewMode = btn.getAttribute('data-set-view');
+    setPref(VIEW_KEY, viewMode);
+    settingsOverlay.querySelectorAll('[data-set-view]').forEach(b=>b.setAttribute('aria-pressed', b === btn));
+    render();
+  });
+});
+document.getElementById('setCategoriesBtn').addEventListener('click', ()=>{
+  settingsOverlay.classList.add('hidden');
+  document.getElementById('openCatBtn').click();
+});
+document.getElementById('setUsernameBtn').addEventListener('click', ()=>{
+  settingsOverlay.classList.add('hidden');
+  openUsernameModal(true);
+});
+document.getElementById('setShareBtn').addEventListener('click', shareShelf);
+document.getElementById('setReloadCoversBtn').addEventListener('click', ()=>{
+  coverCache = {};
+  coverGaveUp.clear();
+  coverPainted.clear();
+  try { localStorage.removeItem(COVER_CACHE_KEY); } catch(e){}
+  settingsOverlay.classList.add('hidden');
+  render();
+  showToast('Cover werden neu geladen');
+});
+document.getElementById('setDevResetBtn').addEventListener('click', ()=>{
+  settingsOverlay.classList.add('hidden');
+  resetSandbox();
+});
+
+// ---- Als App installieren (PWA) ----
+const installBtn = document.getElementById('installBtn');
+const installHelp = document.getElementById('installHelpOverlay');
+let deferredInstall = null;
+const isStandalone = ()=>window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function updateInstallUI(){
+  installBtn.classList.toggle('hidden', isStandalone() || !(deferredInstall || isIOS));
+}
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault(); // eigenen Knopf in der Seitenleiste statt Browser-Banner
+  deferredInstall = e;
+  updateInstallUI();
+});
+window.addEventListener('appinstalled', ()=>{
+  deferredInstall = null;
+  updateInstallUI();
+  showToast('Bücherregal ist jetzt als App installiert');
+});
+installBtn.addEventListener('click', async ()=>{
+  if(deferredInstall){
+    deferredInstall.prompt();
+    await deferredInstall.userChoice;
+    deferredInstall = null;
+    updateInstallUI();
+    return;
+  }
+  document.getElementById('installHelpText').textContent = 'Auf dem iPhone geht das über Safari:';
+  document.getElementById('installHelpSteps').innerHTML =
+    '<li>Tippe unten auf das Teilen-Symbol (Quadrat mit Pfeil nach oben).</li>' +
+    '<li>Wähle „Zum Home-Bildschirm“.</li>' +
+    '<li>Tippe auf „Hinzufügen“. Das Bücherregal erscheint als App-Symbol.</li>';
+  closeToc();
+  installHelp.classList.remove('hidden');
+});
+document.getElementById('installHelpClose').addEventListener('click', ()=>installHelp.classList.add('hidden'));
+installHelp.addEventListener('click', e=>{ if(e.target === installHelp) installHelp.classList.add('hidden'); });
+updateInstallUI();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
 
 // ---- Start ----
 async function boot(){
