@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mein Bücherregal</title>
 <meta name="description" content="Verwalte deine gelesenen Bücher in einem virtuellen Bücherregal, sortiert nach Reihen, und teile es mit anderen.">
-<meta name="theme-color" content="#efeeeb">
+<meta name="theme-color" content="#ece6dc">
 <link rel="canonical" href="https://bookshelf.antonio-tl.com/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Mein Bücherregal">
@@ -29,8 +29,8 @@
 <script>
   // Design vor dem ersten Zeichnen setzen, damit nichts aufflackert.
   (function(){
-    var t = 'auto';
-    try { t = localStorage.getItem('bookshelf-theme') || 'auto'; } catch(e){}
+    var t = 'oak';
+    try { t = localStorage.getItem('bookshelf-theme') || 'oak'; } catch(e){}
     if(t === 'auto') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', t);
   })();

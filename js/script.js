@@ -759,7 +759,7 @@ const themeBtn = document.getElementById('themeBtn');
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 function savedTheme(){
-  try { const t = localStorage.getItem(THEME_KEY); return THEMES.some(x=>x.id === t) ? t : 'auto'; } catch(e){ return 'auto'; }
+  try { const t = localStorage.getItem(THEME_KEY); return THEMES.some(x=>x.id === t) ? t : 'oak'; } catch(e){ return 'oak'; }
 }
 function applyTheme(choice){
   const resolved = choice === 'auto' ? (darkQuery.matches ? 'dark' : 'light') : choice;
