@@ -967,7 +967,7 @@ function renderAuthUI(){
     const handle = currentProfile.username ? '@' + currentProfile.username : '…';
     document.getElementById('userName').textContent = handle;
     document.getElementById('profileUsername').textContent = handle;
-    document.getElementById('profileDisplayName').textContent = currentProfile.display_name || '';
+    document.getElementById('profileDisplayName').textContent = currentProfile.username ? shownName(currentProfile) : '';
 
     const avatar = document.getElementById('userAvatar');
     const avatarLarge = document.getElementById('profileAvatarLarge');
@@ -1096,11 +1096,14 @@ userSearchInput.addEventListener('input', (e)=>{
 });
 
 async function runUserSearch(q){
+  // Sucht in Nutzer- und Anzeigenamen. Zeichen, die im PostgREST-Filter eine Bedeutung haben, fallen weg.
+  const term = q.replace(/[,()*%\\:"]/g, ' ').trim();
+  if(!term){ userSearchResults.classList.add('hidden'); return; }
   const { data, error } = await supabaseClient
     .from('profiles')
-    .select('username, avatar_url')
+    .select('username, display_name, avatar_url')
     .not('username', 'is', null)
-    .ilike('username', `%${q}%`)
+    .or(`username.ilike.*${term}*,display_name.ilike.*${term}*`)
     .limit(8);
 
   if(error || !data || data.length === 0){
@@ -1111,7 +1114,7 @@ async function runUserSearch(q){
   userSearchResults.innerHTML = data.map(p=>`
     <button type="button" class="user-search-item" data-username="${escapeHtml(p.username)}">
       ${p.avatar_url ? `<img src="${escapeHtml(p.avatar_url)}" alt="" referrerpolicy="no-referrer">` : '<span class="user-search-avatar-fallback"></span>'}
-      <span>@${escapeHtml(p.username)}</span>
+      <span class="user-search-names"><b>${escapeHtml(shownName(p))}</b><small>@${escapeHtml(p.username)}</small></span>
     </button>
   `).join('');
   userSearchResults.classList.remove('hidden');
@@ -1248,7 +1251,7 @@ async function loadDirectory(){
   if(directoryLoading) return directoryLoading;
   directoryLoading = (async ()=>{
     const [{ data: profiles, error: pErr }, { data: shelfRows, error: sErr }, { data: bookRows, error: bErr }] = await Promise.all([
-      supabaseClient.from('profiles').select('id, username, avatar_url, created_at').not('username', 'is', null),
+      supabaseClient.from('profiles').select('id, username, display_name, avatar_url, created_at').not('username', 'is', null),
       supabaseClient.from('shelves').select('id, user_id, label'),
       supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read').limit(5000),
     ]);
@@ -1289,9 +1292,16 @@ function staticBookHtml(b, group, out){
 }
 
 // „Antonios Regal“, aber „Orientdreams’ Regal“.
-function possessive(username){
-  const name = username.charAt(0).toUpperCase() + username.slice(1);
+function possessive(name){
   return /[sßxz]$/i.test(name) ? name + '’' : name + 's';
+}
+
+// Sichtbarer Name: der selbst gewählte Anzeigename, sonst der Nutzername mit großem Anfangsbuchstaben.
+function shownName(p){
+  const display = p && p.display_name && p.display_name.trim();
+  if(display) return display;
+  const u = (p && p.username) || '';
+  return u.charAt(0).toUpperCase() + u.slice(1);
 }
 
 function avatarHtml(p){
@@ -1326,7 +1336,7 @@ function readerRowHtml(entry){
   const covers = `<span class="reader-covers" aria-hidden="true">${entry.bookCount ? coverPicks(entry, 6).map(({ b, g })=>thumbHtml(b, g)).join('') : ''}</span>`;
   return `<a class="reader-row ${entry.bookCount ? '' : 'is-empty'}" href="?u=${encodeURIComponent(p.username)}" data-user="${escapeHtml(p.username)}">
     ${avatarHtml(p)}
-    <span class="reader-text"><b>${escapeHtml(possessive(p.username))} Regal</b><small>@${escapeHtml(p.username)} · ${meta}</small>${seriesLine}</span>
+    <span class="reader-text"><b>${escapeHtml(possessive(shownName(p)))} Regal</b><small>@${escapeHtml(p.username)} · ${meta}</small>${seriesLine}</span>
     ${covers}
     <span class="reader-go" aria-hidden="true">→</span>
   </a>`;
@@ -1380,7 +1390,7 @@ function renderHero(entry){
   const groups = entry.groups.slice(0, count);
   shelf.innerHTML = `<div class="ledge-wrap"><div class="display-row">${displayShelfHtml(groups, count)}</div></div>`;
   const u = entry.profile.username;
-  caption.innerHTML = `Aus dem Regal von <a href="?u=${encodeURIComponent(u)}">@${escapeHtml(u)}</a>`;
+  caption.innerHTML = `Aus dem Regal von <a href="?u=${encodeURIComponent(u)}">${escapeHtml(shownName(entry.profile))}</a>`;
   caption.querySelector('a').addEventListener('click', e=>{ e.preventDefault(); goToUser(u); });
 
   // Schritt 1 und 2 zeigen echte Bücher aus diesem Regal.
@@ -1464,7 +1474,9 @@ const DB_ERRORS = {
 function dbErrorText(error, fallback){
   if(!error) return fallback;
   if(error.code === '23505') return 'Nutzername bereits vergeben';
-  if(error.code === '23514') return '3–20 Zeichen: a–z, 0–9, _';
+  if(error.code === '23514'){
+    return String(error.message || '').includes('display_name') ? 'Anzeigename: 1–32 Zeichen' : '3–20 Zeichen: a–z, 0–9, _';
+  }
   if(error.code === 'PGRST202') return 'Diese Funktion ist in der Datenbank noch nicht eingerichtet.';
   const key = Object.keys(DB_ERRORS).find(k=>String(error.message || '').includes(k));
   return key ? DB_ERRORS[key] : fallback;
@@ -1533,7 +1545,16 @@ function syncRenameRow(){
   document.getElementById('accRenameBtn').disabled = !!at || !!ownBan;
 }
 
+function syncDisplayRow(){
+  const own = currentProfile.display_name && currentProfile.display_name.trim();
+  document.getElementById('accDisplay').textContent = own || `Nicht gesetzt (es erscheint „${shownName(currentProfile)}“)`;
+  document.getElementById('accName').textContent = currentProfile.username ? shownName(currentProfile) : 'Dein Konto';
+  document.getElementById('accDisplayBtn').disabled = !!ownBan;
+}
+
 function closeAccountForms(){
+  document.getElementById('accDisplayForm').classList.add('hidden');
+  document.getElementById('accDisplayRow').classList.remove('hidden');
   document.getElementById('accRenameForm').classList.add('hidden');
   document.getElementById('accRenameRow').classList.remove('hidden');
   document.getElementById('accDeleteForm').classList.add('hidden');
@@ -1547,7 +1568,6 @@ async function openAccount(){
   const avatar = document.getElementById('accAvatar');
   avatar.classList.toggle('hidden', !p.avatar_url);
   if(p.avatar_url) avatar.src = p.avatar_url;
-  document.getElementById('accName').textContent = p.display_name || (p.username ? '@' + p.username : 'Dein Konto');
   document.getElementById('accHandle').textContent = p.username ? '@' + p.username : '';
   document.getElementById('accSince').textContent = p.created_at ? fmtMonth(p.created_at) : '–';
   document.getElementById('accBooks').textContent = '–';
@@ -1560,6 +1580,7 @@ async function openAccount(){
   document.getElementById('accDeleteLabel').textContent = p.username
     ? `Zur Bestätigung „${p.username}“ eintippen`
     : 'Zur Bestätigung „löschen“ eintippen';
+  syncDisplayRow();
   syncRenameRow();
   closeAccountForms();
   accountOverlay.classList.remove('hidden');
@@ -1574,6 +1595,36 @@ async function openAccount(){
 
 document.getElementById('accountCloseBtn').addEventListener('click', ()=>accountOverlay.classList.add('hidden'));
 accountOverlay.addEventListener('click', e=>{ if(e.target === accountOverlay) accountOverlay.classList.add('hidden'); });
+
+document.getElementById('accDisplayBtn').addEventListener('click', ()=>{
+  closeAccountForms();
+  document.getElementById('accDisplayRow').classList.add('hidden');
+  document.getElementById('accDisplayForm').classList.remove('hidden');
+  const input = document.getElementById('accDisplayInput');
+  input.value = currentProfile.display_name || '';
+  input.focus();
+  input.select();
+});
+document.getElementById('accDisplayCancel').addEventListener('click', closeAccountForms);
+
+document.getElementById('accDisplayForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  // Mehrfache Leerzeichen zusammenziehen, Steuerzeichen entfernen; leer heißt: Nutzername anzeigen.
+  const val = document.getElementById('accDisplayInput').value.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32) || null;
+  if(val === (currentProfile.display_name || null)){ closeAccountForms(); return; }
+  const btn = document.getElementById('accDisplaySave');
+  btn.disabled = true;
+  const { data, error } = await supabaseClient.from('profiles').update({ display_name: val }).eq('id', currentUser.id).select().single();
+  btn.disabled = false;
+  if(error){ showToast(dbErrorText(error, 'Fehler beim Speichern')); return; }
+  currentProfile = data;
+  directory = null;
+  if(viewedProfile && viewedProfile.id === currentUser.id) viewedProfile.display_name = data.display_name;
+  syncDisplayRow();
+  closeAccountForms();
+  render();
+  showToast(val ? 'Anzeigename gespeichert' : 'Anzeigename entfernt');
+});
 
 document.getElementById('accRenameBtn').addEventListener('click', ()=>{
   closeAccountForms();
@@ -1600,6 +1651,7 @@ document.getElementById('accRenameForm').addEventListener('submit', async e=>{
   currentProfile = data;
   directory = null;
   document.getElementById('accHandle').textContent = '@' + val;
+  syncDisplayRow();
   syncRenameRow();
   closeAccountForms();
   showToast('Nutzername geändert');
@@ -1760,7 +1812,7 @@ function renderAdminStats(){
 
 function adminUserHtml(u){
   const open = u.id === adminOpenId;
-  const name = u.username ? '@' + u.username : 'Ohne Nutzernamen';
+  const name = u.username ? shownName(u) : 'Ohne Nutzernamen';
   const badges = (u.is_admin ? '<span class="badge">Admin</span>' : '') + (u.banned_at ? '<span class="badge badge-danger">Gesperrt</span>' : '');
   const avatar = u.avatar_url
     ? `<img class="reader-avatar" src="${escapeHtml(u.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
@@ -1780,7 +1832,7 @@ function adminUserHtml(u){
   return `<article class="admin-user ${open ? 'open' : ''} ${u.banned_at ? 'is-banned' : ''}" data-id="${escapeHtml(u.id)}">
     <button type="button" class="admin-user-head" aria-expanded="${open}">
       ${avatar}
-      <span class="admin-user-main"><span class="admin-user-name"><b>${escapeHtml(name)}</b>${badges}</span><small>${escapeHtml(u.email || '')}</small></span>
+      <span class="admin-user-main"><span class="admin-user-name"><b>${escapeHtml(name)}</b>${badges}</span><small>${escapeHtml([u.username ? '@' + u.username : '', u.email].filter(Boolean).join(' · '))}</small></span>
       <span class="admin-user-meta">
         <span>${Number(u.book_count)} ${Number(u.book_count) === 1 ? 'Buch' : 'Bücher'}</span>
         <span>seit ${fmtMonth(u.created_at)}</span>
@@ -2024,7 +2076,7 @@ function renderHeader(owner){
   }
   document.getElementById('appContent').classList.remove('hidden');
 
-  const displayName = possessive(viewedProfile.username);
+  const displayName = possessive(shownName(viewedProfile));
   h1.textContent = owner ? 'Mein Regal' : `${displayName} Regal`;
   const since = viewedProfile.created_at
     ? ' · seit ' + new Date(viewedProfile.created_at).toLocaleDateString('de-DE', {month:'long', year:'numeric'})
@@ -2057,7 +2109,7 @@ async function shareShelf(){
   const shareUrl = url.toString();
 
   if(navigator.share){
-    try { await navigator.share({ title: 'Bücherregal von @' + viewedProfile.username, url: shareUrl }); }
+    try { await navigator.share({ title: `${possessive(shownName(viewedProfile))} Bücherregal`, url: shareUrl }); }
     catch(e){ /* Nutzer hat den Teilen-Dialog abgebrochen */ }
     return;
   }

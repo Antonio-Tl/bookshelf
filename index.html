@@ -477,9 +477,27 @@
     <p class="account-banned hidden" id="accBanned"></p>
 
     <section class="settings-group">
+      <h3>Anzeigename</h3>
+      <div class="setting-row" id="accDisplayRow">
+        <span><b id="accDisplay"></b><small>Steht über deinem Regal und in der Übersicht. Muss nicht einzigartig sein, jederzeit änderbar.</small></span>
+        <button type="button" class="btn btn-secondary" id="accDisplayBtn">Ändern</button>
+      </div>
+      <form class="account-form hidden" id="accDisplayForm" autocomplete="off">
+        <label class="field"><span>Anzeigename</span>
+          <input type="text" id="accDisplayInput" maxlength="32" placeholder="z. B. Hans">
+          <small>Bis zu 32 Zeichen. Leer lassen, um deinen Nutzernamen anzuzeigen.</small>
+        </label>
+        <div class="detail-edit-actions">
+          <button type="button" class="btn btn-ghost" id="accDisplayCancel">Abbrechen</button>
+          <button type="submit" class="btn btn-primary" id="accDisplaySave">Speichern</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="settings-group">
       <h3>Nutzername</h3>
       <div class="setting-row" id="accRenameRow">
-        <span><b id="accUsername"></b><small id="accUsernameHint"></small></span>
+        <span><b id="accUsername"></b><small>Steckt in deinem Regal-Link und ist einzigartig.</small><small id="accUsernameHint"></small></span>
         <button type="button" class="btn btn-secondary" id="accRenameBtn">Ändern</button>
       </div>
       <form class="account-form hidden" id="accRenameForm" autocomplete="off">
