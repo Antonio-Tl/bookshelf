@@ -26,6 +26,15 @@
 <link rel="preconnect" href="https://covers.openlibrary.org">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<script>
+  // Design vor dem ersten Zeichnen setzen, damit nichts aufflackert.
+  (function(){
+    var t = 'auto';
+    try { t = localStorage.getItem('bookshelf-theme') || 'auto'; } catch(e){}
+    if(t === 'auto') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 </head>
 <body>
 
@@ -39,6 +48,12 @@
   </a>
 
   <div class="auth-bar" id="authBar">
+    <div class="theme-picker" id="themePicker">
+      <button type="button" class="icon-btn" id="themeBtn" aria-label="Design wählen" aria-haspopup="true" aria-expanded="false" title="Design">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.8 1.6-1.6 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4.2-4-7.4-9-7.4z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10" cy="7" r="1.2" fill="currentColor"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor"/></svg>
+      </button>
+      <div class="theme-menu hidden" id="themeMenu" role="menu" aria-label="Design"></div>
+    </div>
     <div class="user-search-box-wrap">
       <div class="search-box user-search-box" id="userSearchBox">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

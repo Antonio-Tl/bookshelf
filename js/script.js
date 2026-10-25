@@ -65,7 +65,7 @@ function showToast(msg){
 }
 
 function starsSVG(filled){
-  const c = filled ? 'var(--red)' : '#d4d1cb';
+  const c = filled ? 'var(--red)' : 'var(--star-empty)';
   return `<svg viewBox="0 0 24 24" fill="${c}" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7-6.3-3.9L5.7 21l1.7-7L2 9.2l7.1-.6z"/></svg>`;
 }
 
@@ -743,6 +743,56 @@ function isOwnerView(){
   if(devSandboxActive()) return true;
   return !!(currentUser && viewedProfile && currentUser.id === viewedProfile.id);
 }
+
+// ---- Designs ----
+const THEME_KEY = 'bookshelf-theme';
+const THEMES = [
+  { id: 'auto', name: 'Automatisch', note: 'Folgt Hell/Dunkel deines Systems', wall: 'linear-gradient(135deg, #efeeeb 50%, #121214 50%)', shelf: '#6d6d70', accent: '#d23a24' },
+  { id: 'light', name: 'Hell', note: 'Galeriewand, Stahlbrett', wall: '#efeeeb', shelf: '#29292b', accent: '#d23a24' },
+  { id: 'dark', name: 'Dunkel', note: 'Anthrazit, Aluminiumbrett', wall: '#121214', shelf: '#9fa3ab', accent: '#d23a24' },
+  { id: 'oak', name: 'Eiche', note: 'Warm, Holzbrett', wall: '#ece6dc', shelf: '#b98b5b', accent: '#2f6b55' },
+  { id: 'midnight', name: 'Mitternacht', note: 'Nachtblau, Messingbrett', wall: '#0e1726', shelf: '#cfa962', accent: '#e2b65a' },
+  { id: 'sage', name: 'Salbei', note: 'Ruhiges Grün, weißes Brett', wall: '#e3e9e2', shelf: '#f8f9f6', accent: '#1d6b66' },
+];
+const themeMenu = document.getElementById('themeMenu');
+const themeBtn = document.getElementById('themeBtn');
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+function savedTheme(){
+  try { const t = localStorage.getItem(THEME_KEY); return THEMES.some(x=>x.id === t) ? t : 'auto'; } catch(e){ return 'auto'; }
+}
+function applyTheme(choice){
+  const resolved = choice === 'auto' ? (darkQuery.matches ? 'dark' : 'light') : choice;
+  document.documentElement.setAttribute('data-theme', resolved);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--wall').trim());
+}
+function renderThemeMenu(){
+  const current = savedTheme();
+  themeMenu.innerHTML = THEMES.map(t=>`
+    <button type="button" class="theme-item" role="menuitemradio" aria-checked="${t.id === current}" data-theme-id="${t.id}">
+      <span class="theme-swatch" style="background:${t.wall}"><i style="background:${t.accent}"></i><b style="background:${t.shelf}"></b></span>
+      <span class="theme-text"><span class="theme-name">${t.name}</span><span class="theme-note">${t.note}</span></span>
+    </button>`).join('');
+  themeMenu.querySelectorAll('.theme-item').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-theme-id');
+      try { localStorage.setItem(THEME_KEY, id); } catch(e){}
+      applyTheme(id);
+      renderThemeMenu();
+    });
+  });
+}
+function setThemeMenu(open){
+  themeMenu.classList.toggle('hidden', !open);
+  themeBtn.setAttribute('aria-expanded', open);
+  if(open) renderThemeMenu();
+}
+themeBtn.addEventListener('click', e=>{ e.stopPropagation(); setThemeMenu(themeMenu.classList.contains('hidden')); });
+document.addEventListener('click', e=>{ if(!document.getElementById('themePicker').contains(e.target)) setThemeMenu(false); });
+themeMenu.addEventListener('keydown', e=>{ if(e.key === 'Escape'){ e.stopPropagation(); setThemeMenu(false); themeBtn.focus(); } });
+darkQuery.addEventListener('change', ()=>{ if(savedTheme() === 'auto') applyTheme('auto'); });
+applyTheme(savedTheme());
 
 // ---- Lokaler Testmodus ----
 // Auf localhost ist man ohne Login Besitzer von Antonios Regal. Alle Änderungen landen in einer
