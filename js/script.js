@@ -2058,6 +2058,16 @@ function closeBookDetailPanel(){
 }
 bookDetailOverlay.addEventListener('click', closeDetail);
 
+// Klick außerhalb schließt die Schublade, der Klick selbst wirkt trotzdem normal weiter.
+// Ausnahmen: andere Bücher (wechseln die Auswahl) und Dialoge, die aus der Schublade geöffnet wurden.
+document.addEventListener('click', e=>{
+  if(!bookDetailPanel.classList.contains('open') || selectedId == null) return;
+  const t = e.target;
+  if(!(t instanceof Element) || !t.isConnected) return;
+  if(bookDetailPanel.contains(t) || t.closest('[data-book], .modal-overlay, .toast')) return;
+  closeDetail();
+});
+
 function updateBookDetailPanel(){
   const meta = selectedId != null ? bookIndex.get(String(selectedId)) : null;
   if(!meta){
