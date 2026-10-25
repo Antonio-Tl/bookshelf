@@ -146,8 +146,8 @@
     <p class="modal-lede">Tipp den Titel ein und wähl einen Vorschlag: Autor, Seitenzahl, Klappentext und Cover werden dann ausgefüllt.</p>
     <form id="bookForm" autocomplete="off">
       <div class="field suggest-field">
-        <label for="f-title">Titel</label>
-        <input type="text" id="f-title" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addSuggest">
+        <label for="f-title">Titel <abbr class="req" title="Pflichtfeld">*</abbr></label>
+        <input type="text" id="f-title" required aria-required="true" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addSuggest">
         <div class="suggest-list hidden" id="addSuggest" role="listbox" aria-label="Buchvorschläge"></div>
       </div>
       <label class="field"><span>Autor</span>
@@ -158,8 +158,9 @@
           <input type="number" id="f-pages" min="1" placeholder="automatisch">
           <small>Leer lassen: wird aus der Buchdatenbank ergänzt.</small>
         </label>
-        <label class="field"><span>Reihe</span>
-          <input type="text" id="f-series" list="series-list" placeholder="leer = Einzelband">
+        <label class="field"><span>Reihe <abbr class="req" title="Pflichtfeld">*</abbr></span>
+          <input type="text" id="f-series" list="series-list" required aria-required="true" placeholder="z. B. Red Rising">
+          <small>Einzelband? Dann einfach den Buchtitel eintragen.</small>
           <datalist id="series-list"></datalist>
         </label>
       </div>

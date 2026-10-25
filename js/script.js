@@ -1754,6 +1754,11 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
     document.getElementById('f-title').focus();
     return;
   }
+  if(!series){
+    showToast('Bitte eine Reihe eingeben (bei Einzelbänden den Buchtitel)');
+    seriesInput.focus();
+    return;
+  }
 
   let shelf = series ? shelves.find(s=>s.is_series && s.label.toLowerCase()===series.toLowerCase()) : null;
 

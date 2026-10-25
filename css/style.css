@@ -710,22 +710,24 @@ h1 {
 }
 
 /* ---------- series ---------- */
+/* Festes Raster: jede Reihe hat eine gleich breite Zelle, damit ein frontal gedrehtes Buch
+   (breiter als sein Rücken) nie die Anordnung der übrigen Reihen verschiebt. */
 #shelves {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 60px 72px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  align-items: start;
+  gap: 60px 64px;
   padding-top: 22px;
 }
+#shelves.grid-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
 .series {
-  flex: 0 1 auto;
-  min-width: 220px;
-  max-width: 100%;
+  min-width: 0;
   scroll-margin-top: 90px;
 }
-#shelves.grid-mode .series,
 #shelves .empty-state {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
 }
 .series-head {
   margin-bottom: 14px;
@@ -1354,6 +1356,11 @@ h1 {
 .field {
   display: block;
   margin-top: 16px;
+}
+.req {
+  color: var(--red);
+  text-decoration: none;
+  border: none;
 }
 .field > span,
 .field > label {
