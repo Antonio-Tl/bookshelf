@@ -5,3 +5,5 @@
 // grundsätzlich öffentlich sein darf, da Row Level Security ihn absichert).
 window.SUPABASE_URL = 'https://DEIN-PROJEKT.supabase.co';
 window.SUPABASE_ANON_KEY = 'DEIN-ANON-KEY';
+// Optional: Google Books API Key (Browser-Key, auf eigene Domains und die Books API beschränken).
+window.GOOGLE_BOOKS_API_KEY = '';

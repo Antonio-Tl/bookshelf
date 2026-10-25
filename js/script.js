@@ -26,7 +26,8 @@ try { if(localStorage.getItem(VIEW_KEY) === 'grid') viewMode = 'grid'; } catch(e
 
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
 const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
-const ICON_SLIDERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.2" fill="#fff"/><circle cx="15" cy="17" r="2.2" fill="#fff"/></svg>';
+const ICON_IMAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg>';
+const ICON_SLIDERS ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.2" fill="#fff"/><circle cx="15" cy="17" r="2.2" fill="#fff"/></svg>';
 
 // Buchfarben für Bände ohne gefundenes Cover; Index über den Reihennamen, damit eine Reihe einheitlich bleibt.
 const FALLBACK_COLORS = [[59,13,18],[22,52,58],[44,36,80],[96,58,18],[30,48,36],[70,24,64],[24,38,72],[110,40,32]];
@@ -77,20 +78,40 @@ function escapeHtml(s){
 }
 
 // ---- Cover (Open Library) ----
-// Die DB speichert keine Cover; wir suchen sie per Titel+Autor und merken uns Treffer, Farbe und Seitenverhältnis lokal.
-const COVER_CACHE_KEY = 'bookshelf-covers-v6';
+// Ein Buch hat entweder ein gewähltes Cover (books.cover_url, "none" = bewusst keins) oder wird per
+// Titel+Autor bei Open Library gesucht. Treffer, Farben und Seitenverhältnis werden lokal gemerkt.
+const COVER_CACHE_KEY = 'bookshelf-covers-v7';
 let coverCache = {};
 try {
   coverCache = JSON.parse(localStorage.getItem(COVER_CACHE_KEY)) || {};
-  ['v1', 'v2', 'v3', 'v4', 'v5'].forEach(v=>localStorage.removeItem('bookshelf-covers-' + v));
+  ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'].forEach(v=>localStorage.removeItem('bookshelf-covers-' + v));
 } catch(e){ coverCache = {}; }
+
+// Nur http(s)-Bilder, und Zeichen, die aus url('…') oder dem style-Attribut ausbrechen könnten, werden kodiert.
+function safeImageUrl(raw){
+  try {
+    const u = new URL(String(raw).trim());
+    if(u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if(u.protocol === 'http:') u.protocol = 'https:';
+    return u.href.replace(/['"()\\\s<>]/g, c=>'%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+  } catch(e){ return null; }
+}
+function largeCoverUrl(u){
+  if(/covers\.openlibrary\.org\/.+-M\.jpg$/.test(u)) return u.replace(/-M\.jpg$/, '-L.jpg');
+  if(/books\.google/.test(u)) return u.replace(/&zoom=\d/, '') + '&fife=w600-h900';
+  return u;
+}
 const coverPending = new Map();
+const coverGaveUp = new Set(); // Suche in dieser Sitzung gescheitert (Netz): kein Ladezustand mehr anzeigen
 const coverQueue = [];
 const coverQueued = new Set();
 let coverActive = 0;
 let coverSaveTimer = null;
 
-function coverKey(b){ return (String(b.title||'') + '|' + String(b.author||'')).trim().toLowerCase(); }
+function coverKey(b){
+  if(b.cover_url) return 'url:' + b.cover_url;
+  return (String(b.title||'') + '|' + String(b.author||'')).trim().toLowerCase();
+}
 function normTitle(s){
   return String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
     .replace(/[’`]/g, "'").replace(/[^a-z0-9']+/g, ' ').trim();
@@ -107,6 +128,11 @@ function saveCoverCache(){
 function lookupCover(b){
   const key = coverKey(b);
   if(coverCache[key]) return Promise.resolve(coverCache[key]);
+  if(b.cover_url){
+    const direct = b.cover_url === 'none' ? null : safeImageUrl(b.cover_url);
+    coverCache[key] = { id: null, candidates: [], direct, pages: null, done: !direct };
+    return Promise.resolve(coverCache[key]);
+  }
   if(coverPending.has(key)) return coverPending.get(key);
   const p = (async ()=>{
     try {
@@ -142,6 +168,12 @@ function lookupCover(b){
         const top = scored.filter((s,i,arr)=>arr.findIndex(o=>o.cover === s.cover) === i).slice(0, 4);
         if(top.length) entry = { id: null, candidates: top.map(s=>s.cover), pages: top[0].pages || entry.pages };
       }
+      // Open Library kennt viele deutsche Ausgaben nicht: dann die Ausgabe bei Google Books suchen.
+      if(!entry.candidates.length){
+        const gb = await searchGoogleBooks(`intitle:${b.title}${b.author ? ' inauthor:' + b.author : ''}`);
+        const hit = gb.find(c=>c.cover && titleMatches(c.title, b.title));
+        if(hit) entry = { id: null, candidates: [], direct: hit.cover, pages: hit.pages || entry.pages };
+      }
       coverCache[key] = entry;
       saveCoverCache();
       return entry;
@@ -155,7 +187,8 @@ function lookupCover(b){
   return p;
 }
 
-function analyzeCover(id){
+// Liefert Farben/Emblem, oder {error:'nocors'} (Bild lädt, darf aber nicht ausgelesen werden) bzw. {error:'load'}.
+function analyzeCover(src){
   return new Promise(resolve=>{
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -240,10 +273,16 @@ function analyzeCover(id){
           emblem: emblem && { x: +emblem.x.toFixed(1), y: +emblem.y.toFixed(1), size: Math.round(emblem.size) },
           ratio: img.naturalWidth / img.naturalHeight,
         });
-      } catch(e){ resolve(null); }
+      } catch(e){ resolve({ error: 'nocors' }); }
     };
-    img.onerror = ()=>resolve(null);
-    img.src = coverUrl(id, 'M');
+    img.onerror = ()=>{
+      // Ohne CORS-Header schlägt das Laden mit crossOrigin fehl; zeigen lässt sich das Bild trotzdem.
+      const plain = new Image();
+      plain.onload = ()=>resolve({ error: 'nocors', ratio: plain.naturalWidth / plain.naturalHeight });
+      plain.onerror = ()=>resolve({ error: 'load' });
+      plain.src = src;
+    };
+    img.src = src;
   });
 }
 
@@ -292,23 +331,50 @@ function pumpCovers(){
 
 async function processCover(b){
   const entry = await lookupCover(b);
-  if(!entry) return;
-  if(!entry.done){
+  if(!entry){
+    coverGaveUp.add(coverKey(b));
+    refreshBookVisual(b);
+    return;
+  }
+  if(!entry.done && entry.direct){
+    const info = await analyzeCover(entry.direct);
+    if(info.error !== 'load'){
+      const ok = !info.error;
+      const ratio = info.ratio > 0.4 && info.ratio < 1 ? info.ratio : 0.66;
+      Object.assign(entry, {
+        src: entry.direct,
+        srcLarge: largeCoverUrl(entry.direct),
+        rgb: ok ? info.rgb : [70,70,70],
+        ground: ok ? info.ground : [28,28,28],
+        letter: ok ? info.letter : [245,245,245],
+        emblem: ok ? info.emblem : null,
+        ratio,
+      });
+    }
+    entry.done = true;
+    saveCoverCache();
+  } else if(!entry.done){
     let chosen = null, first = null, analyzed = 0;
     for(const id of entry.candidates || []){
-      const info = await analyzeCover(id);
-      if(!info) continue;
+      const info = await analyzeCover(coverUrl(id, 'M'));
+      if(info.error) continue;
       analyzed++;
       if(!first) first = { id, info };
       if(!info.photo){ chosen = { id, info }; break; }
     }
     // Alle Bilder fehlgeschlagen = vermutlich Netzproblem: nicht als erledigt merken, beim nächsten Laden erneut.
-    if((entry.candidates || []).length && !analyzed) return;
+    if((entry.candidates || []).length && !analyzed){
+      coverGaveUp.add(coverKey(b));
+      refreshBookVisual(b);
+      return;
+    }
     chosen = chosen || first;
     if(chosen){
       const i = chosen.info;
       Object.assign(entry, {
         id: chosen.id,
+        src: coverUrl(chosen.id, 'M'),
+        srcLarge: coverUrl(chosen.id, 'L'),
         rgb: i.rgb,
         ground: i.ground,
         letter: i.letter,
@@ -328,20 +394,40 @@ function isLight(rgb){
   return luminance(rgb) > 0.36;
 }
 
+// Bekannte Cover-Adresse heißt noch nicht geladenes Bild: bis dahin den Ladezustand zeigen statt einer Farbfläche.
+const coverPainted = new Set();
+const coverPreloading = new Set();
+function coverIsPainted(url, b){
+  if(coverPainted.has(url)) return true;
+  const img = new Image();
+  img.src = url;
+  if(img.complete && img.naturalWidth){ coverPainted.add(url); return true; }
+  if(!coverPreloading.has(url)){
+    coverPreloading.add(url);
+    img.onload = img.onerror = ()=>{
+      coverPainted.add(url);
+      coverPreloading.delete(url);
+      const meta = bookIndex.get(String(b.id));
+      (meta ? meta.group.items : [b]).forEach(refreshBookVisual);
+    };
+  }
+  return false;
+}
+
 // Bände ohne eigenes Cover übernehmen Farben und Emblem vom ersten bebilderten Band der Reihe.
 function seriesDonor(b){
   const meta = bookIndex.get(String(b.id));
   if(!meta) return null;
   for(const o of meta.group.items){
     const e = coverCache[coverKey(o)];
-    if(e && e.id && e.rgb) return e;
+    if(e && e.src && e.rgb && e.ground) return e;
   }
   return null;
 }
 
 function bookVisual(b, seriesLabel){
   const entry = coverCache[coverKey(b)];
-  const has = !!(entry && entry.id && entry.rgb);
+  const has = !!(entry && entry.src && entry.rgb);
   const donor = has ? null : seriesDonor(b);
   const src = has ? entry : donor;
   const fallback = FALLBACK_COLORS[hashStr(seriesLabel || b.title) % FALLBACK_COLORS.length];
@@ -351,9 +437,10 @@ function bookVisual(b, seriesLabel){
   const hf = (0.9 + (hashStr(String(b.id) + 'h') % 10) / 100).toFixed(2);
   const ground = src && src.ground ? src.ground : rgb;
   const letter = src && src.letter ? src.letter : (isLight(rgb) ? [22,22,22] : [250,250,250]);
-  const emblem = src && src.emblem ? { ...src.emblem, url: coverUrl(src.id, 'M') } : null;
+  const emblem = src && src.emblem ? { ...src.emblem, url: src.src } : null;
   return {
     has,
+    loading: has ? !coverIsPainted(entry.src, b) : (!(entry && entry.done) && !coverGaveUp.has(coverKey(b))),
     rgb,
     ground,
     letter,
@@ -364,8 +451,8 @@ function bookVisual(b, seriesLabel){
     hf,
     pages,
     pagesEstimated: !b.page_count && !!pages,
-    url: has ? coverUrl(entry.id, 'M') : null,
-    urlLarge: has ? coverUrl(entry.id, 'L') : null,
+    url: has ? entry.src : null,
+    urlLarge: has ? (entry.srcLarge || entry.src) : null,
   };
 }
 
@@ -384,6 +471,7 @@ function refreshBookVisual(b){
     el.setAttribute('style', visualStyle(v, el.classList.contains('detail-cover')));
     el.classList.toggle('has-cover', v.has);
     el.classList.toggle('has-emblem', !!v.emblem);
+    el.classList.toggle('is-loading', v.loading);
     el.classList.remove('ink-light','ink-dark');
     el.classList.add(v.ink);
   });
@@ -396,6 +484,193 @@ function refreshBookVisual(b){
 function genCoverHtml(b, group){
   const sub = group.items.length > 1 ? `${escapeHtml(b.author || '')} · Band ${b.series_order}` : escapeHtml(b.author || '');
   return `<span class="gen-cover"><b>${escapeHtml(b.title)}</b><small>${sub}</small></span>`;
+}
+
+// ---- Buchsuche (Google Books + Open Library) ----
+const GB_KEY = window.GOOGLE_BOOKS_API_KEY || '';
+let gbUnavailable = false;
+
+function htmlToText(html){
+  return new DOMParser().parseFromString(String(html || ''), 'text/html').body.textContent.trim();
+}
+function cleanDescription(s){
+  return String(s || '')
+    .replace(/\r/g, '')
+    .replace(/\*\*|__/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\n-{3,}[\s\S]*$/, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+function gbCover(info){
+  const l = info.imageLinks;
+  if(!l) return null;
+  return safeImageUrl(String(l.thumbnail || l.smallThumbnail).replace(/&edge=curl/, ''));
+}
+
+async function searchGoogleBooks(q){
+  if(!GB_KEY || gbUnavailable) return [];
+  try {
+    const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books&key=${encodeURIComponent(GB_KEY)}`);
+    // Gesperrt oder Kontingent leer: für diese Sitzung nur noch Open Library fragen.
+    if(r.status === 403 || r.status === 429){ gbUnavailable = true; return []; }
+    if(!r.ok) return [];
+    const j = await r.json();
+    return (j.items || []).map(item=>{
+      const v = item.volumeInfo || {};
+      return {
+        source: 'Google Books',
+        title: v.title || '',
+        authors: v.authors || [],
+        year: (v.publishedDate || '').slice(0, 4),
+        pages: v.pageCount || null,
+        lang: v.language || '',
+        cover: gbCover(v),
+        description: cleanDescription(htmlToText(v.description)),
+      };
+    }).filter(c=>c.title);
+  } catch(e){ return []; }
+}
+
+async function searchOpenLibrary(q){
+  try {
+    const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=10&fields=key,title,author_name,first_publish_year,cover_i,number_of_pages_median`);
+    if(!r.ok) return [];
+    const j = await r.json();
+    return (j.docs || []).map(d=>({
+      source: 'Open Library',
+      olKey: /^\/works\/OL\d+W$/.test(d.key) ? d.key : null,
+      title: d.title || '',
+      authors: d.author_name || [],
+      year: d.first_publish_year ? String(d.first_publish_year) : '',
+      pages: d.number_of_pages_median || null,
+      lang: '',
+      cover: d.cover_i ? coverUrl(d.cover_i, 'M') : null,
+      description: '',
+    })).filter(c=>c.title);
+  } catch(e){ return []; }
+}
+
+// Ergebnisse beider Quellen zusammenführen; Doppelte (gleicher Titel + Autor) ergänzen sich gegenseitig.
+async function searchBooks(q){
+  const [gb, ol] = await Promise.all([searchGoogleBooks(q), searchOpenLibrary(q)]);
+  const merged = [];
+  [...gb, ...ol].forEach(c=>{
+    const k = normTitle(c.title) + '|' + normTitle((c.authors[0] || '').split(' ').pop());
+    const twin = merged.find(m=>m._k === k);
+    if(twin){
+      twin.cover = twin.cover || c.cover;
+      twin.pages = twin.pages || c.pages;
+      twin.description = twin.description || c.description;
+      twin.olKey = twin.olKey || c.olKey;
+      twin.covers.push(...(c.cover ? [{ url: c.cover, label: c.source }] : []));
+      return;
+    }
+    merged.push({ ...c, _k: k, covers: c.cover ? [{ url: c.cover, label: c.source + (c.year ? ' · ' + c.year : '') }] : [] });
+  });
+  return merged;
+}
+
+async function fetchDescription(c){
+  if(c.description) return c.description;
+  if(!c.olKey) return '';
+  try {
+    const w = await (await fetch(`https://openlibrary.org${c.olKey}.json`)).json();
+    const d = typeof w.description === 'string' ? w.description : (w.description && w.description.value);
+    return d ? cleanDescription(d) : '';
+  } catch(e){ return ''; }
+}
+
+function titleMatches(a, b){
+  const x = normTitle(a), y = normTitle(b);
+  return !!x && !!y && (x.startsWith(y) || y.startsWith(x));
+}
+
+// Cover-Vorschläge: passende Treffer beider Quellen plus englische/deutsche Ausgaben des Open-Library-Werks.
+async function findCoverOptions(title, author, preset = [], seriesLabel = ''){
+  const list = [];
+  const push = (u, label)=>{ const s = safeImageUrl(u); if(s && !list.some(o=>o.url === s)) list.push({ url: s, label }); };
+  preset.forEach(o=>push(o.url, o.label));
+  const res = await searchBooks([title, author].filter(Boolean).join(' '));
+  const hits = res.filter(c=>titleMatches(c.title, title));
+  // Kein Treffer für den (oft deutschen) Titel: Cover der Original-Reihe desselben Autors anbieten.
+  if(!hits.some(c=>c.cover) && seriesLabel && author){
+    const series = await searchOpenLibrary(`${seriesLabel} ${author}`);
+    const surname = normTitle(author.split(',')[0].split(' ').pop());
+    series
+      .filter(c=>c.cover && c.authors.some(a=>normTitle(a).includes(surname)) && !/\b(set|collection|box|bundle|vol\.?\s*\d+\s*-)/i.test(c.title))
+      .forEach(c=>push(c.cover, `${c.title} (Original)`));
+  }
+  hits.forEach(c=>c.covers.forEach(o=>push(o.url, o.label)));
+  const work = hits.find(c=>c.olKey);
+  if(work){
+    try {
+      const eds = (await (await fetch(`https://openlibrary.org${work.olKey}/editions.json?limit=40`)).json()).entries || [];
+      eds.forEach(ed=>{
+        const langs = (ed.languages || []).map(l=>String(l.key).split('/').pop());
+        if(langs.length && !langs.some(l=>l === 'eng' || l === 'ger')) return;
+        // Ohne Sprachangabe nur, wenn der Titel passt (sonst landen Übersetzungen wie "Mañana Azul" in der Auswahl).
+        if(!langs.length && !titleMatches(ed.title || '', title)) return;
+        const cid = (ed.covers || []).find(x=>x > 0);
+        if(cid) push(coverUrl(cid, 'M'), 'Open Library' + (ed.publish_date ? ' · ' + ed.publish_date : ''));
+      });
+    } catch(e){}
+  }
+  return list.slice(0, 14);
+}
+
+async function findDescription(title, author){
+  const res = await searchBooks([title, author].filter(Boolean).join(' '));
+  const hits = res.filter(c=>titleMatches(c.title, title));
+  for(const c of hits){
+    const d = await fetchDescription(c);
+    if(d) return d;
+  }
+  return '';
+}
+
+// Wiederverwendbare Cover-Auswahl: "" = automatisch suchen, "none" = bewusst kein Cover, sonst Bild-URL.
+function createCoverPicker(container){
+  const state = { value: '', options: [], loading: false };
+  const render = ()=>{
+    const custom = state.value && state.value !== 'none' && !state.options.some(o=>o.url === state.value);
+    const opts = [...(custom ? [{ url: state.value, label: 'Eigene URL' }] : []), ...state.options];
+    container.innerHTML = `
+      <div class="cp-strip" role="group" aria-label="Cover wählen">
+        <button type="button" class="cp-opt cp-text ${state.value === '' ? 'is-selected' : ''}" data-v="" aria-pressed="${state.value === ''}">Auto&shy;matisch</button>
+        ${opts.map(o=>`<button type="button" class="cp-opt ${state.value === o.url ? 'is-selected' : ''}" data-v="${escapeHtml(o.url)}" aria-pressed="${state.value === o.url}" title="${escapeHtml(o.label)}"><img src="${escapeHtml(o.url)}" alt="${escapeHtml(o.label)}" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}
+        ${state.loading ? '<span class="cp-loading">Suche Cover …</span>' : ''}
+        <button type="button" class="cp-opt cp-text ${state.value === 'none' ? 'is-selected' : ''}" data-v="none" aria-pressed="${state.value === 'none'}">Kein Cover</button>
+      </div>
+      <div class="cp-url">
+        <input type="url" placeholder="Oder eigene Bild-URL einfügen" aria-label="Eigene Bild-URL">
+        <button type="button" class="btn btn-secondary">Übernehmen</button>
+      </div>`;
+    container.querySelectorAll('.cp-opt').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ state.value = btn.getAttribute('data-v'); render(); });
+      const img = btn.querySelector('img');
+      if(img) img.addEventListener('error', ()=>{ if(state.value !== btn.getAttribute('data-v')) btn.remove(); });
+    });
+    const input = container.querySelector('.cp-url input');
+    const apply = ()=>{
+      const url = safeImageUrl(input.value);
+      if(!url){ showToast('Bitte eine gültige Bild-Adresse (https://…) einfügen'); return; }
+      state.value = url;
+      render();
+    };
+    container.querySelector('.cp-url button').addEventListener('click', apply);
+    input.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); apply(); } });
+  };
+  render();
+  return {
+    get value(){ return state.value; },
+    set(value, options){
+      state.value = value || '';
+      if(options) state.options = options;
+      render();
+    },
+    setLoading(on){ state.loading = on; render(); },
+  };
 }
 
 function categoryNameById(id){
@@ -1000,7 +1275,7 @@ function bookHtml(b, group){
   const isOut = faceOutId(group) === String(b.id);
   const multi = group.items.length > 1;
   const label = multi ? `${b.title}, Band ${b.series_order}` : b.title;
-  return `<button type="button" class="book ${v.ink} ${v.has?'has-cover':''} ${v.emblem?'has-emblem':''} ${isOut?'open':''} ${isSel?'selected':''}" data-book="${escapeHtml(b.id)}" style="${visualStyle(v)}" aria-label="${escapeHtml(label)}" aria-pressed="${isSel}">
+  return `<button type="button" class="book ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${v.emblem?'has-emblem':''} ${isOut?'open':''} ${isSel?'selected':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-label="${escapeHtml(label)}" aria-pressed="${isSel}">
     <span class="book-3d">
       <span class="face spine"><span class="spine-emblem"></span><span class="spine-title">${escapeHtml(b.title)}</span><span class="spine-no">${multi ? b.series_order : ''}</span></span>
       <span class="face front">${genCoverHtml(b, group)}</span>
@@ -1013,7 +1288,7 @@ function tileHtml(b, group){
   const isSel = String(b.id) === String(selectedId);
   const multi = group.items.length > 1;
   const stars = b.rating > 0 ? `<span class="tile-stars" aria-label="${b.rating} von 5 Sternen">${[1,2,3,4,5].map(i=>starsSVG(i<=b.rating)).join('')}</span>` : '';
-  return `<button type="button" class="tile ${v.ink} ${v.has?'has-cover':''} ${isSel?'open':''}" data-book="${escapeHtml(b.id)}" style="${visualStyle(v)}" aria-pressed="${isSel}">
+  return `<button type="button" class="tile ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${isSel?'open':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-pressed="${isSel}">
     <span class="tile-cover">${genCoverHtml(b, group)}</span>
     <span class="tile-title">${escapeHtml(b.title)}</span>
     <span class="tile-meta">${multi ? `Band ${b.series_order}` : escapeHtml(b.author || 'Einzelband')}</span>
@@ -1205,7 +1480,7 @@ function buildDetailCard(book, group, owner){
     : (pagesText ? `<p class="detail-row"><span class="row-label">Umfang</span><span class="row-value">${escapeHtml(pagesText)}</span></p>` : '');
 
   const summaryBlockHtml = owner
-    ? `<label class="detail-block"><span class="row-label">Klappentext</span><textarea class="f-summary" rows="3" placeholder="Worum geht's? (optional)">${escapeHtml(book.summary||'')}</textarea></label>`
+    ? `<div class="detail-block"><label><span class="row-label">Klappentext</span><textarea class="f-summary" rows="3" placeholder="Worum geht's? (optional)">${escapeHtml(book.summary||'')}</textarea></label>${book.summary ? '' : '<button type="button" class="link-btn summary-search">Klappentext automatisch suchen</button>'}</div>`
     : (book.summary ? `<div class="detail-block"><span class="row-label">Klappentext</span><p class="detail-text">${escapeHtml(book.summary)}</p></div>` : '');
 
   const notesBlockHtml = owner
@@ -1231,10 +1506,10 @@ function buildDetailCard(book, group, owner){
   wrap.innerHTML = `
     <div class="detail-hero" style="--c:${v.rgb.join(',')}">
       <div class="detail-hero-actions">
-        ${owner && !isEditing ? `<button type="button" class="icon-btn edit-btn" aria-label="Titel und Autor bearbeiten" title="Bearbeiten">${ICON_EDIT}</button>` : ''}
+        ${owner && !isEditing ? `<button type="button" class="icon-btn cover-btn" aria-label="Cover ändern" title="Cover ändern">${ICON_IMAGE}</button><button type="button" class="icon-btn edit-btn" aria-label="Titel und Autor bearbeiten" title="Bearbeiten">${ICON_EDIT}</button>` : ''}
         <button type="button" class="icon-btn close-x" aria-label="Schließen">${ICON_CLOSE}</button>
       </div>
-      <div class="detail-cover ${v.ink} ${v.has?'has-cover':''}" data-book="${escapeHtml(book.id)}" style="${visualStyle(v, true)}">${genCoverHtml(book, group)}</div>
+      <div class="detail-cover ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''}" data-book="${escapeHtml(book.id)}" style="${escapeHtml(visualStyle(v, true))}">${genCoverHtml(book, group)}</div>
     </div>
     <div class="detail-body">
       ${titleBlockHtml}
@@ -1254,6 +1529,26 @@ function buildDetailCard(book, group, owner){
 
   if(owner){
     renderCategoryToggleList(wrap.querySelector('.f-shelf-category-list'), group.key, group.categoryIds);
+
+    const coverBtn = wrap.querySelector('.cover-btn');
+    if(coverBtn) coverBtn.addEventListener('click', ()=>openCoverModal(book));
+
+    const summaryBtn = wrap.querySelector('.summary-search');
+    if(summaryBtn) summaryBtn.addEventListener('click', async ()=>{
+      summaryBtn.disabled = true;
+      summaryBtn.textContent = 'Suche …';
+      const text = await findDescription(book.title, book.author);
+      if(!text){
+        showToast('Kein Klappentext gefunden');
+        summaryBtn.disabled = false;
+        summaryBtn.textContent = 'Klappentext automatisch suchen';
+        return;
+      }
+      const { error } = await db('books').update({ summary: text }).eq('id', book.id);
+      if(error){ showToast('Fehler beim Speichern'); return; }
+      await refreshAndRender();
+      showToast('Klappentext ergänzt');
+    });
 
     if(isEditing){
       wrap.querySelector('.cancel-edit-btn').addEventListener('click', ()=>{ editingBookId = null; updateBookDetailPanel(); });
@@ -1341,6 +1636,84 @@ function updateCategoryFieldForSeries(){
   }
 }
 
+const addPicker = createCoverPicker(document.getElementById('addCoverPicker'));
+const titleInput = document.getElementById('f-title');
+const suggestBox = document.getElementById('addSuggest');
+let suggestTimer = null, suggestSeq = 0, suggestItems = [], suggestActive = -1;
+
+function closeSuggest(){
+  suggestBox.classList.add('hidden');
+  titleInput.setAttribute('aria-expanded', 'false');
+  titleInput.removeAttribute('aria-activedescendant');
+  suggestActive = -1;
+}
+
+function renderSuggest(){
+  suggestBox.innerHTML = suggestItems.length
+    ? suggestItems.map((c, i)=>`<button type="button" role="option" id="sugg-${i}" class="suggest-item ${i === suggestActive ? 'is-active' : ''}" data-i="${i}" aria-selected="${i === suggestActive}">
+        <span class="suggest-thumb">${c.cover ? `<img src="${escapeHtml(c.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</span>
+        <span class="suggest-text">
+          <span class="suggest-title">${escapeHtml(c.title)}</span>
+          <span class="suggest-meta">${escapeHtml([c.authors.slice(0, 2).join(', '), c.year, c.pages ? c.pages + ' S.' : '', c.lang ? c.lang.toUpperCase() : ''].filter(Boolean).join(' · '))}</span>
+        </span>
+      </button>`).join('')
+    : '<p class="suggest-empty">Nichts gefunden. Du kannst das Buch trotzdem von Hand eintragen.</p>';
+  suggestBox.querySelectorAll('.suggest-item').forEach(btn=>{
+    btn.addEventListener('mousedown', e=>e.preventDefault()); // Fokus bleibt im Titelfeld
+    btn.addEventListener('click', ()=>chooseSuggestion(suggestItems[+btn.getAttribute('data-i')]));
+  });
+  if(suggestActive >= 0) titleInput.setAttribute('aria-activedescendant', 'sugg-' + suggestActive);
+  suggestBox.classList.remove('hidden');
+  titleInput.setAttribute('aria-expanded', 'true');
+}
+
+titleInput.addEventListener('input', ()=>{
+  clearTimeout(suggestTimer);
+  const q = titleInput.value.trim();
+  if(q.length < 3){ closeSuggest(); return; }
+  suggestTimer = setTimeout(async ()=>{
+    const seq = ++suggestSeq;
+    suggestBox.innerHTML = '<p class="suggest-empty">Suche …</p>';
+    suggestBox.classList.remove('hidden');
+    const author = document.getElementById('f-author').value.trim();
+    const res = await searchBooks(author ? `${q} ${author}` : q);
+    if(seq !== suggestSeq || document.activeElement !== titleInput) return;
+    suggestItems = res.slice(0, 7);
+    suggestActive = -1;
+    renderSuggest();
+  }, 350);
+});
+titleInput.addEventListener('keydown', e=>{
+  if(suggestBox.classList.contains('hidden')) return;
+  if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeSuggest(); return; }
+  if(!suggestItems.length) return;
+  if(e.key === 'ArrowDown'){ e.preventDefault(); suggestActive = (suggestActive + 1) % suggestItems.length; renderSuggest(); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); suggestActive = (suggestActive - 1 + suggestItems.length) % suggestItems.length; renderSuggest(); }
+  else if(e.key === 'Enter' && suggestActive >= 0){ e.preventDefault(); chooseSuggestion(suggestItems[suggestActive]); }
+});
+titleInput.addEventListener('blur', ()=>setTimeout(closeSuggest, 150));
+
+async function chooseSuggestion(c){
+  clearTimeout(suggestTimer);
+  suggestSeq++;
+  closeSuggest();
+  titleInput.value = c.title;
+  const authorEl = document.getElementById('f-author');
+  const pagesEl = document.getElementById('f-pages');
+  const summaryEl = document.getElementById('f-summary');
+  if(c.authors.length) authorEl.value = c.authors.slice(0, 2).join(', ');
+  if(c.pages) pagesEl.value = c.pages;
+  addPicker.set(c.cover || '', c.covers);
+  addPicker.setLoading(true);
+  const [desc, options] = await Promise.all([
+    summaryEl.value.trim() ? '' : fetchDescription(c),
+    findCoverOptions(c.title, c.authors[0] || '', c.covers, seriesInput.value.trim()),
+  ]);
+  if(desc && !summaryEl.value.trim()) summaryEl.value = desc;
+  addPicker.set(addPicker.value, options);
+  addPicker.setLoading(false);
+}
+
 document.getElementById('openAddBtn').addEventListener('click', ()=>{
   document.getElementById('f-title').value='';
   document.getElementById('f-author').value='';
@@ -1348,6 +1721,8 @@ document.getElementById('openAddBtn').addEventListener('click', ()=>{
   document.getElementById('f-summary').value='';
   seriesInput.value='';
   addBookSelectedCategoryIds = new Set();
+  addPicker.set('', []);
+  closeSuggest();
   const dl = document.getElementById('series-list');
   const uniqueSeries = shelves.filter(s=>s.is_series).map(s=>s.label);
   dl.innerHTML = uniqueSeries.map(s=>`<option value="${escapeHtml(s)}">`).join('');
@@ -1395,8 +1770,9 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
   const sameSeries = books.filter(b=>b.shelf_id===shelf.id);
   const seriesOrder = sameSeries.length ? Math.max(...sameSeries.map(b=>b.series_order||0)) + 1 : 1;
 
+  const coverChoice = addPicker.value || null;
   const { data: newBook, error: bookErr } = await db('books')
-    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', summary, date_read:null, page_count: pageCount })
+    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', summary, date_read:null, page_count: pageCount, cover_url: coverChoice })
     .select().single();
   if(bookErr){ showToast('Fehler beim Speichern des Buchs'); return; }
 
@@ -1405,6 +1781,42 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
   await refreshAndRender();
   overlay.classList.add('hidden');
   showToast('„' + title + '“ steht jetzt im Regal');
+});
+
+// ---- Cover nachträglich ändern ----
+const coverOverlay = document.getElementById('coverModalOverlay');
+const editPicker = createCoverPicker(document.getElementById('editCoverPicker'));
+let coverEditBook = null;
+
+async function openCoverModal(book){
+  coverEditBook = book;
+  document.getElementById('coverModalLede').textContent = `Für „${book.title}“. „Automatisch“ sucht das Cover anhand von Titel und Autor.`;
+  const entry = coverCache[coverKey(book)];
+  const current = entry && entry.src ? [{ url: entry.src, label: 'Aktuelles Cover' }] : [];
+  editPicker.set(book.cover_url || '', current);
+  editPicker.setLoading(true);
+  coverOverlay.classList.remove('hidden');
+  const meta = bookIndex.get(String(book.id));
+  const seriesLabel = meta && meta.group.items.length > 1 ? meta.group.label : '';
+  const options = await findCoverOptions(book.title, book.author, current, seriesLabel);
+  if(coverEditBook !== book) return;
+  editPicker.set(editPicker.value, options);
+  editPicker.setLoading(false);
+}
+
+function closeCoverModal(){
+  coverOverlay.classList.add('hidden');
+  coverEditBook = null;
+}
+document.getElementById('coverCancelBtn').addEventListener('click', closeCoverModal);
+coverOverlay.addEventListener('click', e=>{ if(e.target === coverOverlay) closeCoverModal(); });
+document.getElementById('coverSaveBtn').addEventListener('click', async ()=>{
+  if(!coverEditBook) return;
+  const { error } = await db('books').update({ cover_url: editPicker.value || null }).eq('id', coverEditBook.id);
+  if(error){ showToast('Cover konnte nicht gespeichert werden'); return; }
+  closeCoverModal();
+  await refreshAndRender();
+  showToast('Cover gespeichert');
 });
 
 // ---- Category management modal ----

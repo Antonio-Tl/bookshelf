@@ -142,11 +142,13 @@
 <div class="modal-overlay hidden" id="modalOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addBookTitle">
     <h2 id="addBookTitle">Neues Buch</h2>
-    <p class="modal-lede">Das Cover suchen wir automatisch anhand von Titel und Autor.</p>
-    <form id="bookForm">
-      <label class="field"><span>Titel</span>
-        <input type="text" id="f-title">
-      </label>
+    <p class="modal-lede">Tipp den Titel ein und wähl einen Vorschlag: Autor, Seitenzahl, Klappentext und Cover werden dann ausgefüllt.</p>
+    <form id="bookForm" autocomplete="off">
+      <div class="field suggest-field">
+        <label for="f-title">Titel</label>
+        <input type="text" id="f-title" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addSuggest">
+        <div class="suggest-list hidden" id="addSuggest" role="listbox" aria-label="Buchvorschläge"></div>
+      </div>
       <label class="field"><span>Autor</span>
         <input type="text" id="f-author">
       </label>
@@ -161,8 +163,11 @@
         </label>
       </div>
       <label class="field"><span>Klappentext</span>
-        <textarea id="f-summary" rows="3" placeholder="Worum geht's? (optional)"></textarea>
+        <textarea id="f-summary" rows="3" placeholder="Wird aus dem Vorschlag übernommen, oder selbst schreiben"></textarea>
       </label>
+      <div class="field"><span>Cover</span>
+        <div class="cover-picker" id="addCoverPicker"></div>
+      </div>
       <div class="field"><span>Kategorien</span>
         <div class="cat-toggle-list" id="f-category-list"></div>
         <small id="f-category-hint"></small>
@@ -172,6 +177,20 @@
         <button type="submit" class="btn btn-primary">Ins Regal stellen</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="coverModalOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="coverModalTitle">
+    <h2 id="coverModalTitle">Cover ändern</h2>
+    <p class="modal-lede" id="coverModalLede"></p>
+    <div class="field"><span>Vorschläge</span>
+      <div class="cover-picker" id="editCoverPicker"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="coverCancelBtn">Abbrechen</button>
+      <button type="button" class="btn btn-primary" id="coverSaveBtn">Speichern</button>
+    </div>
   </div>
 </div>
 
