@@ -211,6 +211,7 @@ html {
 }
 body {
   min-height: 100vh;
+  overflow-x: clip;
   background:
     radial-gradient(ellipse 80% 420px at 50% 0%, var(--wall-glow) 0%, transparent 100%),
     var(--wall);
@@ -1006,6 +1007,13 @@ h1 {
   font-weight: 700;
   letter-spacing: -0.025em;
 }
+/* Autor, Bandzahl und Zahnrad brechen nur gemeinsam um, nie das Zahnrad allein. */
+.series-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
 .series-meta {
   color: var(--dim);
   font-size: 14px;
@@ -1221,7 +1229,8 @@ h1 {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 14px 12px 12px 16px;
+  padding: 14px 10px 12px 13px;
+  container-type: inline-size;
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.12), transparent 50%),
     linear-gradient(0deg, rgba(0, 0, 0, 0.35), transparent 60%);
@@ -1230,12 +1239,14 @@ h1 {
 .has-cover .gen-cover {
   display: none;
 }
+/* Schmale Kacheln auf dem Handy: Schrift mit der Coverbreite verkleinern, damit lange Wörter ganz bleiben. */
 .gen-cover b {
-  font-size: 15px;
+  font-size: min(15px, 14.5cqi);
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 .gen-cover small {
   font-size: 11px;
@@ -1404,7 +1415,7 @@ h1 {
   z-index: 45;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   transform: translateX(-102%);
   box-shadow: 20px 0 50px -20px rgba(20, 20, 20, 0.3);
 }
@@ -1576,6 +1587,7 @@ html select {
   width: 420px;
   max-width: 100vw;
   z-index: 47;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   transform: translateX(102%);
@@ -1621,7 +1633,7 @@ html select {
   animation: cover-in 0.6s var(--ease-out) both;
 }
 .detail-cover .gen-cover b {
-  font-size: 18px;
+  font-size: min(18px, 16cqi);
 }
 @keyframes cover-in {
   from {
@@ -1664,7 +1676,7 @@ html select {
 .rating-row,
 .detail-row {
   display: grid;
-  grid-template-columns: 112px 1fr;
+  grid-template-columns: 112px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   margin: 0;
@@ -1684,7 +1696,22 @@ html select {
   font-variant-numeric: tabular-nums;
 }
 .detail-row input {
-  min-height: 38px;
+  min-width: 0;
+  width: 100%;
+  min-height: 42px;
+}
+/* iOS Safari gibt Datumsfeldern eine feste Mindestbreite und zentrierten Text; beides angleichen. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
 }
 .detail-block {
   padding: 16px 0;
@@ -2159,8 +2186,15 @@ select:focus {
     --spine-scale: 0.86;
   }
   .topbar {
-    padding: 0 12px;
+    padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
     gap: 6px;
+  }
+  /* Unter 16px zoomt iOS beim Antippen hinein und die Seite bleibt danach seitlich verschiebbar. */
+  input,
+  select,
+  textarea,
+  .search-box input[type="text"] {
+    font-size: 16px;
   }
   .brand-name {
     display: none;
@@ -2294,7 +2328,9 @@ select:focus {
     top: auto;
     left: 0;
     width: 100%;
+    max-width: none;
     max-height: 88vh;
+    max-height: 88dvh;
     border-radius: 22px 22px 0 0;
     transform: translateY(102%);
     box-shadow: 0 -20px 60px -20px rgba(20, 20, 20, 0.35);
@@ -2307,7 +2343,14 @@ select:focus {
     width: 124px;
   }
   .detail-body {
-    padding: 48px 20px 28px;
+    padding: 48px 20px calc(24px + env(safe-area-inset-bottom));
+  }
+  .rating-row,
+  .detail-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+  .detail-block textarea {
+    min-height: 140px;
   }
   .field-row {
     grid-template-columns: 1fr;
@@ -2320,12 +2363,17 @@ select:focus {
     width: 100%;
   }
   .modal {
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px - env(safe-area-inset-bottom));
     padding: 24px 20px;
     border-radius: 20px;
   }
   .modal-overlay {
     align-items: flex-end;
-    padding: 10px;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+  .toast {
+    bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
 
