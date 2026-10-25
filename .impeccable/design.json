@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T12:00:00Z",
+  "title": "Design System: Bücherregal",
+  "extensions": {
+    "colorMeta": {
+      "wall": { "role": "neutral", "displayName": "Gallery Wall", "canonical": "oklch(94.6% 0.004 85)", "cssVar": "--wall", "tonalRamp": ["oklch(15% 0.004 85)", "oklch(27% 0.004 85)", "oklch(39% 0.004 85)", "oklch(51% 0.004 85)", "oklch(63% 0.004 85)", "oklch(75% 0.004 85)", "oklch(85% 0.004 85)", "oklch(95% 0.004 85)"] },
+      "wall-deep": { "role": "neutral", "displayName": "Deep Wall", "canonical": "oklch(91.6% 0.006 85)", "cssVar": "--wall-2", "tonalRamp": ["oklch(15% 0.006 85)", "oklch(27% 0.006 85)", "oklch(39% 0.006 85)", "oklch(51% 0.006 85)", "oklch(63% 0.006 85)", "oklch(75% 0.006 85)", "oklch(85% 0.006 85)", "oklch(95% 0.006 85)"] },
+      "surface": { "role": "neutral", "displayName": "Card White", "canonical": "oklch(100% 0 0)", "cssVar": "--surface", "tonalRamp": ["oklch(15% 0 0)", "oklch(27% 0 0)", "oklch(39% 0 0)", "oklch(51% 0 0)", "oklch(63% 0 0)", "oklch(75% 0 0)", "oklch(85% 0 0)", "oklch(95% 0 0)"] },
+      "surface-soft": { "role": "neutral", "displayName": "Soft Card", "canonical": "oklch(97% 0.004 85)", "cssVar": "--surface-2", "tonalRamp": ["oklch(15% 0.004 85)", "oklch(27% 0.004 85)", "oklch(39% 0.004 85)", "oklch(51% 0.004 85)", "oklch(63% 0.004 85)", "oklch(75% 0.004 85)", "oklch(85% 0.004 85)", "oklch(95% 0.004 85)"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(18.5% 0 0)", "cssVar": "--ink", "tonalRamp": ["oklch(15% 0 0)", "oklch(27% 0 0)", "oklch(39% 0 0)", "oklch(51% 0 0)", "oklch(63% 0 0)", "oklch(75% 0 0)", "oklch(85% 0 0)", "oklch(95% 0 0)"] },
+      "ink-soft": { "role": "neutral", "displayName": "Soft Ink", "canonical": "oklch(34% 0.004 85)", "cssVar": "--ink-2", "tonalRamp": ["oklch(15% 0.004 85)", "oklch(27% 0.004 85)", "oklch(39% 0.004 85)", "oklch(51% 0.004 85)", "oklch(63% 0.004 85)", "oklch(75% 0.004 85)", "oklch(85% 0.004 85)", "oklch(95% 0.004 85)"] },
+      "dim": { "role": "neutral", "displayName": "Dim", "canonical": "oklch(47% 0.006 85)", "cssVar": "--dim", "tonalRamp": ["oklch(15% 0.006 85)", "oklch(27% 0.006 85)", "oklch(39% 0.006 85)", "oklch(51% 0.006 85)", "oklch(63% 0.006 85)", "oklch(75% 0.006 85)", "oklch(85% 0.006 85)", "oklch(95% 0.006 85)"] },
+      "line": { "role": "neutral", "displayName": "Line", "canonical": "oklch(88.5% 0.006 85)", "cssVar": "--line", "tonalRamp": ["oklch(15% 0.006 85)", "oklch(27% 0.006 85)", "oklch(39% 0.006 85)", "oklch(51% 0.006 85)", "oklch(63% 0.006 85)", "oklch(75% 0.006 85)", "oklch(85% 0.006 85)", "oklch(95% 0.006 85)"] },
+      "line-soft": { "role": "neutral", "displayName": "Soft Line", "canonical": "oklch(93.5% 0.005 85)", "cssVar": "--line-soft", "tonalRamp": ["oklch(15% 0.005 85)", "oklch(27% 0.005 85)", "oklch(39% 0.005 85)", "oklch(51% 0.005 85)", "oklch(63% 0.005 85)", "oklch(75% 0.005 85)", "oklch(85% 0.005 85)", "oklch(95% 0.005 85)"] },
+      "steel": { "role": "neutral", "displayName": "Steel", "canonical": "oklch(21% 0 0)", "cssVar": "--steel", "tonalRamp": ["oklch(15% 0 0)", "oklch(27% 0 0)", "oklch(39% 0 0)", "oklch(51% 0 0)", "oklch(63% 0 0)", "oklch(75% 0 0)", "oklch(85% 0 0)", "oklch(95% 0 0)"] },
+      "signal-red": { "role": "primary", "displayName": "Signal Red", "canonical": "oklch(57.5% 0.19 33)", "cssVar": "--red", "tonalRamp": ["oklch(15% 0.06 33)", "oklch(27% 0.11 33)", "oklch(39% 0.15 33)", "oklch(51% 0.18 33)", "oklch(63% 0.17 33)", "oklch(75% 0.12 33)", "oklch(85% 0.07 33)", "oklch(95% 0.025 33)"] },
+      "signal-red-deep": { "role": "primary", "displayName": "Deep Signal Red", "canonical": "oklch(52% 0.18 33)", "cssVar": "--red-hover", "tonalRamp": ["oklch(15% 0.06 33)", "oklch(27% 0.11 33)", "oklch(39% 0.15 33)", "oklch(51% 0.18 33)", "oklch(63% 0.17 33)", "oklch(75% 0.12 33)", "oklch(85% 0.07 33)", "oklch(95% 0.025 33)"] }
+    },
+    "runtimeColor": {
+      "note": "Not tokens. Computed per book in js/script.js from its Open Library cover; never author these values.",
+      "spineGround": "Most frequent border colour of the cover (canvas 40x60, 3-bit-per-channel buckets). CSS var --g.",
+      "spineLettering": "Most frequent cover colour with >= 4.5:1 contrast against the ground; else near-white (250,250,250) or near-black (20,20,20), whichever contrasts more. CSS var --l.",
+      "coverTint": "Saturation-weighted average cover colour; cover background fallback and detail-hero tint. CSS var --c.",
+      "spineEmblem": "Square art-window crop outside the top/bottom title bands, rejected where hard-edge density > 0.3; omitted below score 0.42. CSS vars --emblem, --ex, --ey, --es.",
+      "coverlessVolumes": "Borrow ground, lettering and emblem from the series' first covered volume; with no donor, a ground hashed from eight fixed deep fallback colours, lettering by lightness.",
+      "coverChoice": "Per edition: English/German preferred (German when the title looks German), exact title match scores higher; product photos (white corners, no continuous white border) skipped for flat covers."
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Shelf owner's name in the page header; one per page." },
+      "headline": { "displayName": "Headline", "purpose": "Book title in the detail drawer; modal titles at 24px." },
+      "numeral": { "displayName": "Numeral", "purpose": "Header stats with tabular figures; 22px on phones." },
+      "title": { "displayName": "Title", "purpose": "Series name heading each ledge." },
+      "body": { "displayName": "Body", "purpose": "Running text; blurbs at 1.55 line-height, max 62ch." },
+      "control": { "displayName": "Control", "purpose": "Buttons, search fields, menu items." },
+      "label": { "displayName": "Label", "purpose": "Row and field labels, filter pills, segmented options; 12px for stat labels and tags." },
+      "spine": { "displayName": "Spine", "purpose": "Vertical spine titles; auto-shrunk in 0.5px steps down to 9px to fit." }
+    },
+    "shadows": [
+      { "name": "pop", "value": "0 18px 40px -16px rgba(20,20,20,0.28), 0 2px 6px rgba(20,20,20,0.06)", "purpose": "Popovers and toast (--shadow-pop)." },
+      { "name": "card", "value": "0 30px 70px -28px rgba(20,20,20,0.4)", "purpose": "Modals (--shadow-card)." },
+      { "name": "drawer", "value": "-20px 0 60px -20px rgba(20,20,20,0.35)", "purpose": "Detail drawer over scrim; at >=1024px: -1px 0 0 var(--line), -30px 0 60px -40px rgba(20,20,20,0.35)." },
+      { "name": "ledge", "value": "0 4px 6px -2px rgba(20,20,20,0.3), 0 22px 26px -14px rgba(20,20,20,0.45)", "purpose": "Under each steel ledge." },
+      { "name": "cover-lifted", "value": "18px 22px 30px -14px rgba(20,20,20,0.55)", "purpose": "Face-out cover after the turn." },
+      { "name": "tile", "value": "0 12px 20px -12px rgba(20,20,20,0.5)", "purpose": "Cover tile at rest; 0 20px 26px -12px rgba(20,20,20,0.55) on hover." },
+      { "name": "focus-ring", "value": "0 0 0 3px rgba(210,58,36,0.28)", "purpose": "Field focus ring (--focus)." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Shared curve for every entrance and the book turn (--ease-out)." },
+      { "name": "book-turn", "value": "transform 0.7s ease-out; slot width 0.6s ease-out", "purpose": "Signature 3D spine-to-cover turn: rotateY(-90deg) about the spine." },
+      { "name": "state", "value": "0.15s ease", "purpose": "Hover, border and colour changes on controls." },
+      { "name": "drawer", "value": "transform 0.45s ease-out", "purpose": "Drawer and table-of-contents panel slide." },
+      { "name": "modal-in", "value": "0.38s ease-out, translateY(14px) scale(0.98) to rest", "purpose": "Modal entrance." },
+      { "name": "pop-in", "value": "0.2s ease-out, translateY(-4px) scale(0.97) to rest", "purpose": "Popover entrance from top right." },
+      { "name": "reduced-motion", "value": "durations 0.01ms", "purpose": "All animation and transition collapses under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "max-width: 640px" },
+      { "name": "toolbar-reflow", "value": "max-width: 900px" },
+      { "name": "drawer-beside", "value": "min-width: 1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Owner's primary action, e.g. + Buch and modal confirms.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\"><path d=\"M12 5v14M5 12h14\"/></svg><span>Buch</span></button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 12px; border: 1px solid transparent; font-family: Geist, system-ui, sans-serif; font-weight: 600; font-size: 14px; letter-spacing: -0.005em; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s cubic-bezier(0.22,1,0.36,1); } .ds-btn svg { width: 16px; height: 16px; } .ds-btn:active { transform: scale(0.97); } .ds-btn:focus-visible { outline: 2px solid var(--red, #d23a24); outline-offset: 3px; } .ds-btn-primary { background: var(--red, #d23a24); color: #fff; box-shadow: 0 1px 0 rgba(255,255,255,0.2) inset, 0 4px 10px -4px rgba(20,20,20,0.35); } .ds-btn-primary:hover { background: var(--red-hover, #bb2f1b); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Cancel and secondary actions in modals and panels.",
+      "html": "<button class=\"ds-btn-secondary\">Abbrechen</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 12px; background: var(--surface, #fff); border: 1px solid var(--line, #dcdad5); color: var(--ink, #141414); font-family: Geist, system-ui, sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s cubic-bezier(0.22,1,0.36,1); } .ds-btn-secondary:hover { border-color: #c4c1bb; background: var(--surface-2, #f6f5f2); } .ds-btn-secondary:active { transform: scale(0.97); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--red, #d23a24); outline-offset: 3px; }"
+    },
+    {
+      "name": "Ghost Button (destructive)",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet text action; the destructive variant turns soft red on hover.",
+      "html": "<button class=\"ds-btn-ghost ds-danger\">Aus dem Regal entfernen</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 12px; border: none; background: transparent; color: var(--ink-2, #3a3936); font-family: Geist, system-ui, sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.15s ease, color 0.15s ease; } .ds-btn-ghost:hover { background: rgba(20,20,20,0.05); color: var(--ink, #141414); } .ds-btn-ghost.ds-danger:hover { background: rgba(210,58,36,0.1); color: var(--red-hover, #bb2f1b); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--red, #d23a24); outline-offset: 3px; }"
+    },
+    {
+      "name": "Filter Pills",
+      "kind": "chip",
+      "refersTo": "filter-pill",
+      "description": "Category filter row; active state is ink, never red.",
+      "html": "<div class=\"ds-pills\"><button class=\"ds-pill ds-active\" aria-pressed=\"true\">Alle</button><button class=\"ds-pill\" aria-pressed=\"false\">Fantasy</button><button class=\"ds-pill\" aria-pressed=\"false\">Sci-Fi</button></div>",
+      "css": ".ds-pills { display: flex; gap: 6px; } .ds-pill { height: 32px; padding: 0 13px; border-radius: 999px; border: 1px solid var(--line, #dcdad5); background: var(--surface, #fff); color: var(--ink-2, #3a3936); font-family: Geist, system-ui, sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; } .ds-pill:hover { border-color: #c4c1bb; color: var(--ink, #141414); } .ds-pill.ds-active { background: var(--ink, #141414); border-color: var(--ink, #141414); color: #fff; } .ds-pill:focus-visible { outline: 2px solid var(--red, #d23a24); outline-offset: 3px; }"
+    },
+    {
+      "name": "Regal / Cover Toggle",
+      "kind": "custom",
+      "refersTo": "segmented-toggle",
+      "description": "Segmented switch between shelf view and cover grid.",
+      "html": "<div class=\"ds-seg\"><button aria-pressed=\"true\">Regal</button><button aria-pressed=\"false\">Cover</button></div>",
+      "css": ".ds-seg { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--wall-2, #e6e4df); border: 1px solid var(--line, #dcdad5); } .ds-seg button { height: 32px; padding: 0 14px; border: none; border-radius: 9px; background: transparent; color: var(--dim, #5e5c58); font-family: Geist, system-ui, sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; } .ds-seg button:hover { color: var(--ink, #141414); } .ds-seg button[aria-pressed=\"true\"] { background: var(--surface, #fff); color: var(--ink, #141414); box-shadow: 0 1px 2px rgba(20,20,20,0.12); } .ds-seg button:focus-visible { outline: 2px solid var(--red, #d23a24); outline-offset: 3px; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Shelf and people search; fields share the red focus border and ring.",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"M20 20l-3.5-3.5\"/></svg><input type=\"text\" placeholder=\"Reihe oder Titel suchen\"></label>",
+      "css": ".ds-search { position: relative; display: flex; align-items: center; width: 260px; } .ds-search svg { position: absolute; left: 13px; width: 16px; height: 16px; color: var(--dim, #5e5c58); pointer-events: none; } .ds-search input { width: 100%; height: 40px; padding: 0 12px 0 38px; background: var(--surface, #fff); border: 1px solid var(--line, #dcdad5); border-radius: 12px; color: var(--ink, #141414); font-family: Geist, system-ui, sans-serif; font-size: 14px; transition: border-color 0.15s ease, box-shadow 0.15s ease; } .ds-search input::placeholder { color: var(--dim, #5e5c58); } .ds-search input:hover { border-color: #c4c1bb; } .ds-search input:focus { outline: none; border-color: var(--red, #d23a24); box-shadow: 0 0 0 3px rgba(210,58,36,0.28); }"
+    },
+    {
+      "name": "Book on Ledge",
+      "kind": "custom",
+      "refersTo": "book",
+      "description": "Signature: spines with runtime-derived colours on a steel ledge; one volume face-out per series. Demo values stand in for colours computed from covers.",
+      "html": "<div class=\"ds-ledge\"><span class=\"ds-spine\" style=\"--g:28,40,64;--l:236,200,120;width:34px;height:196px\"><b>Red Rising</b><i>1</i></span><span class=\"ds-spine\" style=\"--g:120,28,24;--l:245,235,220;width:38px;height:200px\"><b>Golden Son</b><i>2</i></span><span class=\"ds-cover\" style=\"--c:30,30,34;width:130px;height:198px\"><b>Morning Star</b><small>Pierce Brown · Band 3</small></span><span class=\"ds-spine\" style=\"--g:214,190,120;--l:20,20,20;width:40px;height:192px\"><b>Iron Gold</b><i>4</i></span></div>",
+      "css": ".ds-ledge { position: relative; display: flex; align-items: flex-end; gap: 2px; padding: 22px 18px 0; font-family: Geist, system-ui, sans-serif; } .ds-ledge::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: -15px; height: 15px; border-radius: 1.5px; background: linear-gradient(180deg, #555 0, #2a2a2a 2px, #1d1d1d 40%, #0e0e0e 100%); box-shadow: 0 4px 6px -2px rgba(20,20,20,0.3), 0 22px 26px -14px rgba(20,20,20,0.45); } .ds-spine { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 5px 0 9px; border-radius: 2px 2px 1px 1px; background: rgb(var(--g)); color: rgb(var(--l)); box-shadow: inset -1px 0 0 rgba(0,0,0,0.3), inset 1px 0 0 rgba(255,255,255,0.16), inset 0 1px 0 rgba(255,255,255,0.2); cursor: pointer; transition: transform 0.7s cubic-bezier(0.22,1,0.36,1); } .ds-spine:hover { transform: translateY(-6px); } .ds-spine b { flex: 1; writing-mode: vertical-rl; font-size: 13px; font-weight: 700; line-height: 1.08; } .ds-spine i { font-style: normal; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; } .ds-cover { display: flex; flex-direction: column; justify-content: space-between; padding: 14px 12px 12px 16px; border-radius: 1px 4px 4px 1px; background: linear-gradient(160deg, rgba(255,255,255,0.12), transparent 50%), linear-gradient(0deg, rgba(0,0,0,0.35), transparent 60%), rgb(var(--c)); color: #fafafa; box-shadow: inset 4px 0 0 rgba(255,255,255,0.16), inset 8px 0 8px -4px rgba(0,0,0,0.35), 18px 22px 30px -14px rgba(20,20,20,0.55); } .ds-cover b { font-size: 15px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; } .ds-cover small { font-size: 11px; font-weight: 600; opacity: 0.8; }"
+    },
+    {
+      "name": "Cover Tile",
+      "kind": "card",
+      "refersTo": "cover-tile",
+      "description": "Cover view item: 2:3 cover, title, volume, red stars; selected tile gets a red outline.",
+      "html": "<button class=\"ds-tile\"><span class=\"ds-tile-cover\" style=\"--c:40,52,90\"></span><span class=\"ds-tile-title\">Fourth Wing</span><span class=\"ds-tile-meta\">Band 1</span><span class=\"ds-tile-stars\"><svg viewBox=\"0 0 24 24\" fill=\"#d23a24\"><path d=\"M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7-6.3-3.9L5.7 21l1.7-7L2 9.2l7.1-.6z\"/></svg><svg viewBox=\"0 0 24 24\" fill=\"#d23a24\"><path d=\"M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7-6.3-3.9L5.7 21l1.7-7L2 9.2l7.1-.6z\"/></svg><svg viewBox=\"0 0 24 24\" fill=\"#d4d1cb\"><path d=\"M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7-6.3-3.9L5.7 21l1.7-7L2 9.2l7.1-.6z\"/></svg></span></button>",
+      "css": ".ds-tile { display: flex; flex-direction: column; gap: 4px; width: 132px; padding: 0; border: none; background: none; text-align: left; cursor: pointer; font-family: Geist, system-ui, sans-serif; border-radius: 6px; } .ds-tile-cover { aspect-ratio: 2 / 3; margin-bottom: 8px; border-radius: 3px 6px 6px 3px; background: rgb(var(--c)); box-shadow: inset 3px 0 0 rgba(255,255,255,0.16), inset 7px 0 7px -4px rgba(0,0,0,0.3), 0 12px 20px -12px rgba(20,20,20,0.5); transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), box-shadow 0.35s cubic-bezier(0.22,1,0.36,1); } .ds-tile:hover .ds-tile-cover { transform: translateY(-4px); box-shadow: inset 3px 0 0 rgba(255,255,255,0.16), inset 7px 0 7px -4px rgba(0,0,0,0.3), 0 20px 26px -12px rgba(20,20,20,0.55); } .ds-tile:focus-visible { outline: 2px solid var(--red, #d23a24); outline-offset: 3px; } .ds-tile:active .ds-tile-cover { outline: 3px solid var(--red, #d23a24); outline-offset: 3px; } .ds-tile-title { font-size: 14px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; color: var(--ink, #141414); } .ds-tile-meta { font-size: 13px; color: var(--dim, #5e5c58); } .ds-tile-stars { display: flex; gap: 1px; } .ds-tile-stars svg { width: 11px; height: 11px; }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Bottom-centred ink confirmation.",
+      "html": "<div class=\"ds-toast\">Link kopiert</div>",
+      "css": ".ds-toast { display: inline-block; padding: 11px 18px; border-radius: 12px; background: var(--ink, #141414); color: #fff; font-family: Geist, system-ui, sans-serif; font-size: 14px; font-weight: 500; box-shadow: 0 18px 40px -16px rgba(20,20,20,0.28), 0 2px 6px rgba(20,20,20,0.06); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Gallery Wall",
+    "overview": "A contemporary design-bookshop wall, not a library and not a tracker. A pale, warm-grey gallery ground carries full-width black steel ledges; real books stand spine-out on them, every spine dressed in colours and a small art crop lifted from that book's own cover, and one click turns a volume face-out in 3D. The chrome is quiet, neutral and set entirely in Geist; the covers are the only rich colour on the page, so the collection itself is the interface.\n\nDensity is calm but not sparse: series sit side by side on their own ledges (wrapping on wide screens, one per row on phones), headed by a bold series title with author and volume count. Book detail lives in a white panel with a soft long shadow, beside the shelf on large screens and as a bottom sheet on phones. One signal red marks the primary action, the current selection and filled stars, and nothing else.\n\nThe world rejects both the flat list tracker and the wood-and-brass library rendering of the shelf metaphor.",
+    "keyCharacteristics": [
+      "Gallery-wall neutral ground, ink text, matte black steel ledges.",
+      "Covers carry all saturated colour; spines are computed from covers at runtime.",
+      "One signal red, reserved for primary action, selection and stars.",
+      "Geist everywhere, heavy weights with tight negative tracking on display sizes, tabular numerals for counts.",
+      "One signature motion: the CSS 3D spine-to-cover turn.",
+      "White cards and drawers lifted by soft, long, ink-tinted shadows."
+    ],
+    "rules": [
+      { "name": "The Covers-Carry-Colour Rule", "body": "Chrome stays in the wall, ink, line and steel neutrals plus one red. Every other saturated colour on screen comes from a book cover or is computed from one.", "section": "colors" },
+      { "name": "The One Red Rule", "body": "Signal red marks the primary action, the current selection, focus and filled stars. Active filters use ink, not red; red never fills a large area or decorates.", "section": "colors" },
+      { "name": "The Derived Spine Rule", "body": "Spine ground, lettering and emblem are computed from the cover at runtime. A spine colour is never hand-picked.", "section": "colors" },
+      { "name": "The Tight Display Rule", "body": "The larger the type, the heavier and tighter it sets: display at -0.04em, headlines at -0.035em, titles at -0.025em; body text is never negatively tracked.", "section": "typography" },
+      { "name": "The Tabular Count Rule", "body": "Every count, rating and volume number uses tabular numerals.", "section": "typography" },
+      { "name": "The Soft Long Shadow Rule", "body": "Shadows are long, soft, negatively spread and ink-tinted. No hard offset shadows, no coloured glows.", "section": "elevation" },
+      { "name": "The One Turn Rule", "body": "The 3D spine-to-cover turn is the only signature motion. Everything else is a short ease-out (cubic-bezier(0.22, 1, 0.36, 1)) entrance or a 0.15s state change, and all motion collapses under reduced-motion.", "section": "components" },
+      { "name": "The One Face-Out Rule", "body": "Each series shows exactly one cover; every other volume stays spine-out.", "section": "components" }
+    ],
+    "dos": [
+      "**Do** derive every spine's ground, lettering and emblem from its cover at runtime, and let coverless volumes borrow from the series' first covered volume.",
+      "**Do** keep chrome in the neutral tokens and reserve signal red for the primary action, selection, focus and stars.",
+      "**Do** stand books on black steel ledges with soft contact and ledge shadows.",
+      "**Do** set display sizes in Geist 800 with negative tracking, and counts in tabular numerals.",
+      "**Do** lift white cards, drawers and popovers with the soft long shadows listed above.",
+      "**Do** keep detail beside the shelf without a scrim at ≥1024px, and as a bottom sheet with a scrim on phones."
+    ],
+    "donts": [
+      "**Don't** hand-pick spine colours or introduce chrome colours that compete with covers.",
+      "**Don't** use red for active filters, decoration or large fills; active filters are ink.",
+      "**Don't** render the shelf as wood and brass, or flatten it into a list tracker.",
+      "**Don't** add a second signature motion beside the spine-to-cover turn.",
+      "**Don't** use hard offset shadows or coloured glows.",
+      "**Don't** show more than one face-out cover per series."
+    ]
+  }
+}

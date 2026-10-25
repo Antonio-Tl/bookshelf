@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mein Bücherregal</title>
 <meta name="description" content="Verwalte deine gelesenen Bücher in einem virtuellen Bücherregal, sortiert nach Reihen, und teile es mit anderen.">
+<meta name="theme-color" content="#efeeeb">
 <link rel="canonical" href="https://bookshelf.antonio-tl.com/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Mein Bücherregal">
@@ -19,98 +20,124 @@
 <link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16.png">
 <link rel="icon" type="image/png" sizes="192x192" href="img/favicon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="img/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://covers.openlibrary.org">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<div class="top-navbar">
-  <button class="menu-btn hidden" id="tocMenuBtn" aria-label="Inhaltsverzeichnis">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+<header class="topbar">
+  <button class="icon-btn hidden" id="tocMenuBtn" aria-label="Reihen anzeigen" title="Reihen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
   </button>
-  <button class="menu-btn hidden" id="shareBtn" aria-label="Bücherregal teilen" title="Bücherregal teilen">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
-  </button>
+  <a class="brand" href="./" aria-label="Bücherregal Startseite">
+    <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="brand-name">Bücherregal</span>
+  </a>
 
   <div class="auth-bar" id="authBar">
     <div class="user-search-box-wrap">
       <div class="search-box user-search-box" id="userSearchBox">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="userSearchInput" placeholder="Nutzer suchen...">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="userSearchInput" placeholder="Leute finden" aria-label="Nutzer suchen" autocomplete="off">
       </div>
       <div class="user-search-results hidden" id="userSearchResults"></div>
     </div>
 
     <div class="login-hint-wrap">
       <button class="google-btn" id="googleLoginBtn">
-        <svg viewBox="0 0 18 18" width="16" height="16"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+        <svg viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
         <span>Mit Google anmelden</span>
       </button>
-      <div class="login-hint hidden" id="loginHint">
-        <button class="login-hint-close" id="loginHintClose" aria-label="Hinweis schließen">&times;</button>
-        <span>Um dein eigenes Bücherregal zu erstellen, hier anmelden</span>
-      </div>
     </div>
+
     <div class="user-chip hidden" id="userChip">
-      <button class="user-chip-trigger" id="userChipTrigger">
-        <img id="userAvatar" class="user-avatar" alt="">
+      <button class="user-chip-trigger" id="userChipTrigger" aria-label="Konto">
+        <img id="userAvatar" class="user-avatar" alt="" referrerpolicy="no-referrer">
         <span class="chip-name" id="userName"></span>
       </button>
       <div class="profile-panel hidden" id="profilePanel">
-        <img id="profileAvatarLarge" class="profile-avatar-large" alt="">
+        <img id="profileAvatarLarge" class="profile-avatar-large" alt="" referrerpolicy="no-referrer">
         <p class="profile-display-name" id="profileDisplayName"></p>
         <p class="profile-username" id="profileUsername"></p>
         <p class="profile-meta" id="profileMemberSince"></p>
         <div class="profile-actions">
-          <button class="manage-btn hidden" id="myShelfBtn">Meine Sammlung</button>
-          <button class="manage-btn" id="logoutBtn">Abmelden</button>
+          <button class="btn btn-secondary hidden" id="myShelfBtn">Mein Regal</button>
+          <button class="btn btn-ghost" id="logoutBtn">Abmelden</button>
         </div>
       </div>
     </div>
   </div>
-</div>
+</header>
 
 <div class="toc-overlay" id="tocOverlay"></div>
-<nav class="toc-panel" id="tocPanel">
+<nav class="toc-panel" id="tocPanel" aria-label="Reihen">
   <div class="toc-header">
     <span>Reihen</span>
-    <button class="toc-close" id="tocCloseBtn" aria-label="Schließen">&times;</button>
+    <button class="icon-btn" id="tocCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
   </div>
   <ul class="toc-list" id="tocList"></ul>
 </nav>
 
-<div class="book-detail-overlay" id="bookDetailOverlay"></div>
-<aside class="book-detail-panel" id="bookDetailPanel"></aside>
+<div class="drawer-overlay" id="bookDetailOverlay"></div>
+<aside class="drawer" id="bookDetailPanel" aria-label="Buchdetails"></aside>
 
-<div class="library">
-  <header>
-    <p class="eyebrow">Bücherregal-Community</p>
-    <h1 id="pageTitle">Mein Bücherregal</h1>
-    <p class="sub" id="pageSub">Gelesene Bücher, nach Reihe geordnet</p>
+<main class="page">
+  <div class="login-hint hidden" id="loginHint" role="note">
+    <p><span class="lh-long">Lust auf ein eigenes Regal? Melde dich an und stell deine gelesenen Bücher hinein.</span><span class="lh-short">Eigenes Regal anlegen?</span></p>
+    <button type="button" class="btn btn-secondary" id="loginHintAction">Anmelden</button>
+    <button type="button" class="icon-btn sm" id="loginHintClose" aria-label="Hinweis schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+  </div>
 
-    <div class="header-actions hidden" id="headerActions">
-      <button class="add-btn" id="openAddBtn">+ Buch hinzufügen</button>
-      <button class="manage-btn" id="openCatBtn">Kategorien verwalten</button>
+  <section class="shelf-head">
+    <div class="shelf-id">
+      <h1 id="pageTitle">Bücherregal</h1>
+      <p class="shelf-meta">
+        <span id="pageSub"></span>
+        <span class="viewing-badge hidden" id="viewingBanner"></span>
+      </p>
     </div>
-  </header>
-
-  <p class="viewing-banner hidden" id="viewingBanner"></p>
+    <div class="shelf-head-side">
+      <dl class="stats" id="shelfStats"></dl>
+      <button class="btn btn-secondary hidden" id="shareBtn" title="Regal teilen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        <span>Teilen</span>
+      </button>
+    </div>
+  </section>
 
   <div id="appContent">
-    <div class="search-row">
-      <div class="search-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="searchInput" placeholder="Reihe oder Buchtitel suchen...">
-        <button type="button" class="clear-btn" id="clearSearchBtn" aria-label="Suche löschen">&times;</button>
+    <div class="toolbar">
+      <div class="search-box shelf-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Reihe oder Titel suchen" aria-label="Im Regal suchen" autocomplete="off">
+        <button type="button" class="clear-btn" id="clearSearchBtn" aria-label="Suche löschen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+      </div>
+      <div class="filter-bar" id="filterBar"></div>
+      <div class="toolbar-end">
+        <div class="seg" role="group" aria-label="Ansicht">
+          <button type="button" data-view="shelf" aria-pressed="true">Regal</button>
+          <button type="button" data-view="grid" aria-pressed="false">Cover</button>
+        </div>
+        <div class="header-actions hidden" id="headerActions">
+          <button class="btn btn-secondary" id="openCatBtn">Kategorien</button>
+          <button class="btn btn-primary" id="openAddBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Buch</span>
+          </button>
+        </div>
       </div>
     </div>
-    <div class="filter-bar" id="filterBar"></div>
     <div id="shelves"></div>
   </div>
-</div>
+</main>
 
 <div class="modal-overlay hidden" id="modalOverlay">
-  <div class="modal">
-    <h2>Neues Buch</h2>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addBookTitle">
+    <h2 id="addBookTitle">Neues Buch</h2>
+    <p class="modal-lede">Das Cover suchen wir automatisch anhand von Titel und Autor.</p>
     <form id="bookForm">
       <label class="field"><span>Titel</span>
         <input type="text" id="f-title">
@@ -118,86 +145,91 @@
       <label class="field"><span>Autor</span>
         <input type="text" id="f-author">
       </label>
-      <label class="field"><span>Seitenzahl (optional)</span>
-        <input type="number" id="f-pages" min="1" placeholder="z. B. 320">
+      <div class="field-row">
+        <label class="field"><span>Seitenzahl</span>
+          <input type="number" id="f-pages" min="1" placeholder="optional">
+        </label>
+        <label class="field"><span>Reihe</span>
+          <input type="text" id="f-series" list="series-list" placeholder="leer = Einzelband">
+          <datalist id="series-list"></datalist>
+        </label>
+      </div>
+      <label class="field"><span>Klappentext</span>
+        <textarea id="f-summary" rows="3" placeholder="Worum geht's? (optional)"></textarea>
       </label>
-      <label class="field"><span>Klappentext (optional)</span>
-        <textarea id="f-summary" rows="3" placeholder="Worum geht's?"></textarea>
-      </label>
-      <label class="field"><span>Reihe (leer lassen, falls Einzelband)</span>
-        <input type="text" id="f-series" list="series-list" placeholder="z. B. Red Rising">
-        <datalist id="series-list"></datalist>
-      </label>
-      <label class="field"><span>Kategorien</span>
+      <div class="field"><span>Kategorien</span>
         <div class="cat-toggle-list" id="f-category-list"></div>
         <small id="f-category-hint"></small>
-      </label>
+      </div>
       <div class="modal-actions">
-        <button type="button" class="btn-ghost" id="cancelAddBtn">Abbrechen</button>
-        <button type="submit" class="btn-primary">Ins Regal stellen</button>
+        <button type="button" class="btn btn-ghost" id="cancelAddBtn">Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Ins Regal stellen</button>
       </div>
     </form>
   </div>
 </div>
 
 <div class="modal-overlay hidden" id="catModalOverlay">
-  <div class="modal">
-    <h2>Kategorien verwalten</h2>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="catModalTitle">
+    <h2 id="catModalTitle">Kategorien</h2>
+    <p class="modal-lede">Kategorien gelten für ganze Reihen und erscheinen als Filter über dem Regal.</p>
     <div class="cat-chip-list" id="catChipList"></div>
     <div class="add-cat-row">
-      <input type="text" id="newCatInput" placeholder="Neue Kategorie...">
-      <button type="button" class="btn-primary" id="addCatBtn">Hinzufügen</button>
+      <input type="text" id="newCatInput" placeholder="Neue Kategorie" aria-label="Neue Kategorie">
+      <button type="button" class="btn btn-primary" id="addCatBtn">Hinzufügen</button>
     </div>
     <div class="modal-actions">
-      <button type="button" class="btn-ghost" id="closeCatBtn">Schließen</button>
+      <button type="button" class="btn btn-ghost" id="closeCatBtn">Schließen</button>
     </div>
   </div>
 </div>
 
 <div class="modal-overlay hidden" id="shelfCatModalOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="shelfCatTitle">
     <div class="modal-title-row">
-      <h2 id="shelfCatTitle">Kategorie</h2>
-      <button type="button" class="edit-btn" id="shelfEditTitleBtn" aria-label="Titel bearbeiten" title="Titel bearbeiten">✎</button>
+      <h2 id="shelfCatTitle">Reihe</h2>
+      <button type="button" class="icon-btn" id="shelfEditTitleBtn" aria-label="Titel bearbeiten" title="Titel bearbeiten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
     </div>
     <label class="field hidden" id="shelfRenameField"><span>Titel der Reihe</span>
       <input type="text" id="shelfRenameInput">
     </label>
     <div class="detail-edit-actions hidden" id="shelfRenameActions">
-      <button type="button" class="btn-ghost" id="shelfRenameCancelBtn">Abbrechen</button>
-      <button type="button" class="btn-primary" id="shelfRenameSaveBtn">Speichern</button>
+      <button type="button" class="btn btn-ghost" id="shelfRenameCancelBtn">Abbrechen</button>
+      <button type="button" class="btn btn-primary" id="shelfRenameSaveBtn">Speichern</button>
     </div>
-    <label class="field"><span>Kategorien dieser Reihe</span>
+    <div class="field"><span>Kategorien dieser Reihe</span>
       <div class="cat-toggle-list" id="shelfCatToggleList"></div>
-    </label>
-    <div class="cat-chip-list" id="shelfCatChipList" style="margin-top:22px;"></div>
+    </div>
+    <div class="field"><span>Alle Kategorien</span>
+      <div class="cat-chip-list" id="shelfCatChipList"></div>
+    </div>
     <label class="field"><span>Neue Kategorie anlegen</span>
       <div class="add-cat-row">
-        <input type="text" id="shelfNewCatInput" placeholder="Neue Kategorie...">
-        <button type="button" class="btn-primary" id="shelfAddCatBtn">Hinzufügen</button>
+        <input type="text" id="shelfNewCatInput" placeholder="Neue Kategorie">
+        <button type="button" class="btn btn-primary" id="shelfAddCatBtn">Hinzufügen</button>
       </div>
     </label>
     <div class="modal-actions">
-      <button type="button" class="btn-ghost" id="closeShelfCatBtn">Fertig</button>
+      <button type="button" class="btn btn-secondary" id="closeShelfCatBtn">Fertig</button>
     </div>
   </div>
 </div>
 
 <div class="modal-overlay hidden" id="usernameModalOverlay">
-  <div class="modal">
-    <h2>Nutzernamen wählen</h2>
-    <p style="color:var(--cream-dim);font-size:14px;margin:0 0 6px;">Damit andere dein Regal finden können, brauchst du einen einzigartigen Nutzernamen.</p>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="usernameModalTitle">
+    <h2 id="usernameModalTitle">Nutzernamen wählen</h2>
+    <p class="modal-lede">Damit andere dein Regal finden können, brauchst du einen einzigartigen Nutzernamen.</p>
     <label class="field"><span>Nutzername</span>
       <input type="text" id="f-username" placeholder="z. B. antonio" maxlength="20">
-      <small>3-20 Zeichen: Kleinbuchstaben, Zahlen, Unterstrich.</small>
+      <small>3–20 Zeichen: Kleinbuchstaben, Zahlen, Unterstrich.</small>
     </label>
     <div class="modal-actions">
-      <button type="button" class="btn-primary" id="saveUsernameBtn">Speichern</button>
+      <button type="button" class="btn btn-primary" id="saveUsernameBtn">Speichern</button>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
