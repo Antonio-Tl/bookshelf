@@ -21,8 +21,12 @@ let searchQuery = '';
 let lastGroups = [];
 
 const VIEW_KEY = 'bookshelf-view';
-let viewMode = 'shelf';
-try { if(localStorage.getItem(VIEW_KEY) === 'grid') viewMode = 'grid'; } catch(e){}
+// Ohne gespeicherte Wahl: auf dem Handy das Cover-Raster, auf größeren Screens das Regal.
+let viewMode = window.matchMedia('(max-width: 640px)').matches ? 'grid' : 'shelf';
+try {
+  const saved = localStorage.getItem(VIEW_KEY);
+  if(saved === 'grid' || saved === 'shelf') viewMode = saved;
+} catch(e){}
 
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
 const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
