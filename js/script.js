@@ -406,10 +406,10 @@ function categoryNameById(id){
 // ---- Kategorie-Mehrfachauswahl (Toggle-Chips) ----
 async function toggleShelfCategory(shelfId, categoryId, isActive){
   if(isActive){
-    const { error } = await supabaseClient.from('shelf_categories').insert({ shelf_id: shelfId, category_id: categoryId });
+    const { error } = await db('shelf_categories').insert({ shelf_id: shelfId, category_id: categoryId });
     if(error){ showToast('Fehler beim Speichern'); return false; }
   } else {
-    const { error } = await supabaseClient.from('shelf_categories').delete().eq('shelf_id', shelfId).eq('category_id', categoryId);
+    const { error } = await db('shelf_categories').delete().eq('shelf_id', shelfId).eq('category_id', categoryId);
     if(error){ showToast('Fehler beim Speichern'); return false; }
   }
   return true;
@@ -461,7 +461,97 @@ function renderCategoryPickerList(containerEl, selectedIds, disabled){
 }
 
 function isOwnerView(){
+  if(devSandboxActive()) return true;
   return !!(currentUser && viewedProfile && currentUser.id === viewedProfile.id);
+}
+
+// ---- Lokaler Testmodus ----
+// Auf localhost ist man ohne Login Besitzer von Antonios Regal. Alle Änderungen landen in einer
+// Kopie im localStorage; die echte Datenbank wird nie beschrieben (RLS würde es ohnehin ablehnen).
+const DEV_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || location.hostname.endsWith('.localhost');
+const SANDBOX_KEY = 'bookshelf-dev-sandbox-v1';
+let sandbox = null;
+try { sandbox = JSON.parse(localStorage.getItem(SANDBOX_KEY)); } catch(e){ sandbox = null; }
+
+function devSandboxActive(){
+  return DEV_LOCAL && !currentUser && !!viewedProfile && viewedProfile.username === DEFAULT_USERNAME;
+}
+
+function saveSandbox(){
+  try { localStorage.setItem(SANDBOX_KEY, JSON.stringify(sandbox)); } catch(e){ showToast('Lokaler Speicher ist voll'); }
+}
+
+function db(table){
+  return devSandboxActive() ? sandboxTable(table) : supabaseClient.from(table);
+}
+
+// Bildet genau die Supabase-Aufrufe nach, die die App zum Schreiben nutzt: insert/update/delete + eq + select().single().
+function sandboxTable(table){
+  let op = null, payload = null, single = false;
+  const filters = [];
+  const run = ()=>{
+    const match = r=>filters.every(([k, v])=>String(r[k]) === String(v));
+    if(op === 'insert'){
+      const list = (Array.isArray(payload) ? payload : [payload]).map(p=>({
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        user_id: sandbox.profileId,
+        ...p,
+      }));
+      sandbox[table].push(...list);
+      saveSandbox();
+      return { data: single ? list[0] : list, error: null };
+    }
+    if(op === 'update'){
+      sandbox[table].forEach(r=>{ if(match(r)) Object.assign(r, payload); });
+    } else if(op === 'delete'){
+      const removed = sandbox[table].filter(match).map(r=>r.id);
+      sandbox[table] = sandbox[table].filter(r=>!match(r));
+      if(table === 'categories') sandbox.shelf_categories = sandbox.shelf_categories.filter(sc=>!removed.includes(sc.category_id));
+      if(table === 'shelves') sandbox.shelf_categories = sandbox.shelf_categories.filter(sc=>!removed.includes(sc.shelf_id));
+    }
+    saveSandbox();
+    return { data: null, error: null };
+  };
+  const q = {
+    insert(p){ op = 'insert'; payload = p; return q; },
+    update(p){ op = 'update'; payload = p; return q; },
+    delete(){ op = 'delete'; return q; },
+    eq(k, v){ filters.push([k, v]); return q; },
+    select(){ return q; },
+    single(){ single = true; return q; },
+    then(resolve, reject){ try { resolve(run()); } catch(e){ reject(e); } },
+  };
+  return q;
+}
+
+function applySandboxToState(){
+  categories = [...sandbox.categories].sort((a, b)=>a.name.localeCompare(b.name, 'de'));
+  shelves = sandbox.shelves.map(s=>({
+    ...s,
+    categoryIds: sandbox.shelf_categories.filter(sc=>sc.shelf_id === s.id).map(sc=>sc.category_id),
+  }));
+  books = [...sandbox.books].sort((a, b)=>(a.series_order || 0) - (b.series_order || 0));
+}
+
+function seedSandbox(profileId, cats, shelvesData, booksData){
+  sandbox = {
+    profileId,
+    categories: cats.map(c=>({ ...c })),
+    shelves: shelvesData.map(({ shelf_categories, ...s })=>({ ...s })),
+    shelf_categories: shelvesData.flatMap(s=>(s.shelf_categories || []).map(sc=>({ shelf_id: s.id, category_id: sc.category_id }))),
+    books: booksData.map(b=>({ ...b })),
+  };
+  saveSandbox();
+}
+
+async function resetSandbox(){
+  sandbox = null;
+  try { localStorage.removeItem(SANDBOX_KEY); } catch(e){}
+  selectedId = null;
+  displayedId = null;
+  await refreshAndRender();
+  showToast('Testdaten auf den echten Stand zurückgesetzt');
 }
 
 // ---- Auth ----
@@ -481,6 +571,8 @@ async function handleSession(session){
   } else {
     currentProfile = null;
   }
+  // Login/Logout auf localhost wechselt zwischen Testkopie und echten Daten.
+  if(DEV_LOCAL && viewedProfile) await loadShelfData(viewedProfile.id);
   render();
 }
 
@@ -538,7 +630,7 @@ function renderAuthUI(){
     myShelfBtn.classList.toggle('hidden', !showMyShelf);
   } else {
     loginBtn.classList.remove('hidden');
-    loginHint.classList.toggle('hidden', loginHintDismissed());
+    loginHint.classList.toggle('hidden', loginHintDismissed() || DEV_LOCAL);
     userChip.classList.add('hidden');
     document.getElementById('profilePanel').classList.add('hidden');
   }
@@ -567,6 +659,7 @@ async function signOut(){
 }
 
 document.getElementById('googleLoginBtn').addEventListener('click', signInWithGoogle);
+document.getElementById('devResetBtn').addEventListener('click', resetSandbox);
 document.getElementById('loginHintAction').addEventListener('click', signInWithGoogle);
 document.getElementById('logoutBtn').addEventListener('click', signOut);
 document.getElementById('myShelfBtn').addEventListener('click', ()=>{
@@ -724,6 +817,11 @@ window.addEventListener('popstate', loadViewedUserFromURL);
 
 // ---- Daten laden ----
 async function loadShelfData(profileId){
+  const useSandbox = devSandboxActive();
+  if(useSandbox && sandbox && sandbox.profileId === profileId){
+    applySandboxToState();
+    return;
+  }
   const [{data: cats, error: catErr}, {data: shelvesData, error: shelfErr}, {data: booksData, error: bookErr}] = await Promise.all([
     supabaseClient.from('categories').select('*').eq('user_id', profileId).order('name'),
     supabaseClient.from('shelves').select('*, shelf_categories(category_id)').eq('user_id', profileId),
@@ -731,6 +829,11 @@ async function loadShelfData(profileId){
   ]);
   if(catErr || shelfErr || bookErr){
     showToast('Daten konnten nicht geladen werden');
+    return;
+  }
+  if(useSandbox){
+    seedSandbox(profileId, cats || [], shelvesData || [], booksData || []);
+    applySandboxToState();
     return;
   }
   categories = cats || [];
@@ -920,6 +1023,7 @@ function tileHtml(b, group){
 
 function render(){
   const owner = isOwnerView();
+  document.getElementById('devBanner').classList.toggle('hidden', !devSandboxActive());
   renderAuthUI();
   renderHeader(owner);
   syncViewButtons();
@@ -1159,7 +1263,7 @@ function buildDetailCard(book, group, owner){
         const newTitle = titleInput.value.trim();
         if(!newTitle){ showToast('Bitte einen Titel eingeben'); titleInput.focus(); return; }
         const newAuthor = authorInput.value.trim();
-        const { error } = await supabaseClient.from('books').update({ title: newTitle, author: newAuthor }).eq('id', book.id);
+        const { error } = await db('books').update({ title: newTitle, author: newAuthor }).eq('id', book.id);
         if(error){ showToast('Fehler beim Speichern'); return; }
         editingBookId = null;
         await refreshAndRender();
@@ -1174,39 +1278,39 @@ function buildDetailCard(book, group, owner){
       btn.addEventListener('click', async ()=>{
         const val = parseInt(btn.getAttribute('data-star'),10);
         const newRating = (book.rating === val) ? 0 : val;
-        const { error } = await supabaseClient.from('books').update({rating: newRating}).eq('id', book.id);
+        const { error } = await db('books').update({rating: newRating}).eq('id', book.id);
         if(error){ showToast('Fehler beim Speichern'); return; }
         await refreshAndRender();
       });
     });
     wrap.querySelector('.f-date').addEventListener('change', async (e)=>{
-      const { error } = await supabaseClient.from('books').update({date_read: e.target.value || null}).eq('id', book.id);
+      const { error } = await db('books').update({date_read: e.target.value || null}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
     });
     wrap.querySelector('.f-pages').addEventListener('change', async (e)=>{
       const val = e.target.value.trim();
       const pageCount = val ? parseInt(val, 10) : null;
-      const { error } = await supabaseClient.from('books').update({page_count: pageCount}).eq('id', book.id);
+      const { error } = await db('books').update({page_count: pageCount}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
     });
     wrap.querySelector('.f-summary').addEventListener('change', async (e)=>{
-      const { error } = await supabaseClient.from('books').update({summary: e.target.value.trim() || null}).eq('id', book.id);
+      const { error } = await db('books').update({summary: e.target.value.trim() || null}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
     });
     wrap.querySelector('.f-notes').addEventListener('change', async (e)=>{
-      const { error } = await supabaseClient.from('books').update({notes: e.target.value}).eq('id', book.id);
+      const { error } = await db('books').update({notes: e.target.value}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
     });
     wrap.querySelector('.remove-btn').addEventListener('click', async ()=>{
-      const { error } = await supabaseClient.from('books').delete().eq('id', book.id);
+      const { error } = await db('books').delete().eq('id', book.id);
       if(error){ showToast('Fehler beim Entfernen'); return; }
       const remaining = books.filter(b=>b.shelf_id===book.shelf_id && b.id!==book.id).length;
       if(remaining === 0){
-        await supabaseClient.from('shelves').delete().eq('id', book.shelf_id);
+        await db('shelves').delete().eq('id', book.shelf_id);
       }
       selectedId = null;
       editingBookId = null;
@@ -1275,8 +1379,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
   let shelf = series ? shelves.find(s=>s.is_series && s.label.toLowerCase()===series.toLowerCase()) : null;
 
   if(!shelf){
-    const { data: newShelf, error: shelfErr } = await supabaseClient
-      .from('shelves')
+    const { data: newShelf, error: shelfErr } = await db('shelves')
       .insert({ label: series || title, is_series: !!series })
       .select().single();
     if(shelfErr){ showToast('Fehler beim Anlegen des Regals'); return; }
@@ -1284,7 +1387,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
 
     if(addBookSelectedCategoryIds.size > 0){
       const rows = [...addBookSelectedCategoryIds].map(catId=>({ shelf_id: shelf.id, category_id: catId }));
-      const { error: catLinkErr } = await supabaseClient.from('shelf_categories').insert(rows);
+      const { error: catLinkErr } = await db('shelf_categories').insert(rows);
       if(catLinkErr){ showToast('Fehler beim Zuordnen der Kategorien'); }
     }
   }
@@ -1292,13 +1395,13 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
   const sameSeries = books.filter(b=>b.shelf_id===shelf.id);
   const seriesOrder = sameSeries.length ? Math.max(...sameSeries.map(b=>b.series_order||0)) + 1 : 1;
 
-  const { data: newBook, error: bookErr } = await supabaseClient
-    .from('books')
+  const { data: newBook, error: bookErr } = await db('books')
     .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', summary, date_read:null, page_count: pageCount })
     .select().single();
   if(bookErr){ showToast('Fehler beim Speichern des Buchs'); return; }
 
   selectedId = newBook.id;
+  displayedId = newBook.id;
   await refreshAndRender();
   overlay.classList.add('hidden');
   showToast('„' + title + '“ steht jetzt im Regal');
@@ -1318,7 +1421,7 @@ function renderCatChips(containerId, afterDelete){
     btn.addEventListener('click', async ()=>{
       const id = btn.getAttribute('data-id');
       const cat = categories.find(c=>c.id===id);
-      const { error } = await supabaseClient.from('categories').delete().eq('id', id);
+      const { error } = await db('categories').delete().eq('id', id);
       if(error){ showToast('Fehler beim Löschen'); return; }
       if(cat && activeCategory === cat.name) activeCategory = null;
       await loadShelfData(viewedProfile.id);
@@ -1346,7 +1449,7 @@ document.getElementById('addCatBtn').addEventListener('click', async ()=>{
     showToast('Kategorie existiert bereits');
     return;
   }
-  const { error } = await supabaseClient.from('categories').insert({ name: val });
+  const { error } = await db('categories').insert({ name: val });
   if(error){ showToast('Fehler beim Anlegen'); return; }
   input.value='';
   await loadShelfData(viewedProfile.id);
@@ -1409,7 +1512,7 @@ document.getElementById('shelfRenameCancelBtn').addEventListener('click', closeS
 document.getElementById('shelfRenameSaveBtn').addEventListener('click', async ()=>{
   const newLabel = shelfRenameInput.value.trim();
   if(!newLabel){ showToast('Bitte einen Titel eingeben'); shelfRenameInput.focus(); return; }
-  const { error } = await supabaseClient.from('shelves').update({ label: newLabel }).eq('id', currentShelfKey);
+  const { error } = await db('shelves').update({ label: newLabel }).eq('id', currentShelfKey);
   if(error){ showToast('Fehler beim Speichern'); return; }
   setShelfCatTitle(newLabel);
   closeShelfRenameMode();
@@ -1432,7 +1535,7 @@ document.getElementById('shelfAddCatBtn').addEventListener('click', async ()=>{
     showToast('Kategorie existiert bereits');
     return;
   }
-  const { error } = await supabaseClient.from('categories').insert({ name: val });
+  const { error } = await db('categories').insert({ name: val });
   if(error){ showToast('Fehler beim Anlegen'); return; }
   input.value='';
   await loadShelfData(viewedProfile.id);
