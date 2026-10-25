@@ -52,6 +52,15 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 2400);
 }
 
+const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+
+function formatDate(iso){
+  // T00:00 erzwingt lokale Zeit, sonst kann ein reines Datum je nach Zeitzone auf den Vortag rutschen.
+  const d = new Date(iso + 'T00:00:00');
+  return isNaN(d) ? iso : d.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' });
+}
+
 function starsSVG(filled){
   const c = filled ? 'var(--brass-light)' : '#4a3d2c';
   return `<svg viewBox="0 0 24 24" fill="${c}"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7-6.3-3.9L5.7 21l1.7-7L2 9.2l7.1-.6z"/></svg>`;
@@ -537,21 +546,22 @@ function render(){
     section.id = 'shelf-' + group.key;
 
     const catTagsHtml = group.categories.map(c=>`<span class="cat-tag">${escapeHtml(c.name)}</span>`).join('');
-    const labelHtml = `<div class="shelf-label" data-key="${escapeHtml(group.key)}" data-label="${escapeHtml(group.label)}"><span class="plate">${escapeHtml(group.label)}</span><div class="cat-tags">${catTagsHtml}</div></div>`;
+    const labelInner = `<span class="plate">${escapeHtml(group.label)}</span><div class="cat-tags">${catTagsHtml}</div>`;
+    const labelHtml = owner
+      ? `<button type="button" class="shelf-label" data-key="${escapeHtml(group.key)}" data-label="${escapeHtml(group.label)}" title="Reihe bearbeiten">${labelInner}</button>`
+      : `<div class="shelf-label">${labelInner}</div>`;
 
     const spinesHtml = group.items.map(b=>{
       const width = Math.max(46, Math.min(66, 44 + b.title.length*1.1));
+      const height = 176 + (hashStr(String(b.id)) % 22);
       const isSel = b.id === selectedId;
-      const badge = group.items.length > 1 ? `<div class="spine-badge">${romanize(b.series_order)}</div>` : `<div class="spine-badge">&nbsp;</div>`;
-      const starsRow = `<div class="spine-stars">${[1,2,3,4,5].map(i=>starsSVG(i<=b.rating)).join('')}</div>`;
+      const badge = group.items.length > 1 ? `<span class="spine-badge">${romanize(b.series_order)}</span>` : '';
+      const starsRow = `<span class="spine-stars">${[1,2,3,4,5].map(i=>starsSVG(i<=b.rating)).join('')}</span>`;
       const color = colorFor(b, group.label);
-      return `<div class="spine ${isSel?'selected':''}" style="width:${width}px;background:linear-gradient(180deg, ${color}, ${color} 85%, rgba(0,0,0,0.3));" data-id="${b.id}">
-        <div class="spine-title">${escapeHtml(b.title)}</div>
-        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-          ${starsRow}
-          ${badge}
-        </div>
-      </div>`;
+      return `<button type="button" class="spine ${isSel?'selected':''}" style="--spine:${color};--w:${width}px;--h:${height}px" data-id="${b.id}" aria-label="${escapeHtml(b.title)}" aria-pressed="${isSel}">
+        <span class="spine-title">${escapeHtml(b.title)}</span>
+        <span class="spine-foot">${starsRow}${badge}</span>
+      </button>`;
     }).join('');
 
     section.innerHTML = `
@@ -608,7 +618,7 @@ function buildDetailCard(book, group, owner){
 
   const dateBlockHtml = owner
     ? `<label class="field"><span>Gelesen am</span><input type="date" class="f-date" value="${book.date_read||''}"></label>`
-    : (book.date_read ? `<p class="detail-readonly-row"><span class="rating-label">Gelesen am</span> ${escapeHtml(book.date_read)}</p>` : '');
+    : (book.date_read ? `<p class="detail-readonly-row"><span class="rating-label">Gelesen am</span> ${escapeHtml(formatDate(book.date_read))}</p>` : '');
 
   const pagesBlockHtml = owner
     ? `<label class="field"><span>Seitenzahl</span><input type="number" class="f-pages" min="1" placeholder="optional" value="${book.page_count||''}"></label>`
@@ -640,12 +650,15 @@ function buildDetailCard(book, group, owner){
          <p class="detail-meta">${escapeHtml(meta)}</p>
        </div>`;
 
+  const coverMark = group.items.length > 1 ? `<span class="detail-cover-mark">${romanize(book.series_order)}</span>` : '';
+
   wrap.innerHTML = `
+    <div class="detail-cover" style="--spine:${colorFor(book, group.label)}" aria-hidden="true">${coverMark}</div>
     <div class="detail-top">
       ${titleBlockHtml}
       <div class="detail-top-actions">
-        ${owner && !isEditing ? '<button type="button" class="edit-btn" aria-label="Bearbeiten" title="Bearbeiten">✎</button>' : ''}
-        <button class="close-x" aria-label="Schließen">&times;</button>
+        ${owner && !isEditing ? `<button type="button" class="edit-btn" aria-label="Bearbeiten" title="Bearbeiten">${ICON_EDIT}</button>` : ''}
+        <button type="button" class="close-x" aria-label="Schließen">${ICON_CLOSE}</button>
       </div>
     </div>
     <div class="rating-row">
@@ -823,10 +836,10 @@ const catOverlay = document.getElementById('catModalOverlay');
 function renderCatChips(containerId, afterDelete){
   const list = document.getElementById(containerId);
   if(categories.length === 0){
-    list.innerHTML = '<p style="color:var(--cream-dim);font-style:italic;margin:0;">Noch keine Kategorien angelegt.</p>';
+    list.innerHTML = '<p class="cat-empty">Noch keine Kategorien angelegt.</p>';
     return;
   }
-  list.innerHTML = categories.map(c=>`<span class="cat-chip">${escapeHtml(c.name)}<button type="button" data-id="${escapeHtml(c.id)}" aria-label="Entfernen">&times;</button></span>`).join('');
+  list.innerHTML = categories.map(c=>`<span class="cat-chip">${escapeHtml(c.name)}<button type="button" data-id="${escapeHtml(c.id)}" aria-label="${escapeHtml(c.name)} entfernen">${ICON_CLOSE}</button></span>`).join('');
   list.querySelectorAll('button').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const id = btn.getAttribute('data-id');
