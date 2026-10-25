@@ -1734,12 +1734,6 @@ select:focus {
     top: 64px;
     box-shadow: -1px 0 0 var(--line), -30px 0 60px -40px rgba(20, 20, 20, 0.35);
   }
-  .page {
-    transition: padding-right 0.45s var(--ease-out);
-  }
-  body.drawer-open .page {
-    padding-right: calc(28px + 420px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
