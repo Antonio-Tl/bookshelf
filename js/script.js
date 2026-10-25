@@ -4,6 +4,8 @@ const DEFAULT_USERNAME = 'antonio';
 
 let currentUser = null;    // eingeloggter Auth-User (oder null)
 let currentProfile = null; // profiles-Zeile des eingeloggten Users
+let isAdminMember = false; // in der Tabelle admins eingetragen (Admin-Aktionen brauchen zusätzlich Zwei-Faktor)
+let ownBan = null;         // eigene Sperre {reason, banned_at} oder null
 
 let viewedProfile = null;  // profiles-Zeile des Regals, das gerade angezeigt wird
 
@@ -750,7 +752,8 @@ function renderCategoryPickerList(containerEl, selectedIds, disabled){
 
 function isOwnerView(){
   if(devSandboxActive()) return true;
-  return !!(currentUser && viewedProfile && currentUser.id === viewedProfile.id);
+  // Gesperrte Konten sehen ihr Regal nur noch lesend; die Datenbank lehnt Änderungen ohnehin ab.
+  return !!(currentUser && viewedProfile && currentUser.id === viewedProfile.id && !ownBan);
 }
 
 // ---- Designs ----
@@ -906,16 +909,21 @@ async function handleSession(session){
     if(currentProfile && !currentProfile.username){
       openUsernameModal();
     } else if(currentProfile && getPref(AFTER_LOGIN_KEY, '')){
-      // Über „Eigenes Regal erstellen“ angemeldet: direkt ins eigene Regal.
+      // Nach dem Google-Login dorthin zurück, wo die Anmeldung gestartet wurde.
+      const target = getPref(AFTER_LOGIN_KEY, '');
       setPref(AFTER_LOGIN_KEY, '');
-      goToUser(currentProfile.username);
+      if(target === 'admin') navigate('?view=admin');
+      else goToUser(currentProfile.username);
     }
   } else {
     currentProfile = null;
+    isAdminMember = false;
+    ownBan = null;
   }
   // Login/Logout auf localhost wechselt zwischen Testkopie und echten Daten.
   if(DEV_LOCAL && viewedProfile) await loadShelfData(viewedProfile.id);
   render();
+  if(currentRoute === 'admin') renderAdmin();
 }
 
 async function loadProfile(){
@@ -923,6 +931,13 @@ async function loadProfile(){
     .from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
   if(error){ showToast('Profil konnte nicht geladen werden'); return; }
   currentProfile = data;
+  // Beide Tabellen zeigen nur die eigene Zeile. Fehlen sie noch (SQL 008 nicht ausgeführt), gilt: kein Admin, keine Sperre.
+  const [{ data: adminRow }, { data: banRow }] = await Promise.all([
+    supabaseClient.from('admins').select('user_id').eq('user_id', currentUser.id).maybeSingle(),
+    supabaseClient.from('bans').select('reason, banned_at').eq('user_id', currentUser.id).maybeSingle(),
+  ]);
+  isAdminMember = !!adminRow;
+  ownBan = banRow || null;
 }
 
 const LOGIN_HINT_DISMISSED_KEY = 'bookshelf-login-hint-dismissed';
@@ -969,8 +984,9 @@ function renderAuthUI(){
       ? 'Mitglied seit ' + new Date(currentProfile.created_at).toLocaleDateString('de-DE', {year:'numeric', month:'long'})
       : '';
 
-    const showMyShelf = currentProfile.username && !isOwnerView();
+    const showMyShelf = currentProfile.username && !(viewedProfile && viewedProfile.id === currentUser.id && currentRoute === 'shelf');
     myShelfBtn.classList.toggle('hidden', !showMyShelf);
+    document.getElementById('adminBtn').classList.toggle('hidden', !isAdminMember);
   } else {
     loginBtn.classList.remove('hidden');
     loginHint.classList.toggle('hidden', loginHintDismissed() || DEV_LOCAL);
@@ -1009,6 +1025,8 @@ document.getElementById('myShelfBtn').addEventListener('click', ()=>{
   document.getElementById('profilePanel').classList.add('hidden');
   if(currentProfile && currentProfile.username) goToUser(currentProfile.username);
 });
+document.getElementById('accountBtn').addEventListener('click', ()=>openAccount());
+document.getElementById('adminBtn').addEventListener('click', ()=>document.getElementById('profilePanel').classList.add('hidden'));
 
 document.getElementById('userChipTrigger').addEventListener('click', (e)=>{
   e.stopPropagation();
@@ -1041,7 +1059,7 @@ document.getElementById('saveUsernameBtn').addEventListener('click', async ()=>{
   }
   const { error } = await supabaseClient.from('profiles').update({ username: val }).eq('id', currentUser.id);
   if(error){
-    showToast(error.code === '23505' ? 'Nutzername bereits vergeben' : 'Fehler beim Speichern');
+    showToast(dbErrorText(error, 'Fehler beim Speichern'));
     return;
   }
   currentProfile.username = val;
@@ -1128,6 +1146,7 @@ function routeFromURL(){
   const params = new URLSearchParams(window.location.search);
   if(params.get('u')) return 'shelf';
   if(params.get('view') === 'regale') return 'browse';
+  if(params.get('view') === 'admin') return 'admin';
   if(params.get('source') === 'app' && getPref(LAST_USER_KEY, '')) return 'shelf';
   return 'home';
 }
@@ -1138,15 +1157,17 @@ function showRoute(route){
   document.body.setAttribute('data-route', route);
   document.getElementById('homeView').classList.toggle('hidden', route !== 'home');
   document.getElementById('browseView').classList.toggle('hidden', route !== 'browse');
+  document.getElementById('adminView').classList.toggle('hidden', route !== 'admin');
   document.getElementById('shelfView').classList.toggle('hidden', route !== 'shelf');
   if(route !== 'shelf'){
     selectedId = null;
     closeToc();
     updateBookDetailPanel();
-    document.title = route === 'browse' ? 'Bücherregale' : 'Bücherregal';
+    document.title = { browse: 'Bücherregale', admin: 'Verwaltung' }[route] || 'Bücherregal';
   }
   if(route === 'home') renderHome();
   if(route === 'browse') renderBrowse();
+  if(route === 'admin') renderAdmin();
   syncDemoLoop();
 }
 
@@ -1166,7 +1187,7 @@ document.addEventListener('click', e=>{
   const link = e.target.closest('a[data-route]');
   if(!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
-  navigate(link.getAttribute('data-route') === 'browse' ? '?view=regale' : '');
+  navigate({ browse: '?view=regale', admin: '?view=admin' }[link.getAttribute('data-route')] || '');
 });
 document.querySelector('.brand').addEventListener('click', e=>{
   if(e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -1430,6 +1451,466 @@ function syncDemoLoop(){
   }, 3200);
 }
 
+// ---- Fehlermeldungen der Datenbank ----
+const DB_ERRORS = {
+  username_cooldown: 'Du kannst deinen Nutzernamen nur alle 30 Tage ändern.',
+  username_reserved: 'Dieser Name ist gerade noch für jemand anderen reserviert.',
+  confirm_mismatch: 'Der Nutzername stimmt nicht überein.',
+  admin_cannot_delete_self: 'Admin-Konten können sich nicht selbst löschen. Entferne zuerst den Admin-Eintrag in Supabase.',
+  admin_required: 'Keine Berechtigung. Bitte bestätige dich erneut mit dem Zwei-Faktor-Code.',
+  not_on_self: 'Das geht nicht mit deinem eigenen Konto.',
+  target_is_admin: 'Andere Admins lassen sich hier nicht sperren oder löschen.',
+};
+function dbErrorText(error, fallback){
+  if(!error) return fallback;
+  if(error.code === '23505') return 'Nutzername bereits vergeben';
+  if(error.code === '23514') return '3–20 Zeichen: a–z, 0–9, _';
+  if(error.code === 'PGRST202') return 'Diese Funktion ist in der Datenbank noch nicht eingerichtet.';
+  const key = Object.keys(DB_ERRORS).find(k=>String(error.message || '').includes(k));
+  return key ? DB_ERRORS[key] : fallback;
+}
+
+const fmtDate = d=>new Date(d).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+const fmtMonth = d=>new Date(d).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+
+// ---- Rückfrage-Dialog ----
+// Mit `match` muss ein Text exakt eingetippt werden (wie bei GitHub), mit `input` liefert er die Eingabe.
+function ask({ title, text = '', confirmLabel = 'OK', danger = false, input = null, match = null }){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('askOverlay');
+    const form = document.getElementById('askForm');
+    const inp = document.getElementById('askInput');
+    const confirm = document.getElementById('askConfirm');
+    const cancel = document.getElementById('askCancel');
+    const needsInput = !!(input || match);
+    document.getElementById('askTitle').textContent = title;
+    document.getElementById('askText').textContent = text;
+    document.getElementById('askField').classList.toggle('hidden', !needsInput);
+    document.getElementById('askLabel').textContent = match ? `Zur Bestätigung „${match}“ eintippen` : (input && input.label) || '';
+    document.getElementById('askHint').textContent = (input && input.hint) || '';
+    inp.value = (input && input.value) || '';
+    inp.placeholder = (input && input.placeholder) || '';
+    confirm.textContent = confirmLabel;
+    confirm.className = 'btn ' + (danger ? 'btn-danger-solid' : 'btn-primary');
+    const sync = ()=>{ confirm.disabled = !!match && inp.value.trim().toLowerCase() !== match.toLowerCase(); };
+    const done = value=>{
+      overlay.classList.add('hidden');
+      form.removeEventListener('submit', onSubmit);
+      cancel.removeEventListener('click', onCancel);
+      inp.removeEventListener('input', sync);
+      overlay.removeEventListener('keydown', onKey);
+      resolve(value);
+    };
+    const onSubmit = e=>{ e.preventDefault(); if(!confirm.disabled) done(input ? inp.value.trim() : true); };
+    const onCancel = ()=>done(null);
+    const onKey = e=>{ if(e.key === 'Escape') done(null); };
+    form.addEventListener('submit', onSubmit);
+    cancel.addEventListener('click', onCancel);
+    inp.addEventListener('input', sync);
+    overlay.addEventListener('keydown', onKey);
+    sync();
+    overlay.classList.remove('hidden');
+    (needsInput ? inp : confirm).focus();
+  });
+}
+
+// ---- Profil und Konto ----
+const accountOverlay = document.getElementById('accountOverlay');
+const RENAME_COOLDOWN_DAYS = 30;
+
+function renameAvailableAt(){
+  if(!currentProfile || !currentProfile.username || !currentProfile.username_changed_at) return null;
+  const at = new Date(currentProfile.username_changed_at).getTime() + RENAME_COOLDOWN_DAYS * 864e5;
+  return at > Date.now() ? new Date(at) : null;
+}
+
+function syncRenameRow(){
+  const at = renameAvailableAt();
+  document.getElementById('accUsername').textContent = currentProfile.username ? '@' + currentProfile.username : 'Noch kein Nutzername';
+  document.getElementById('accUsernameHint').textContent = ownBan
+    ? 'Gesperrte Konten können den Namen nicht ändern.'
+    : at ? `Nächste Änderung ab ${fmtDate(at)} möglich.` : 'Alle 30 Tage änderbar.';
+  document.getElementById('accRenameBtn').disabled = !!at || !!ownBan;
+}
+
+function closeAccountForms(){
+  document.getElementById('accRenameForm').classList.add('hidden');
+  document.getElementById('accRenameRow').classList.remove('hidden');
+  document.getElementById('accDeleteForm').classList.add('hidden');
+  document.getElementById('accDeleteBtn').classList.remove('hidden');
+}
+
+async function openAccount(){
+  if(!currentProfile) return;
+  document.getElementById('profilePanel').classList.add('hidden');
+  const p = currentProfile;
+  const avatar = document.getElementById('accAvatar');
+  avatar.classList.toggle('hidden', !p.avatar_url);
+  if(p.avatar_url) avatar.src = p.avatar_url;
+  document.getElementById('accName').textContent = p.display_name || (p.username ? '@' + p.username : 'Dein Konto');
+  document.getElementById('accHandle').textContent = p.username ? '@' + p.username : '';
+  document.getElementById('accSince').textContent = p.created_at ? fmtMonth(p.created_at) : '–';
+  document.getElementById('accBooks').textContent = '–';
+  document.getElementById('accSeries').textContent = '–';
+  const banned = document.getElementById('accBanned');
+  banned.classList.toggle('hidden', !ownBan);
+  if(ownBan){
+    banned.textContent = `Dein Konto ist seit ${fmtDate(ownBan.banned_at)} gesperrt${ownBan.reason ? ': ' + ownBan.reason : '.'} Dein Regal ist nicht mehr öffentlich, und du kannst nichts ändern.`;
+  }
+  document.getElementById('accDeleteLabel').textContent = p.username
+    ? `Zur Bestätigung „${p.username}“ eintippen`
+    : 'Zur Bestätigung „löschen“ eintippen';
+  syncRenameRow();
+  closeAccountForms();
+  accountOverlay.classList.remove('hidden');
+
+  const [books, series] = await Promise.all([
+    supabaseClient.from('books').select('id', { count: 'exact', head: true }).eq('user_id', p.id),
+    supabaseClient.from('shelves').select('id', { count: 'exact', head: true }).eq('user_id', p.id),
+  ]);
+  if(books.count != null) document.getElementById('accBooks').textContent = books.count;
+  if(series.count != null) document.getElementById('accSeries').textContent = series.count;
+}
+
+document.getElementById('accountCloseBtn').addEventListener('click', ()=>accountOverlay.classList.add('hidden'));
+accountOverlay.addEventListener('click', e=>{ if(e.target === accountOverlay) accountOverlay.classList.add('hidden'); });
+
+document.getElementById('accRenameBtn').addEventListener('click', ()=>{
+  closeAccountForms();
+  document.getElementById('accRenameRow').classList.add('hidden');
+  document.getElementById('accRenameForm').classList.remove('hidden');
+  const input = document.getElementById('accRenameInput');
+  input.value = currentProfile.username || '';
+  input.focus();
+  input.select();
+});
+document.getElementById('accRenameCancel').addEventListener('click', closeAccountForms);
+
+document.getElementById('accRenameForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const val = document.getElementById('accRenameInput').value.trim().toLowerCase();
+  if(val === currentProfile.username){ closeAccountForms(); return; }
+  if(!/^[a-z0-9_]{3,20}$/.test(val)){ showToast('3–20 Zeichen: a–z, 0–9, _'); return; }
+  const btn = document.getElementById('accRenameSave');
+  btn.disabled = true;
+  const { data, error } = await supabaseClient.from('profiles').update({ username: val }).eq('id', currentUser.id).select().single();
+  btn.disabled = false;
+  if(error){ showToast(dbErrorText(error, 'Fehler beim Speichern')); return; }
+  const wasViewingOwn = currentRoute === 'shelf' && viewedProfile && viewedProfile.id === currentUser.id;
+  currentProfile = data;
+  directory = null;
+  document.getElementById('accHandle').textContent = '@' + val;
+  syncRenameRow();
+  closeAccountForms();
+  showToast('Nutzername geändert');
+  if(wasViewingOwn) goToUser(val); else renderAuthUI();
+});
+
+document.getElementById('accDeleteBtn').addEventListener('click', ()=>{
+  closeAccountForms();
+  document.getElementById('accDeleteBtn').classList.add('hidden');
+  document.getElementById('accDeleteForm').classList.remove('hidden');
+  const input = document.getElementById('accDeleteInput');
+  input.value = '';
+  document.getElementById('accDeleteConfirm').disabled = true;
+  input.focus();
+});
+document.getElementById('accDeleteCancel').addEventListener('click', closeAccountForms);
+document.getElementById('accDeleteInput').addEventListener('input', e=>{
+  const expected = currentProfile.username || 'löschen';
+  document.getElementById('accDeleteConfirm').disabled = e.target.value.trim().toLowerCase() !== expected;
+});
+document.getElementById('accDeleteForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const btn = document.getElementById('accDeleteConfirm');
+  if(btn.disabled) return;
+  btn.disabled = true;
+  const { error } = await supabaseClient.rpc('delete_my_account', { confirm_username: document.getElementById('accDeleteInput').value.trim() });
+  if(error){
+    btn.disabled = false;
+    showToast(dbErrorText(error, 'Konto konnte nicht gelöscht werden'));
+    return;
+  }
+  accountOverlay.classList.add('hidden');
+  setPref(LAST_USER_KEY, '');
+  directory = null;
+  await supabaseClient.auth.signOut({ scope: 'local' });
+  navigate('');
+  showToast('Dein Konto wurde gelöscht');
+});
+
+// ---- Verwaltung (nur Admins, zusätzlich mit Zwei-Faktor gesichert) ----
+// Die Seite ist nur die Oberfläche: jede Aktion läuft über eine Datenbankfunktion,
+// die selbst prüft, ob die Sitzung einem Admin gehört und per Zwei-Faktor bestätigt ist.
+let adminUsers = [];
+let adminOpenId = null;
+let adminLoadSeq = 0;
+const ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg>';
+
+function gateHtml(title, text, actions = ''){
+  return `<div class="gate-card"><span class="gate-icon">${ICON_LOCK}</span><h2>${title}</h2><p>${text}</p>${actions ? `<div class="gate-actions">${actions}</div>` : ''}</div>`;
+}
+function codeFormHtml(){
+  return `<form class="mfa-form" id="mfaForm" autocomplete="off">
+    <input type="text" id="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" aria-label="6-stelliger Code">
+    <button type="submit" class="btn btn-primary">Bestätigen</button>
+  </form>`;
+}
+
+function showAdminGate(html){
+  const gate = document.getElementById('adminGate');
+  gate.innerHTML = html;
+  gate.classList.remove('hidden');
+  document.getElementById('adminContent').classList.add('hidden');
+  document.getElementById('adminRefreshBtn').classList.add('hidden');
+}
+
+async function renderAdmin(){
+  if(!currentUser){
+    showAdminGate(gateHtml('Bitte anmelden', 'Die Verwaltung ist nur für angemeldete Admins.',
+      '<button type="button" class="btn btn-primary" id="adminLoginBtn">Mit Google anmelden</button>'));
+    document.getElementById('adminLoginBtn').addEventListener('click', ()=>{
+      setPref(AFTER_LOGIN_KEY, 'admin');
+      signInWithGoogle();
+    });
+    return;
+  }
+  if(!isAdminMember){
+    showAdminGate(gateHtml('Kein Zugriff', 'Dein Konto hat keine Admin-Rechte.',
+      '<a class="btn btn-secondary" href="./" data-route="home">Zur Startseite</a>'));
+    return;
+  }
+  const { data: aal, error } = await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(currentRoute !== 'admin') return;
+  if(error){ showAdminGate(gateHtml('Fehler', 'Die Sicherheitsstufe der Sitzung konnte nicht geprüft werden.')); return; }
+  if(aal.currentLevel !== 'aal2'){ await renderMfaGate(); return; }
+  document.getElementById('adminGate').classList.add('hidden');
+  document.getElementById('adminContent').classList.remove('hidden');
+  document.getElementById('adminRefreshBtn').classList.remove('hidden');
+  await loadAdminData();
+}
+
+async function renderMfaGate(){
+  const { data: factors, error } = await supabaseClient.auth.mfa.listFactors();
+  if(error){ showAdminGate(gateHtml('Fehler', 'Der Zwei-Faktor-Status konnte nicht geladen werden.')); return; }
+  const verified = (factors.totp || []).find(f=>f.status === 'verified');
+  if(verified){
+    showAdminGate(gateHtml('Mit Code bestätigen', 'Gib den 6-stelligen Code aus deiner Authenticator-App ein.', codeFormHtml()));
+    bindCodeForm(verified.id);
+    return;
+  }
+  // Abgebrochene Einrichtungen entfernen, sonst lehnt Supabase eine neue ab.
+  for(const f of (factors.all || []).filter(f=>f.status === 'unverified')){
+    await supabaseClient.auth.mfa.unenroll({ factorId: f.id });
+  }
+  const { data: enroll, error: enrollErr } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Bücherregal Admin' });
+  if(currentRoute !== 'admin') return;
+  if(enrollErr){
+    showAdminGate(gateHtml('Zwei-Faktor nicht verfügbar', 'Aktiviere in Supabase unter Authentication → Multi-Factor die App-Authentifizierung (TOTP) und lade die Seite neu.'));
+    return;
+  }
+  showAdminGate(gateHtml('Zwei-Faktor einrichten',
+    'Die Verwaltung ist zusätzlich mit einem Code aus einer Authenticator-App geschützt, zum Beispiel Google Authenticator, 1Password oder Authy. Scanne den QR-Code und gib den angezeigten Code ein.',
+    `<img class="mfa-qr" src="${escapeHtml(enroll.totp.qr_code)}" alt="QR-Code für die Authenticator-App">
+     <p class="mfa-secret">Oder den Schlüssel von Hand eingeben:<code>${escapeHtml(enroll.totp.secret)}</code></p>
+     ${codeFormHtml()}`));
+  bindCodeForm(enroll.id);
+}
+
+function bindCodeForm(factorId){
+  const form = document.getElementById('mfaForm');
+  const input = document.getElementById('mfaCode');
+  input.focus();
+  form.addEventListener('submit', async e=>{
+    e.preventDefault();
+    const code = input.value.replace(/\s/g, '');
+    if(!/^\d{6}$/.test(code)){ showToast('Bitte den 6-stelligen Code eingeben'); return; }
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    const { error } = await supabaseClient.auth.mfa.challengeAndVerify({ factorId, code });
+    btn.disabled = false;
+    if(error){ input.select(); showToast('Code falsch oder abgelaufen'); return; }
+    renderAdmin();
+  });
+}
+
+async function loadAdminData(){
+  const seq = ++adminLoadSeq;
+  const [users, log] = await Promise.all([supabaseClient.rpc('admin_list_users'), supabaseClient.rpc('admin_list_log')]);
+  if(seq !== adminLoadSeq || currentRoute !== 'admin') return;
+  if(users.error){
+    document.getElementById('adminUsers').innerHTML = `<p class="cards-error">${escapeHtml(dbErrorText(users.error, 'Die Nutzer konnten nicht geladen werden.'))}</p>`;
+    return;
+  }
+  adminUsers = users.data || [];
+  renderAdminStats();
+  renderAdminUsers();
+  renderAdminLog(log.data || []);
+}
+
+function renderAdminStats(){
+  const books = adminUsers.reduce((s, u)=>s + Number(u.book_count || 0), 0);
+  const banned = adminUsers.filter(u=>u.banned_at).length;
+  document.getElementById('adminStats').innerHTML = `
+    <div><dt>Konten</dt><dd>${adminUsers.length}</dd></div>
+    <div><dt>Bücher</dt><dd>${books}</dd></div>
+    <div><dt>Gesperrt</dt><dd>${banned}</dd></div>`;
+}
+
+function adminUserHtml(u){
+  const open = u.id === adminOpenId;
+  const name = u.username ? '@' + u.username : 'Ohne Nutzernamen';
+  const badges = (u.is_admin ? '<span class="badge">Admin</span>' : '') + (u.banned_at ? '<span class="badge badge-danger">Gesperrt</span>' : '');
+  const avatar = u.avatar_url
+    ? `<img class="reader-avatar" src="${escapeHtml(u.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+    : `<span class="reader-avatar reader-avatar-fallback" aria-hidden="true">${escapeHtml((u.username || '?').charAt(0).toUpperCase())}</span>`;
+  const body = open ? `
+    <div class="admin-user-body">
+      ${u.banned_at ? `<p class="admin-note">Gesperrt seit ${fmtDate(u.banned_at)}${u.ban_reason ? ': ' + escapeHtml(u.ban_reason) : ''}</p>` : ''}
+      <div class="admin-actions">
+        ${u.username ? `<a class="btn btn-secondary" href="?u=${encodeURIComponent(u.username)}" data-act="open">Regal öffnen</a>` : ''}
+        <button type="button" class="btn btn-secondary" data-act="rename">Umbenennen</button>
+        ${u.is_admin ? '' : `<button type="button" class="btn btn-secondary" data-act="ban">${u.banned_at ? 'Sperre aufheben' : 'Sperren'}</button>`}
+        <button type="button" class="btn btn-danger-outline" data-act="clear" ${Number(u.book_count) ? '' : 'disabled'}>Regal leeren</button>
+        ${u.is_admin ? '' : '<button type="button" class="btn btn-danger-outline" data-act="delete">Konto löschen</button>'}
+      </div>
+      <div class="admin-books" id="adminBooks"><p class="admin-muted">Bücher werden geladen …</p></div>
+    </div>` : '';
+  return `<article class="admin-user ${open ? 'open' : ''} ${u.banned_at ? 'is-banned' : ''}" data-id="${escapeHtml(u.id)}">
+    <button type="button" class="admin-user-head" aria-expanded="${open}">
+      ${avatar}
+      <span class="admin-user-main"><span class="admin-user-name"><b>${escapeHtml(name)}</b>${badges}</span><small>${escapeHtml(u.email || '')}</small></span>
+      <span class="admin-user-meta">
+        <span>${Number(u.book_count)} ${Number(u.book_count) === 1 ? 'Buch' : 'Bücher'}</span>
+        <span>seit ${fmtMonth(u.created_at)}</span>
+        <span>${u.last_sign_in_at ? 'zuletzt ' + new Date(u.last_sign_in_at).toLocaleDateString('de-DE') : 'nie angemeldet'}</span>
+      </span>
+      <svg class="admin-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    ${body}
+  </article>`;
+}
+
+function renderAdminUsers(){
+  const q = document.getElementById('adminSearch').value.trim().toLowerCase();
+  const list = q
+    ? adminUsers.filter(u=>[u.username, u.email, u.display_name].some(v=>v && v.toLowerCase().includes(q)))
+    : adminUsers;
+  const box = document.getElementById('adminUsers');
+  box.innerHTML = list.length ? list.map(adminUserHtml).join('') : '<p class="cards-error">Niemand gefunden.</p>';
+  if(adminOpenId && list.some(u=>u.id === adminOpenId)) loadAdminBooks(adminOpenId);
+}
+
+async function loadAdminBooks(userId){
+  const { data, error } = await supabaseClient
+    .from('books').select('id, title, author, series_order, shelves(label)')
+    .eq('user_id', userId).order('created_at', { ascending: false });
+  const box = document.getElementById('adminBooks');
+  if(!box || adminOpenId !== userId) return;
+  if(error){ box.innerHTML = '<p class="admin-muted">Bücher konnten nicht geladen werden.</p>'; return; }
+  if(!data.length){ box.innerHTML = '<p class="admin-muted">Keine Bücher.</p>'; return; }
+  box.innerHTML = `<h3>Bücher</h3><ul>${data.map(b=>`
+    <li>
+      <span><b>${escapeHtml(b.title)}</b><small>${escapeHtml([b.author, b.shelves && b.shelves.label !== b.title ? `${b.shelves.label} · Band ${b.series_order}` : ''].filter(Boolean).join(' · '))}</small></span>
+      <button type="button" class="icon-btn sm" data-book-del="${escapeHtml(b.id)}" data-title="${escapeHtml(b.title)}" aria-label="„${escapeHtml(b.title)}“ löschen" title="Buch löschen">${ICON_TRASH}</button>
+    </li>`).join('')}</ul>`;
+}
+
+async function runAdmin(fn, args, success){
+  const { error } = await supabaseClient.rpc(fn, args);
+  if(error){ showToast(dbErrorText(error, 'Aktion fehlgeschlagen')); return false; }
+  showToast(success);
+  directory = null;
+  await loadAdminData();
+  return true;
+}
+
+async function adminAction(act, u){
+  const label = u.username ? '@' + u.username : 'dieses Konto';
+  if(act === 'rename'){
+    const val = await ask({ title: `${label} umbenennen`, text: 'Admins sind nicht an die 30-Tage-Frist gebunden. Alte Links auf das Regal funktionieren danach nicht mehr.',
+      input: { label: 'Neuer Nutzername', value: u.username || '', hint: '3–20 Zeichen: a–z, 0–9, _' }, confirmLabel: 'Umbenennen' });
+    if(val == null) return;
+    const name = val.toLowerCase();
+    if(!/^[a-z0-9_]{3,20}$/.test(name)){ showToast('3–20 Zeichen: a–z, 0–9, _'); return; }
+    if(name !== u.username) await runAdmin('admin_rename_user', { target: u.id, new_username: name }, `Umbenannt in @${name}`);
+  } else if(act === 'ban'){
+    if(u.banned_at){
+      if(await ask({ title: `Sperre von ${label} aufheben?`, text: 'Das Regal ist danach wieder öffentlich, und das Konto kann wieder bearbeiten.', confirmLabel: 'Sperre aufheben' })){
+        await runAdmin('admin_set_ban', { target: u.id, banned: false, reason: null }, 'Sperre aufgehoben');
+      }
+    } else {
+      const reason = await ask({ title: `${label} sperren?`, text: 'Das Regal verschwindet aus der Öffentlichkeit, und das Konto kann nichts mehr ändern. Die Daten bleiben erhalten.',
+        input: { label: 'Grund (sieht die Person in ihrem Profil)', placeholder: 'optional' }, confirmLabel: 'Sperren', danger: true });
+      if(reason == null) return;
+      await runAdmin('admin_set_ban', { target: u.id, banned: true, reason }, `${label} gesperrt`);
+    }
+  } else if(act === 'clear'){
+    if(await ask({ title: `Regal von ${label} leeren?`, text: `Alle ${u.book_count} Bücher, Reihen und Kategorien werden endgültig gelöscht. Das Konto bleibt bestehen.`,
+      match: u.username || 'leeren', confirmLabel: 'Regal leeren', danger: true })){
+      await runAdmin('admin_clear_shelf', { target: u.id }, 'Regal geleert');
+    }
+  } else if(act === 'delete'){
+    if(await ask({ title: `Konto ${label} löschen?`, text: 'Profil, Regal und alle Bücher werden endgültig gelöscht. Die Person kann sich danach mit Google neu registrieren.',
+      match: u.username || 'löschen', confirmLabel: 'Konto löschen', danger: true })){
+      if(await runAdmin('admin_delete_user', { target: u.id }, 'Konto gelöscht')) adminOpenId = null;
+    }
+  }
+}
+
+document.getElementById('adminUsers').addEventListener('click', async e=>{
+  const card = e.target.closest('.admin-user');
+  if(!card) return;
+  const u = adminUsers.find(x=>x.id === card.getAttribute('data-id'));
+  if(!u) return;
+  if(e.target.closest('.admin-user-head')){
+    adminOpenId = adminOpenId === u.id ? null : u.id;
+    renderAdminUsers();
+    return;
+  }
+  const del = e.target.closest('[data-book-del]');
+  if(del){
+    if(await ask({ title: 'Buch löschen?', text: `„${del.getAttribute('data-title')}“ wird aus dem Regal von ${u.username ? '@' + u.username : 'diesem Konto'} entfernt.`, confirmLabel: 'Löschen', danger: true })){
+      await runAdmin('admin_delete_book', { book: del.getAttribute('data-book-del') }, 'Buch gelöscht');
+    }
+    return;
+  }
+  const btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  if(btn.getAttribute('data-act') === 'open'){
+    if(e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    goToUser(u.username);
+    return;
+  }
+  adminAction(btn.getAttribute('data-act'), u);
+});
+document.getElementById('adminSearch').addEventListener('input', renderAdminUsers);
+document.getElementById('adminRefreshBtn').addEventListener('click', loadAdminData);
+
+const LOG_LABELS = {
+  ban: 'hat gesperrt:',
+  unban: 'hat die Sperre aufgehoben:',
+  rename: 'hat umbenannt:',
+  delete_book: 'hat ein Buch gelöscht bei',
+  clear_shelf: 'hat das Regal geleert von',
+  delete_user: 'hat das Konto gelöscht:',
+};
+function renderAdminLog(entries){
+  const box = document.getElementById('adminLog');
+  if(!entries.length){ box.innerHTML = '<li class="admin-muted">Noch keine Aktionen.</li>'; return; }
+  box.innerHTML = entries.map(l=>{
+    const d = l.details || {};
+    const extra = l.action === 'rename' ? ` (@${d.from || '–'} → @${d.to || '–'})`
+      : l.action === 'delete_book' ? ` („${d.title || ''}“)`
+      : l.action === 'clear_shelf' ? ` (${d.books || 0} Bücher)`
+      : l.action === 'ban' && d.reason ? ` (${d.reason})` : '';
+    const when = new Date(l.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<li><time>${when}</time><span><b>@${escapeHtml(l.admin_name || '?')}</b> ${LOG_LABELS[l.action] || escapeHtml(l.action)} <b>${l.target_name ? '@' + escapeHtml(l.target_name) : 'gelöschtes Konto'}</b>${escapeHtml(extra)}</span></li>`;
+  }).join('');
+}
+
 // ---- Daten laden ----
 async function loadShelfData(profileId){
   const useSandbox = devSandboxActive();
@@ -1555,7 +2036,8 @@ function renderHeader(owner){
   if(owner){
     banner.classList.add('hidden');
   } else {
-    banner.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Nur ansehen';
+    const ownButBanned = ownBan && currentUser && viewedProfile.id === currentUser.id;
+    banner.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>' + (ownButBanned ? 'Konto gesperrt' : 'Nur ansehen');
     banner.classList.remove('hidden');
   }
 
@@ -2479,7 +2961,7 @@ document.getElementById('setCategoriesBtn').addEventListener('click', ()=>{
 });
 document.getElementById('setUsernameBtn').addEventListener('click', ()=>{
   settingsOverlay.classList.add('hidden');
-  openUsernameModal(true);
+  openAccount();
 });
 document.getElementById('setShareBtn').addEventListener('click', shareShelf);
 document.getElementById('setReloadCoversBtn').addEventListener('click', ()=>{

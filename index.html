@@ -84,8 +84,12 @@
         <p class="profile-display-name" id="profileDisplayName"></p>
         <p class="profile-username" id="profileUsername"></p>
         <p class="profile-meta" id="profileMemberSince"></p>
+        <div class="profile-links">
+          <button type="button" class="profile-link hidden" id="myShelfBtn">Mein Regal</button>
+          <button type="button" class="profile-link" id="accountBtn">Profil und Konto</button>
+          <a class="profile-link hidden" id="adminBtn" href="?view=admin" data-route="admin">Verwaltung</a>
+        </div>
         <div class="profile-actions">
-          <button class="btn btn-secondary hidden" id="myShelfBtn">Mein Regal</button>
           <button class="btn btn-ghost" id="logoutBtn">Abmelden</button>
         </div>
       </div>
@@ -182,6 +186,32 @@
     </div>
   </header>
   <div class="reader-list" id="browseCards"></div>
+</main>
+
+<main class="page admin hidden" id="adminView">
+  <header class="browse-head">
+    <div>
+      <h1>Verwaltung</h1>
+      <p class="browse-lede">Nur für Admins. Jede Aktion wird mit deinem Namen protokolliert.</p>
+    </div>
+    <button type="button" class="btn btn-secondary hidden" id="adminRefreshBtn">Aktualisieren</button>
+  </header>
+
+  <section class="admin-gate hidden" id="adminGate" aria-live="polite"></section>
+
+  <div class="hidden" id="adminContent">
+    <dl class="stats admin-stats" id="adminStats"></dl>
+    <div class="admin-toolbar">
+      <div class="search-box browse-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="adminSearch" placeholder="Name oder E-Mail" aria-label="Nutzer filtern" autocomplete="off">
+      </div>
+    </div>
+    <div class="admin-users" id="adminUsers"></div>
+
+    <h2 class="section-title admin-log-title">Protokoll</h2>
+    <ol class="admin-log" id="adminLog"></ol>
+  </div>
 </main>
 
 <main class="page hidden" id="shelfView">
@@ -322,7 +352,7 @@
       <h3>Mein Regal</h3>
       <div class="setting-actions">
         <button type="button" class="btn btn-secondary" id="setCategoriesBtn">Kategorien verwalten</button>
-        <button type="button" class="btn btn-secondary hidden" id="setUsernameBtn">Nutzernamen ändern</button>
+        <button type="button" class="btn btn-secondary hidden" id="setUsernameBtn">Profil und Konto</button>
         <button type="button" class="btn btn-secondary" id="setShareBtn">Regal-Link teilen</button>
       </div>
     </section>
@@ -423,6 +453,80 @@
       <button type="button" class="btn btn-primary" id="saveUsernameBtn">Speichern</button>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay hidden" id="accountOverlay">
+  <div class="modal account-modal" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
+    <div class="modal-title-row">
+      <h2 id="accountTitle">Profil und Konto</h2>
+      <button type="button" class="icon-btn" id="accountCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    </div>
+
+    <div class="account-head">
+      <img class="account-avatar" id="accAvatar" alt="" referrerpolicy="no-referrer">
+      <div>
+        <p class="account-name" id="accName"></p>
+        <p class="account-handle" id="accHandle"></p>
+      </div>
+    </div>
+    <dl class="account-facts">
+      <div><dt>Mitglied seit</dt><dd id="accSince">–</dd></div>
+      <div><dt>Bücher</dt><dd id="accBooks">–</dd></div>
+      <div><dt>Reihen</dt><dd id="accSeries">–</dd></div>
+    </dl>
+    <p class="account-banned hidden" id="accBanned"></p>
+
+    <section class="settings-group">
+      <h3>Nutzername</h3>
+      <div class="setting-row" id="accRenameRow">
+        <span><b id="accUsername"></b><small id="accUsernameHint"></small></span>
+        <button type="button" class="btn btn-secondary" id="accRenameBtn">Ändern</button>
+      </div>
+      <form class="account-form hidden" id="accRenameForm" autocomplete="off">
+        <label class="field"><span>Neuer Nutzername</span>
+          <input type="text" id="accRenameInput" maxlength="20" spellcheck="false" autocapitalize="none">
+          <small>3–20 Zeichen: Kleinbuchstaben, Zahlen, Unterstrich. Danach ist die nächste Änderung erst in 30 Tagen möglich, und dein alter Name bleibt 14 Tage für dich reserviert. Alte Links auf dein Regal funktionieren dann nicht mehr.</small>
+        </label>
+        <div class="detail-edit-actions">
+          <button type="button" class="btn btn-ghost" id="accRenameCancel">Abbrechen</button>
+          <button type="submit" class="btn btn-primary" id="accRenameSave">Speichern</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="settings-group">
+      <h3>Konto</h3>
+      <div class="setting-row">
+        <span><b>Konto löschen</b><small>Löscht dein Profil, dein Regal und alle Bücher endgültig.</small></span>
+        <button type="button" class="btn btn-danger-outline" id="accDeleteBtn">Löschen …</button>
+      </div>
+      <form class="account-form account-danger hidden" id="accDeleteForm" autocomplete="off">
+        <label class="field"><span id="accDeleteLabel">Zur Bestätigung deinen Nutzernamen eintippen</span>
+          <input type="text" id="accDeleteInput" spellcheck="false" autocapitalize="none">
+          <small>Das kann nicht rückgängig gemacht werden.</small>
+        </label>
+        <div class="detail-edit-actions">
+          <button type="button" class="btn btn-ghost" id="accDeleteCancel">Abbrechen</button>
+          <button type="submit" class="btn btn-danger-solid" id="accDeleteConfirm" disabled>Endgültig löschen</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="askOverlay">
+  <form class="modal ask-modal" role="dialog" aria-modal="true" aria-labelledby="askTitle" id="askForm" autocomplete="off">
+    <h2 id="askTitle"></h2>
+    <p class="modal-lede" id="askText"></p>
+    <label class="field hidden" id="askField"><span id="askLabel"></span>
+      <input type="text" id="askInput" spellcheck="false" autocapitalize="none">
+      <small id="askHint"></small>
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="askCancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="askConfirm">OK</button>
+    </div>
+  </form>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
