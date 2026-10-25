@@ -115,7 +115,76 @@
 <div class="drawer-overlay" id="bookDetailOverlay"></div>
 <aside class="drawer" id="bookDetailPanel" aria-label="Buchdetails"></aside>
 
-<main class="page">
+<main class="page home hidden" id="homeView">
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="hero-copy">
+      <h1 class="hero-title" id="heroTitle">Alles, was du gelesen hast. <span>In einem Regal.</span></h1>
+      <p class="hero-lede">Trag deine Bücher ein, und sie stehen Rücken an Rücken an der Wand, sortiert nach Reihen. Cover, Seitenzahl und Klappentext sucht das Regal selbst heraus.</p>
+      <div class="hero-actions">
+        <button type="button" class="btn btn-primary btn-lg" id="homeCreateBtn">Eigenes Regal erstellen</button>
+        <a class="btn btn-secondary btn-lg" href="?view=regale" data-route="browse">Bücherregale ansehen</a>
+      </div>
+      <p class="hero-note" id="homeCreateNote">Kostenlos, Anmeldung mit Google</p>
+    </div>
+    <figure class="hero-scene">
+      <div class="hero-shelf" id="heroShelf" aria-hidden="true"></div>
+      <figcaption class="hero-caption" id="heroCaption"></figcaption>
+    </figure>
+  </section>
+
+  <section class="steps" aria-labelledby="stepsTitle">
+    <h2 class="section-title" id="stepsTitle">In drei Handgriffen zum eigenen Regal</h2>
+    <ol class="step-list">
+      <li class="step">
+        <div class="step-demo demo-search" aria-hidden="true">
+          <div class="demo-input"><span id="demoTyped">Red Ris</span><i class="demo-caret"></i></div>
+          <div class="demo-suggest" id="demoSuggest"></div>
+        </div>
+        <h3><span class="step-no">1</span>Titel eintippen</h3>
+        <p>Schon beim Tippen schlägt das Regal passende Bücher vor, auch die Folgebände einer Reihe.</p>
+      </li>
+      <li class="step">
+        <div class="step-demo demo-turn" aria-hidden="true">
+          <div class="ledge-wrap"><div class="ledge" id="demoTurn"></div></div>
+        </div>
+        <h3><span class="step-no">2</span>Zurücklehnen</h3>
+        <p>Cover, Autor, Seiten und Klappentext kommen von allein. Sterne und Notizen setzt du, wann du willst.</p>
+      </li>
+      <li class="step">
+        <div class="step-demo demo-share" aria-hidden="true">
+          <div class="demo-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+            <span><span class="demo-host">bookshelf.antonio-tl.com/?u=</span><b>deinname</b></span>
+          </div>
+          <span class="demo-copied">Link kopiert</span>
+        </div>
+        <h3><span class="step-no">3</span>Teilen</h3>
+        <p>Dein Regal hat einen eigenen Link. Freunde stöbern darin, ohne sich anmelden zu müssen.</p>
+      </li>
+    </ol>
+  </section>
+
+  <footer class="home-foot">
+    <span>Bücherregal</span>
+    <span>Buchdaten und Cover von Open Library und Google Books</span>
+  </footer>
+</main>
+
+<main class="page browse hidden" id="browseView">
+  <header class="browse-head">
+    <div>
+      <h1>Bücherregale</h1>
+      <p class="browse-lede">Stöber in den Regalen anderer Leser. <span class="browse-count" id="browseCount"></span></p>
+    </div>
+    <div class="search-box browse-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="browseSearch" placeholder="Nach Namen suchen" aria-label="Regale nach Namen filtern" autocomplete="off">
+    </div>
+  </header>
+  <div class="reader-list" id="browseCards"></div>
+</main>
+
+<main class="page hidden" id="shelfView">
   <div class="login-hint hidden" id="loginHint" role="note">
     <p><span class="lh-long">Lust auf ein eigenes Regal? Melde dich an und stell deine gelesenen Bücher hinein.</span><span class="lh-short">Eigenes Regal anlegen?</span></p>
     <button type="button" class="btn btn-secondary" id="loginHintAction">Anmelden</button>

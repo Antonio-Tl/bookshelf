@@ -429,7 +429,7 @@ function coverIsPainted(url, b){
 
 // Bände ohne eigenes Cover übernehmen Farben und Emblem vom ersten bebilderten Band der Reihe.
 function seriesDonor(b){
-  const meta = bookIndex.get(String(b.id));
+  const meta = bookIndex.get(String(b.id)) || browseIndex.get(String(b.id));
   if(!meta) return null;
   for(const o of meta.group.items){
     const e = coverCache[coverKey(o)];
@@ -477,7 +477,7 @@ function visualStyle(v, large){
 }
 
 function refreshBookVisual(b){
-  const meta = bookIndex.get(String(b.id));
+  const meta = bookIndex.get(String(b.id)) || browseIndex.get(String(b.id));
   const label = meta ? meta.group.label : '';
   const v = bookVisual(b, label);
   document.querySelectorAll(`[data-book="${CSS.escape(String(b.id))}"]`).forEach(el=>{
@@ -905,6 +905,10 @@ async function handleSession(session){
     await loadProfile();
     if(currentProfile && !currentProfile.username){
       openUsernameModal();
+    } else if(currentProfile && getPref(AFTER_LOGIN_KEY, '')){
+      // Über „Eigenes Regal erstellen“ angemeldet: direkt ins eigene Regal.
+      setPref(AFTER_LOGIN_KEY, '');
+      goToUser(currentProfile.username);
     }
   } else {
     currentProfile = null;
@@ -927,6 +931,7 @@ function loginHintDismissed(){
 }
 
 function renderAuthUI(){
+  updateHomeCta();
   const loginBtn = document.getElementById('googleLoginBtn');
   const userChip = document.getElementById('userChip');
   const myShelfBtn = document.getElementById('myShelfBtn');
@@ -1040,6 +1045,8 @@ document.getElementById('saveUsernameBtn').addEventListener('click', async ()=>{
     return;
   }
   currentProfile.username = val;
+  setPref(AFTER_LOGIN_KEY, '');
+  directory = null;
   usernameModalOverlay.classList.add('hidden');
   await goToUser(val);
 });
@@ -1112,9 +1119,60 @@ document.addEventListener('click', (e)=>{
 // ---- Regal-Routing (welches Profil wird angezeigt) ----
 function usernameFromURL(){
   const params = new URLSearchParams(window.location.search);
-  // Ohne ?u= (z. B. beim Start der installierten App) das zuletzt angesehene Regal öffnen.
   return (params.get('u') || getPref(LAST_USER_KEY, DEFAULT_USERNAME)).toLowerCase();
 }
+
+// Drei Ansichten: Startseite (ohne Parameter), Übersicht aller Regale (?view=regale), ein Regal (?u=name).
+// Die installierte App startet weiter direkt im zuletzt angesehenen Regal.
+function routeFromURL(){
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('u')) return 'shelf';
+  if(params.get('view') === 'regale') return 'browse';
+  if(params.get('source') === 'app' && getPref(LAST_USER_KEY, '')) return 'shelf';
+  return 'home';
+}
+
+let currentRoute = null;
+function showRoute(route){
+  currentRoute = route;
+  document.body.setAttribute('data-route', route);
+  document.getElementById('homeView').classList.toggle('hidden', route !== 'home');
+  document.getElementById('browseView').classList.toggle('hidden', route !== 'browse');
+  document.getElementById('shelfView').classList.toggle('hidden', route !== 'shelf');
+  if(route !== 'shelf'){
+    selectedId = null;
+    closeToc();
+    updateBookDetailPanel();
+    document.title = route === 'browse' ? 'Bücherregale' : 'Bücherregal';
+  }
+  if(route === 'home') renderHome();
+  if(route === 'browse') renderBrowse();
+  syncDemoLoop();
+}
+
+async function applyRoute(){
+  const route = routeFromURL();
+  showRoute(route);
+  if(route === 'shelf') await loadViewedUserFromURL();
+}
+
+function navigate(search){
+  history.pushState({}, '', window.location.pathname + search);
+  window.scrollTo(0, 0);
+  applyRoute();
+}
+
+document.addEventListener('click', e=>{
+  const link = e.target.closest('a[data-route]');
+  if(!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  navigate(link.getAttribute('data-route') === 'browse' ? '?view=regale' : '');
+});
+document.querySelector('.brand').addEventListener('click', e=>{
+  if(e.metaKey || e.ctrlKey || e.shiftKey) return;
+  e.preventDefault();
+  navigate('');
+});
 
 async function loadViewedUserByUsername(username){
   selectedId = null;
@@ -1150,13 +1208,227 @@ async function loadViewedUserFromURL(){
 }
 
 async function goToUser(username){
-  const url = new URL(window.location.href);
-  url.searchParams.set('u', username.toLowerCase());
-  history.pushState({}, '', url);
+  history.pushState({}, '', window.location.pathname + '?u=' + encodeURIComponent(username.toLowerCase()));
+  if(currentRoute !== 'shelf') window.scrollTo(0, 0);
+  showRoute('shelf');
   await loadViewedUserByUsername(username);
 }
 
-window.addEventListener('popstate', loadViewedUserFromURL);
+window.addEventListener('popstate', applyRoute);
+
+// ---- Startseite und Regal-Übersicht ----
+const AFTER_LOGIN_KEY = 'bookshelf-after-login';
+const browseIndex = new Map(); // id -> {book, group}, für Bücher außerhalb des geöffneten Regals
+let directory = null;          // [{profile, groups, bookCount}], Antonio zuerst
+let directoryLoading = null;
+
+async function loadDirectory(){
+  if(directory) return directory;
+  if(directoryLoading) return directoryLoading;
+  directoryLoading = (async ()=>{
+    const [{ data: profiles, error: pErr }, { data: shelfRows, error: sErr }, { data: bookRows, error: bErr }] = await Promise.all([
+      supabaseClient.from('profiles').select('id, username, avatar_url, created_at').not('username', 'is', null),
+      supabaseClient.from('shelves').select('id, user_id, label'),
+      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read').limit(5000),
+    ]);
+    if(pErr || sErr || bErr){ directoryLoading = null; return null; }
+    directory = (profiles || []).map(profile=>{
+      const own = (bookRows || []).filter(b=>b.user_id === profile.id);
+      const groups = (shelfRows || [])
+        .filter(s=>s.user_id === profile.id)
+        .map(s=>({
+          key: s.id,
+          label: s.label,
+          items: own.filter(b=>b.shelf_id === s.id).sort((a, b)=>(a.series_order || 0) - (b.series_order || 0)),
+        }))
+        .filter(g=>g.items.length)
+        .sort((a, b)=>a.label.localeCompare(b.label, 'de'));
+      groups.forEach(g=>g.items.forEach(b=>browseIndex.set(String(b.id), { book: b, group: g })));
+      return { profile, groups, bookCount: own.length };
+    }).sort((a, b)=>
+      (b.profile.username === DEFAULT_USERNAME) - (a.profile.username === DEFAULT_USERNAME) ||
+      b.bookCount - a.bookCount ||
+      a.profile.username.localeCompare(b.profile.username, 'de')
+    );
+    return directory;
+  })();
+  return directoryLoading;
+}
+
+// Nicht anklickbare Kopie eines Regalbuchs für Startseite und Karten; dreht sich wie im echten Regal.
+function staticBookHtml(b, group, out){
+  const v = bookVisual(b, group.label);
+  const multi = group.items.length > 1;
+  return `<span class="book ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${v.emblem?'has-emblem':''} ${out?'open':''}" data-book="${escapeHtml(b.id)}" data-series="${escapeHtml(group.key)}" style="${escapeHtml(visualStyle(v))}">
+    <span class="book-3d">
+      <span class="face spine"><span class="spine-emblem"></span><span class="spine-title">${escapeHtml(b.title)}</span><span class="spine-no">${multi ? b.series_order : ''}</span></span>
+      <span class="face front">${genCoverHtml(b, group)}</span>
+    </span>
+  </span>`;
+}
+
+// „Antonios Regal“, aber „Orientdreams’ Regal“.
+function possessive(username){
+  const name = username.charAt(0).toUpperCase() + username.slice(1);
+  return /[sßxz]$/i.test(name) ? name + '’' : name + 's';
+}
+
+function avatarHtml(p){
+  return p.avatar_url
+    ? `<img class="reader-avatar" src="${escapeHtml(p.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+    : `<span class="reader-avatar reader-avatar-fallback" aria-hidden="true">${escapeHtml(p.username.charAt(0).toUpperCase())}</span>`;
+}
+
+function thumbHtml(b, group){
+  const v = bookVisual(b, group.label);
+  return `<span class="thumb ${v.has ? 'has-cover' : ''} ${v.loading ? 'is-loading' : ''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}"></span>`;
+}
+
+// Für die Cover-Reihe: erst der erste Band jeder Reihe, dann die Folgebände.
+function coverPicks(entry, n){
+  const firsts = entry.groups.map(g=>({ b: g.items[0], g }));
+  const rest = entry.groups.flatMap(g=>g.items.slice(1).map(b=>({ b, g })));
+  return firsts.concat(rest).slice(0, n);
+}
+
+function readerRowHtml(entry){
+  const p = entry.profile;
+  const series = entry.groups.length;
+  const meta = entry.bookCount
+    ? `${entry.bookCount} ${entry.bookCount === 1 ? 'Buch' : 'Bücher'} · ${series} ${series === 1 ? 'Reihe' : 'Reihen'}`
+    : 'Noch keine Bücher';
+  const names = entry.groups.map(g=>g.label);
+  const seriesLine = names.length
+    ? `<span class="reader-series">${escapeHtml(names.slice(0, 4).join(' · '))}${names.length > 4 ? ` <em>+${names.length - 4}</em>` : ''}</span>`
+    : '';
+  // Auch leer vorhanden, damit der Pfeil in jeder Zeile an derselben Stelle steht.
+  const covers = `<span class="reader-covers" aria-hidden="true">${entry.bookCount ? coverPicks(entry, 6).map(({ b, g })=>thumbHtml(b, g)).join('') : ''}</span>`;
+  return `<a class="reader-row ${entry.bookCount ? '' : 'is-empty'}" href="?u=${encodeURIComponent(p.username)}" data-user="${escapeHtml(p.username)}">
+    ${avatarHtml(p)}
+    <span class="reader-text"><b>${escapeHtml(possessive(p.username))} Regal</b><small>@${escapeHtml(p.username)} · ${meta}</small>${seriesLine}</span>
+    ${covers}
+    <span class="reader-go" aria-hidden="true">→</span>
+  </a>`;
+}
+
+function readerSkeleton(n){
+  return Array.from({ length: n }, ()=>`<div class="reader-row is-skeleton"><span class="reader-avatar"></span><span class="reader-text"><b></b><small></small></span><span class="reader-covers">${'<span class="thumb"></span>'.repeat(5)}</span></div>`).join('');
+}
+
+function updateHomeCta(){
+  const btn = document.getElementById('homeCreateBtn');
+  const note = document.getElementById('homeCreateNote');
+  const mine = currentProfile && currentProfile.username;
+  btn.textContent = mine ? 'Zu meinem Regal' : 'Eigenes Regal erstellen';
+  note.textContent = mine ? `Angemeldet als @${currentProfile.username}` : 'Kostenlos, Anmeldung mit Google';
+}
+
+document.getElementById('homeCreateBtn').addEventListener('click', ()=>{
+  if(currentProfile && currentProfile.username){ goToUser(currentProfile.username); return; }
+  if(currentUser){ openUsernameModal(); return; }
+  // Lokal gibt es keinen Google-Login: der Testmodus macht Antonios Regal zum eigenen.
+  if(DEV_LOCAL){ goToUser(DEFAULT_USERNAME); return; }
+  setPref(AFTER_LOGIN_KEY, '1');
+  signInWithGoogle();
+});
+
+async function renderHome(){
+  updateHomeCta();
+  const list = await loadDirectory();
+  if(currentRoute !== 'home' || !list) return;
+  renderHero(list.find(e=>e.profile.username === DEFAULT_USERNAME) || list.find(e=>e.bookCount));
+}
+
+const narrowQuery = window.matchMedia('(max-width: 640px)');
+narrowQuery.addEventListener('change', ()=>{ if(currentRoute === 'home' && directory) renderHome(); });
+
+// Schaufenster statt vollem Regal: je Reihe ein Cover, alle gleich groß. Die weiteren Bände
+// liegen unsichtbar dahinter und werden nacheinander eingeblendet.
+function displayShelfHtml(groups, count){
+  return groups.slice(0, count).map(g=>`<span class="display-slot">${g.items.slice(0, 4).map((b, i)=>{
+    const v = bookVisual(b, g.label);
+    return `<span class="display-cover ${v.has ? 'has-cover' : ''} ${i === 0 ? 'is-front' : ''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}">${genCoverHtml(b, g)}</span>`;
+  }).join('')}</span>`).join('');
+}
+
+function renderHero(entry){
+  const shelf = document.getElementById('heroShelf');
+  const caption = document.getElementById('heroCaption');
+  if(!entry){ shelf.innerHTML = ''; caption.innerHTML = ''; return; }
+  const count = narrowQuery.matches ? 3 : 5;
+  const groups = entry.groups.slice(0, count);
+  shelf.innerHTML = `<div class="ledge-wrap"><div class="display-row">${displayShelfHtml(groups, count)}</div></div>`;
+  const u = entry.profile.username;
+  caption.innerHTML = `Aus dem Regal von <a href="?u=${encodeURIComponent(u)}">@${escapeHtml(u)}</a>`;
+  caption.querySelector('a').addEventListener('click', e=>{ e.preventDefault(); goToUser(u); });
+
+  // Schritt 1 und 2 zeigen echte Bücher aus diesem Regal.
+  const all = entry.groups.flatMap(g=>g.items.map(b=>({ b, g })));
+  const pick = all.find(x=>/red rising/i.test(x.g.label)) || all[0];
+  const sameSeries = all.filter(x=>x.g === pick.g).slice(0, 2);
+  document.getElementById('demoTyped').textContent = pick.g.label.slice(0, Math.max(3, pick.g.label.length - 3));
+  document.getElementById('demoSuggest').innerHTML = sameSeries.map(({ b, g })=>
+    `<div class="demo-row">${thumbHtml(b, g)}<span><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.author || '')}${g.items.length > 1 ? ' · Band ' + b.series_order : ''}</small></span></div>`
+  ).join('');
+  const turnGroup = entry.groups.find(g=>g.items.length >= 3) || entry.groups[0];
+  document.getElementById('demoTurn').innerHTML = turnGroup.items.slice(0, 4).map((b, i)=>staticBookHtml(b, turnGroup, i === 0)).join('');
+  queueCovers(groups.flatMap(g=>g.items.slice(0, 4)).concat(sameSeries.map(x=>x.b), turnGroup.items.slice(0, 4)));
+  scheduleFit();
+}
+
+async function renderBrowse(){
+  const rows = document.getElementById('browseCards');
+  if(!directory) rows.innerHTML = readerSkeleton(4);
+  const list = await loadDirectory();
+  if(currentRoute !== 'browse') return;
+  if(!list){
+    rows.innerHTML = '<p class="cards-error">Die Regale konnten gerade nicht geladen werden. <button type="button" class="link-btn" id="browseRetry">Neu laden</button></p>';
+    document.getElementById('browseRetry').addEventListener('click', renderBrowse);
+    return;
+  }
+  const q = document.getElementById('browseSearch').value.trim().toLowerCase();
+  const shown = q ? list.filter(e=>e.profile.username.includes(q)) : list;
+  document.getElementById('browseCount').textContent = `${list.length} ${list.length === 1 ? 'Regal' : 'Regale'}`;
+  rows.innerHTML = shown.length
+    ? shown.map(readerRowHtml).join('')
+    : `<p class="cards-error">Kein Regal mit „${escapeHtml(q)}“ gefunden.</p>`;
+  rows.querySelectorAll('.reader-row[data-user]').forEach(row=>{
+    row.addEventListener('click', e=>{
+      if(e.metaKey || e.ctrlKey || e.shiftKey) return;
+      e.preventDefault();
+      goToUser(row.getAttribute('data-user'));
+    });
+  });
+  queueCovers(shown.flatMap(e=>coverPicks(e, 6).map(x=>x.b)));
+}
+document.getElementById('browseSearch').addEventListener('input', ()=>renderBrowse());
+
+// Startseite: im Schaufenster blendet ab und zu ein Cover zum nächsten Band über,
+// in Schritt 2 dreht sich ein anderer Band nach vorne.
+let demoTimer = 0;
+let demoLastSlot = null;
+function syncDemoLoop(){
+  clearInterval(demoTimer);
+  if(currentRoute !== 'home' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  demoTimer = setInterval(()=>{
+    if(document.hidden) return;
+    const slots = [...document.querySelectorAll('#heroShelf .display-slot')].filter(s=>s.children.length > 1 && s !== demoLastSlot);
+    if(slots.length){
+      const slot = slots[Math.floor(Math.random() * slots.length)];
+      const covers = [...slot.children];
+      const cur = covers.findIndex(el=>el.classList.contains('is-front'));
+      covers[cur].classList.remove('is-front');
+      covers[(cur + 1) % covers.length].classList.add('is-front');
+      demoLastSlot = slot;
+    }
+    const books = [...document.querySelectorAll('#demoTurn .book')];
+    if(books.length > 1){
+      const cur = books.findIndex(el=>el.classList.contains('open'));
+      books.forEach(el=>el.classList.remove('open'));
+      books[(cur + 1) % books.length].classList.add('open');
+    }
+  }, 3200);
+}
 
 // ---- Daten laden ----
 async function loadShelfData(profileId){
@@ -1188,6 +1460,7 @@ async function loadShelfData(profileId){
 }
 
 async function refreshAndRender(){
+  directory = null; // Übersicht beim nächsten Öffnen neu laden
   if(viewedProfile) await loadShelfData(viewedProfile.id);
   render();
 }
@@ -1270,14 +1543,14 @@ function renderHeader(owner){
   }
   document.getElementById('appContent').classList.remove('hidden');
 
-  const displayName = viewedProfile.username.charAt(0).toUpperCase() + viewedProfile.username.slice(1);
-  h1.textContent = owner ? 'Mein Regal' : `${displayName}s Regal`;
+  const displayName = possessive(viewedProfile.username);
+  h1.textContent = owner ? 'Mein Regal' : `${displayName} Regal`;
   const since = viewedProfile.created_at
     ? ' · seit ' + new Date(viewedProfile.created_at).toLocaleDateString('de-DE', {month:'long', year:'numeric'})
     : '';
   sub.textContent = '@' + viewedProfile.username + since;
   shareBtn.classList.remove('hidden');
-  document.title = owner ? 'Mein Bücherregal' : `${displayName}s Bücherregal`;
+  document.title = owner ? 'Mein Bücherregal' : `${displayName} Bücherregal`;
 
   if(owner){
     banner.classList.add('hidden');
@@ -1462,7 +1735,7 @@ let fitFrame = 0;
 function scheduleFit(){
   cancelAnimationFrame(fitFrame);
   fitFrame = requestAnimationFrame(()=>{
-    document.querySelectorAll('#shelves .spine-title').forEach(t=>{
+    document.querySelectorAll('#shelves .spine-title, #heroShelf .spine-title, #demoTurn .spine-title').forEach(t=>{
       t.style.fontSize = '';
       let size = parseFloat(getComputedStyle(t).fontSize);
       while(t.scrollWidth > t.clientWidth + 1 && size > 9){
@@ -2270,7 +2543,7 @@ if('serviceWorker' in navigator){
 // ---- Start ----
 async function boot(){
   syncViewButtons();
-  await Promise.all([ initAuth(), loadViewedUserFromURL() ]);
+  await Promise.all([ initAuth(), applyRoute() ]);
   render();
 }
 boot();
