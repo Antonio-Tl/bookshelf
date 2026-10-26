@@ -270,40 +270,63 @@
 </main>
 
 <div class="modal-overlay hidden" id="modalOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addBookTitle">
-    <h2 id="addBookTitle">Neues Buch</h2>
-    <p class="modal-lede">Tipp den Titel ein und wähl einen Vorschlag: Autor, Seitenzahl, Klappentext und Cover werden dann ausgefüllt.</p>
+  <div class="modal modal-add" role="dialog" aria-modal="true" aria-labelledby="addBookTitle">
     <form id="bookForm" autocomplete="off">
-      <div class="field suggest-field">
-        <label for="f-title">Titel <abbr class="req" title="Pflichtfeld">*</abbr></label>
-        <input type="text" id="f-title" required aria-required="true" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addSuggest">
-        <div class="suggest-list hidden" id="addSuggest" role="listbox" aria-label="Buchvorschläge"></div>
+      <div class="modal-add-head">
+        <div class="modal-title-row">
+          <h2 id="addBookTitle">Neues Buch</h2>
+          <button type="button" class="icon-btn" id="closeAddBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        </div>
+        <div class="suggest-field add-search">
+          <label for="f-title" class="visually-hidden">Titel</label>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="f-title" required aria-required="true" placeholder="Titel suchen, z. B. Red Rising" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addSuggest" aria-describedby="addSearchHint">
+          </div>
+          <div class="suggest-list hidden" id="addSuggest" role="listbox" aria-label="Buchvorschläge"></div>
+          <small id="addSearchHint">Wähl einen Vorschlag, dann werden Autor, Seiten, Genres, Klappentext und Cover ergänzt.</small>
+        </div>
       </div>
-      <label class="field"><span>Autor</span>
-        <input type="text" id="f-author">
-      </label>
-      <div class="field-row">
-        <label class="field"><span>Seitenzahl</span>
-          <input type="number" id="f-pages" min="1" placeholder="automatisch">
-          <small>Leer lassen: wird aus der Buchdatenbank ergänzt.</small>
+
+      <div class="modal-add-body">
+        <div class="add-book-card">
+          <div class="add-preview" id="addPreview" aria-hidden="true"></div>
+          <div class="add-book-fields">
+            <label class="field"><span>Autor</span>
+              <input type="text" id="f-author">
+            </label>
+            <div class="field-row">
+              <label class="field"><span>Reihe <abbr class="req" title="Pflichtfeld">*</abbr></span>
+                <input type="text" id="f-series" list="series-list" required aria-required="true" placeholder="z. B. Red Rising">
+                <datalist id="series-list"></datalist>
+              </label>
+              <label class="field"><span>Seiten</span>
+                <input type="number" id="f-pages" min="1" placeholder="auto">
+              </label>
+            </div>
+            <small class="field-hint" id="f-series-hint">Einzelband? Dann einfach den Buchtitel als Reihe eintragen.</small>
+          </div>
+        </div>
+
+        <div class="field"><span>Kategorien</span>
+          <div class="cat-toggle-list" id="f-category-list"></div>
+          <small id="f-category-hint"></small>
+          <details class="more-genres" id="f-more-genres">
+            <summary>Weitere Genres</summary>
+            <div class="cat-toggle-list" id="f-more-genres-list"></div>
+          </details>
+        </div>
+
+        <label class="field"><span>Klappentext</span>
+          <textarea id="f-summary" rows="4" placeholder="Wird aus dem Vorschlag übernommen, oder selbst schreiben"></textarea>
         </label>
-        <label class="field"><span>Reihe <abbr class="req" title="Pflichtfeld">*</abbr></span>
-          <input type="text" id="f-series" list="series-list" required aria-required="true" placeholder="z. B. Red Rising">
-          <small>Einzelband? Dann einfach den Buchtitel eintragen.</small>
-          <datalist id="series-list"></datalist>
-        </label>
+
+        <div class="field"><span>Cover</span>
+          <div class="cover-picker" id="addCoverPicker"></div>
+        </div>
       </div>
-      <label class="field"><span>Klappentext</span>
-        <textarea id="f-summary" rows="3" placeholder="Wird aus dem Vorschlag übernommen, oder selbst schreiben"></textarea>
-      </label>
-      <div class="field"><span>Cover</span>
-        <div class="cover-picker" id="addCoverPicker"></div>
-      </div>
-      <div class="field"><span>Kategorien</span>
-        <div class="cat-toggle-list" id="f-category-list"></div>
-        <small id="f-category-hint"></small>
-      </div>
-      <div class="modal-actions">
+
+      <div class="modal-actions modal-add-foot">
         <button type="button" class="btn btn-ghost" id="cancelAddBtn">Abbrechen</button>
         <button type="submit" class="btn btn-primary">Ins Regal stellen</button>
       </div>

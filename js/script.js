@@ -542,6 +542,7 @@ async function searchGoogleBooks(q){
         lang: v.language || '',
         cover: gbCover(v),
         description: cleanDescription(htmlToText(v.description)),
+        genres: v.categories || [],
       };
     }).filter(c=>c.title);
   } catch(e){ return []; }
@@ -549,7 +550,7 @@ async function searchGoogleBooks(q){
 
 async function searchOpenLibrary(q){
   try {
-    const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=10&fields=key,title,author_name,first_publish_year,cover_i,number_of_pages_median`);
+    const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=10&fields=key,title,author_name,first_publish_year,cover_i,number_of_pages_median,subject`);
     if(!r.ok) return [];
     const j = await r.json();
     return (j.docs || []).map(d=>({
@@ -562,6 +563,7 @@ async function searchOpenLibrary(q){
       lang: '',
       cover: d.cover_i ? coverUrl(d.cover_i, 'M') : null,
       description: '',
+      genres: d.subject || [],
     })).filter(c=>c.title);
   } catch(e){ return []; }
 }
@@ -578,12 +580,108 @@ async function searchBooks(q){
       twin.pages = twin.pages || c.pages;
       twin.description = twin.description || c.description;
       twin.olKey = twin.olKey || c.olKey;
+      twin.genres = [...new Set([...twin.genres, ...c.genres])];
       twin.covers.push(...(c.cover ? [{ url: c.cover, label: c.source }] : []));
       return;
     }
     merged.push({ ...c, _k: k, covers: c.cover ? [{ url: c.cover, label: c.source + (c.year ? ' · ' + c.year : '') }] : [] });
   });
   return merged;
+}
+
+// Google liefert grobe Pfade ("Fiction / Fantasy / Epic"), Open Library viele, teils verrauschte Subjects.
+// Beides wird auf eine feste Genre-Liste abgebildet. Spezifische Genres stehen vor ihrem Obergenre
+// (parent), damit eine Kategorie wie "Urban Fantasy" nicht als "Fantasy" erkannt wird.
+const GENRE_RULES = [
+  { name: 'Space Opera', parent: 'Sci-Fi', re: /space opera|space warfare|interstellar/ },
+  { name: 'Military Sci-Fi', parent: 'Sci-Fi', re: /military science fiction|military sf\b/ },
+  { name: 'Cyberpunk', parent: 'Sci-Fi', re: /cyberpunk/ },
+  { name: 'Dystopia', parent: 'Sci-Fi', re: /dystop/ },
+  { name: 'Post-Apocalyptic', parent: 'Sci-Fi', re: /post-?apocalyp|endzeit/ },
+  { name: 'Time Travel', parent: 'Sci-Fi', re: /time travel|zeitreise/ },
+  { name: 'Steampunk', parent: 'Sci-Fi', re: /steampunk/ },
+  { name: 'LitRPG', parent: 'Fantasy', re: /litrpg|gamelit|progression fantasy/ },
+  { name: 'Romantasy', parent: 'Fantasy', re: /romantasy|romantic fantasy|fantasy romance/ },
+  { name: 'Urban Fantasy', parent: 'Fantasy', re: /urban fantasy/ },
+  { name: 'Epic Fantasy', parent: 'Fantasy', re: /epic fantasy|high fantasy|epische fantasy/ },
+  { name: 'Dark Fantasy', parent: 'Fantasy', re: /dark fantasy/ },
+  { name: 'Paranormal', parent: 'Fantasy', re: /paranormal|vampires?\b|werewol/ },
+  { name: 'Fairy Tales', parent: 'Fantasy', re: /fairy tales?|märchen|folklore/ },
+  { name: 'Mythology', parent: 'Fantasy', re: /mytholog/ },
+  { name: 'Psychological Thriller', parent: 'Thriller', re: /psychological (thriller|suspense)|psychothriller/ },
+  { name: 'Spy', parent: 'Thriller', re: /espionage|\bspies\b|spy (stories|fiction|thrillers?)|spionage/ },
+  { name: 'Political Thriller', parent: 'Thriller', re: /political thriller/ },
+  { name: 'Cozy Mystery', parent: 'Crime', re: /cozy myster/ },
+  { name: 'True Crime', parent: 'Nonfiction', re: /true crime/ },
+  { name: 'Historical Fiction', re: /historical fiction|historischer roman/ },
+  { name: 'Fantasy', re: /\bfantasy\b|fantastik/ },
+  { name: 'Sci-Fi', re: /science.?fiction|\bsci-?fi\b/ },
+  { name: 'Horror', re: /horror|grusel/ },
+  { name: 'Thriller', re: /thriller|suspense/ },
+  { name: 'Crime', re: /\bcrime\b|mystery|detective|krimi|kriminal/ },
+  { name: 'Romance', re: /\bromance\b|love stories|liebesroman/ },
+  { name: 'Adventure', re: /adventure|abenteuer/ },
+  { name: 'Action', re: /\baction\b/ },
+  { name: 'Humor', re: /\bhumou?r|humorous|comedy|satire/ },
+  { name: 'War', re: /war stories|\bwar fiction|kriegsroman/ },
+  { name: 'Western', re: /western stories|western fiction|\bwesterns\b/ },
+  { name: 'Literary Fiction', re: /contemporary fiction|literary fiction|gegenwartsliteratur/ },
+  { name: 'Classics', re: /\bclassics?\b|klassiker/ },
+  { name: 'Young Adult', re: /^young adult|juvenile fiction|jugendbuch/ },
+  { name: "Children's", re: /children's (fiction|stories|books)|picture books|kinderbuch/ },
+  { name: 'Graphic Novel', re: /graphic novel|comic books|comics & graphic|\bmanga\b/ },
+  { name: 'Poetry', re: /\bpoetry\b|lyrik|gedichte/ },
+  { name: 'Biography', nonfiction: true, re: /biograph|memoir/ },
+  { name: 'History', nonfiction: true, re: /^history\b|^geschichte/ },
+  { name: 'Science', nonfiction: true, re: /^science$|popular science|physics|astronomy|biology|naturwissenschaft/ },
+  { name: 'Psychology', nonfiction: true, re: /psycholog/ },
+  { name: 'Philosophy', nonfiction: true, re: /philosoph/ },
+  { name: 'Self-Help', nonfiction: true, re: /self-?help|personal growth|ratgeber/ },
+  { name: 'Business', nonfiction: true, re: /business|economics|wirtschaft/ },
+  { name: 'Cookbook', nonfiction: true, re: /cooking|cookbook|kochbuch/ },
+  { name: 'Nonfiction', nonfiction: true, re: /non-?fiction|sachbuch/ },
+];
+const MAX_NEW_GENRES = 4;
+
+function detectGenres(raw){
+  const tokens = [];
+  (raw || []).forEach(s=>{
+    const t = String(s).toLowerCase().trim();
+    if(/^(nyt|series|franchise|form|place|person|time):/.test(t)) return;
+    const clean = t.replace(/^genre:/, '');
+    tokens.push(clean, ...clean.split(/\s*\/\s*/));
+  });
+  const isFiction = tokens.some(t=>/\bfiction\b|\bnovel|\broman\b/.test(t.replace(/non-?fiction/g, '')));
+  const rules = GENRE_RULES.filter(r=>!(r.nonfiction && isFiction));
+  const found = new Set();
+  tokens.forEach(t=>{
+    const hits = rules.filter(r=>r.re.test(t));
+    // Sammel-Regale wie "Science fiction, fantasy, horror" oder "Action & adventure" sagen nichts über das Buch.
+    if(hits.length > 1 && /,|&| and /.test(t)) return;
+    hits.forEach(r=>found.add(r.name));
+  });
+  if(found.has('Fantasy') && found.has('Romance')) found.add('Romantasy');
+  [...found].forEach(n=>{ const p = GENRE_RULES.find(r=>r.name === n).parent; if(p) found.add(p); });
+  if(found.has('Young Adult')) found.delete("Children's");
+  // In Listenreihenfolge zurückgeben: spezifische zuerst.
+  return GENRE_RULES.map(r=>r.name).filter(n=>found.has(n));
+}
+
+// Welches Genre eine vorhandene Kategorie meint: exakter Name zuerst, sonst die erste passende Regel.
+function genreOfCategory(name){
+  const n = name.toLowerCase();
+  const rule = GENRE_RULES.find(r=>r.name.toLowerCase() === n) || GENRE_RULES.find(r=>r.re.test(n));
+  return rule ? rule.name : null;
+}
+
+// Erkannte Genres -> IDs vorhandener Kategorien plus höchstens vier Namen, für die es noch keine gibt.
+function suggestCategories(raw){
+  const ids = new Set(), fresh = [];
+  detectGenres(raw).forEach(g=>{
+    const hit = categories.find(c=>genreOfCategory(c.name) === g);
+    if(hit) ids.add(hit.id); else fresh.push(g);
+  });
+  return { ids, fresh: fresh.slice(0, MAX_NEW_GENRES) };
 }
 
 async function fetchDescription(c){
@@ -645,9 +743,10 @@ async function findDescription(title, author){
 }
 
 // Wiederverwendbare Cover-Auswahl: "" = automatisch suchen, "none" = bewusst kein Cover, sonst Bild-URL.
-function createCoverPicker(container){
+function createCoverPicker(container, onChange){
   const state = { value: '', options: [], loading: false };
   const render = ()=>{
+    if(onChange) onChange(state);
     const custom = state.value && state.value !== 'none' && !state.options.some(o=>o.url === state.value);
     const opts = [...(custom ? [{ url: state.value, label: 'Eigene URL' }] : []), ...state.options];
     container.innerHTML = `
@@ -2509,23 +2608,87 @@ const overlay = document.getElementById('modalOverlay');
 const seriesInput = document.getElementById('f-series');
 const categoryListEl = document.getElementById('f-category-list');
 const categoryHint = document.getElementById('f-category-hint');
-let addBookSelectedCategoryIds = new Set();
-
-function updateCategoryFieldForSeries(){
-  const seriesVal = seriesInput.value.trim();
-  const existingShelf = shelves.find(s=> s.is_series && s.label.toLowerCase() === seriesVal.toLowerCase() && seriesVal !== '');
-  if(existingShelf){
-    renderCategoryPickerList(categoryListEl, new Set(existingShelf.categoryIds), true);
-    categoryHint.textContent = 'Übernommen von der bestehenden Reihe „' + seriesVal + '“.';
-  } else {
-    renderCategoryPickerList(categoryListEl, addBookSelectedCategoryIds, false);
-    categoryHint.textContent = '';
-  }
-}
-
-const addPicker = createCoverPicker(document.getElementById('addCoverPicker'));
+const authorInput = document.getElementById('f-author');
 const titleInput = document.getElementById('f-title');
 const suggestBox = document.getElementById('addSuggest');
+const addPreview = document.getElementById('addPreview');
+let addBookSelectedCategoryIds = new Set();
+let addSuggestedCatIds = new Set();
+let addFreshGenres = [];
+
+function existingSeriesShelf(){
+  const v = seriesInput.value.trim().toLowerCase();
+  return v ? shelves.find(s=>s.is_series && s.label.toLowerCase() === v) : null;
+}
+
+const moreGenresEl = document.getElementById('f-more-genres');
+const moreGenresList = document.getElementById('f-more-genres-list');
+
+// Alle bekannten Genres, für die es noch keine Kategorie gibt und die nicht schon vorgeschlagen sind.
+function renderMoreGenres(){
+  const have = new Set(categories.map(c=>genreOfCategory(c.name)));
+  const rest = GENRE_RULES.map(r=>r.name)
+    .filter(n=>!have.has(n) && !addFreshGenres.includes(n))
+    .sort((a, b)=>a.localeCompare(b, 'en'));
+  moreGenresEl.classList.toggle('hidden', !rest.length);
+  moreGenresEl.querySelector('summary').textContent = `Weitere Genres (${rest.length})`;
+  moreGenresList.innerHTML = rest.map(g=>
+    `<button type="button" class="cat-toggle cat-new" data-genre="${escapeHtml(g)}" title="Als neue Kategorie anlegen">+ ${escapeHtml(g)}</button>`).join('');
+  moreGenresList.querySelectorAll('.cat-new').forEach(btn=>{
+    btn.addEventListener('click', ()=>createCategoryFromGenre(btn.getAttribute('data-genre'), btn));
+  });
+}
+
+function updateCategoryFieldForSeries(){
+  const existingShelf = existingSeriesShelf();
+  if(existingShelf){
+    renderCategoryPickerList(categoryListEl, new Set(existingShelf.categoryIds), true);
+    categoryHint.textContent = 'Übernommen von der bestehenden Reihe „' + existingShelf.label + '“.';
+    moreGenresEl.classList.add('hidden');
+    return;
+  }
+  renderMoreGenres();
+  renderCategoryPickerList(categoryListEl, addBookSelectedCategoryIds, false);
+  if(addFreshGenres.length){
+    const empty = categoryListEl.querySelector('.cat-toggle-empty');
+    if(empty) empty.remove();
+    categoryListEl.insertAdjacentHTML('beforeend', addFreshGenres.map(g=>
+      `<button type="button" class="cat-toggle cat-new" data-genre="${escapeHtml(g)}" title="Als neue Kategorie anlegen">+ ${escapeHtml(g)}</button>`).join(''));
+    categoryListEl.querySelectorAll('.cat-new').forEach(btn=>{
+      btn.addEventListener('click', ()=>createCategoryFromGenre(btn.getAttribute('data-genre'), btn));
+    });
+  }
+  categoryHint.textContent = addSuggestedCatIds.size || addFreshGenres.length
+    ? 'Nach den Genres aus der Buchdatenbank vorausgewählt.' + (addFreshGenres.length ? ' Gestrichelte legen eine neue Kategorie an.' : '')
+    : '';
+}
+
+async function createCategoryFromGenre(name, btn){
+  btn.disabled = true;
+  const { data, error } = await db('categories').insert({ name }).select().single();
+  if(error || !data){ btn.disabled = false; showToast('Kategorie konnte nicht angelegt werden'); return; }
+  categories = [...categories, data].sort((a, b)=>a.name.localeCompare(b.name, 'de'));
+  if(addFreshGenres.includes(name)) addSuggestedCatIds.add(data.id);
+  addFreshGenres = addFreshGenres.filter(g=>g !== name);
+  addBookSelectedCategoryIds.add(data.id);
+  updateCategoryFieldForSeries();
+}
+
+// Vorschau links neben den Feldern: gewähltes Cover, sonst ein schlichtes Titelblatt.
+let addPickerState = { value: '', options: [] };
+function renderAddPreview(state = addPickerState){
+  addPickerState = state;
+  const url = state.value === 'none' ? '' : (state.value || (state.options[0] && state.options[0].url) || '');
+  const title = titleInput.value.trim();
+  addPreview.classList.toggle('is-empty', !url && !title);
+  const blank = `<span class="add-preview-blank"><b>${escapeHtml(title || 'Titel')}</b><small>${escapeHtml(authorInput.value.trim())}</small></span>`;
+  addPreview.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer">` : blank;
+  const img = addPreview.querySelector('img');
+  if(img) img.addEventListener('error', ()=>{ addPreview.innerHTML = blank; });
+}
+
+const addPicker = createCoverPicker(document.getElementById('addCoverPicker'), renderAddPreview);
+authorInput.addEventListener('input', ()=>renderAddPreview());
 let suggestTimer = null, suggestSeq = 0, suggestItems = [], suggestActive = -1;
 
 function closeSuggest(){
@@ -2542,6 +2705,7 @@ function renderSuggest(){
         <span class="suggest-text">
           <span class="suggest-title">${escapeHtml(c.title)}</span>
           <span class="suggest-meta">${escapeHtml([c.authors.slice(0, 2).join(', '), c.year, c.pages ? c.pages + ' S.' : '', c.lang ? c.lang.toUpperCase() : ''].filter(Boolean).join(' · '))}</span>
+          ${(g=>g.length ? `<span class="suggest-genres">${g.slice(0, 3).map(n=>`<span>${escapeHtml(n)}</span>`).join('')}</span>` : '')(detectGenres(c.genres))}
         </span>
       </button>`).join('')
     : '<p class="suggest-empty">Nichts gefunden. Du kannst das Buch trotzdem von Hand eintragen.</p>';
@@ -2555,6 +2719,7 @@ function renderSuggest(){
 }
 
 titleInput.addEventListener('input', ()=>{
+  renderAddPreview();
   clearTimeout(suggestTimer);
   const q = titleInput.value.trim();
   if(q.length < 3){ closeSuggest(); return; }
@@ -2585,11 +2750,25 @@ async function chooseSuggestion(c){
   suggestSeq++;
   closeSuggest();
   titleInput.value = c.title;
-  const authorEl = document.getElementById('f-author');
   const pagesEl = document.getElementById('f-pages');
   const summaryEl = document.getElementById('f-summary');
-  if(c.authors.length) authorEl.value = c.authors.slice(0, 2).join(', ');
+  if(c.authors.length) authorInput.value = c.authors.slice(0, 2).join(', ');
   if(c.pages) pagesEl.value = c.pages;
+
+  // Open Library nennt die Reihe als "series:…"-Subject; eine passende bestehende Reihe hat Vorrang.
+  if(!seriesInput.value.trim()){
+    const seriesNames = c.genres.filter(s=>/^series:/i.test(s)).map(s=>s.slice(7).trim()).filter(Boolean);
+    const known = shelves.find(s=>s.is_series && seriesNames.some(n=>normTitle(n).includes(normTitle(s.label))));
+    if(known || seriesNames.length) seriesInput.value = known ? known.label : seriesNames[0];
+  }
+
+  const { ids, fresh } = suggestCategories(c.genres);
+  addSuggestedCatIds.forEach(id=>addBookSelectedCategoryIds.delete(id));
+  ids.forEach(id=>addBookSelectedCategoryIds.add(id));
+  addSuggestedCatIds = ids;
+  addFreshGenres = fresh;
+  updateCategoryFieldForSeries();
+
   addPicker.set(c.cover || '', c.covers);
   addPicker.setLoading(true);
   const [desc, options] = await Promise.all([
@@ -2608,6 +2787,9 @@ document.getElementById('openAddBtn').addEventListener('click', ()=>{
   document.getElementById('f-summary').value='';
   seriesInput.value='';
   addBookSelectedCategoryIds = new Set();
+  addSuggestedCatIds = new Set();
+  addFreshGenres = [];
+  moreGenresEl.open = false;
   addPicker.set('', []);
   closeSuggest();
   const dl = document.getElementById('series-list');
@@ -2620,6 +2802,7 @@ document.getElementById('openAddBtn').addEventListener('click', ()=>{
 seriesInput.addEventListener('input', updateCategoryFieldForSeries);
 
 document.getElementById('cancelAddBtn').addEventListener('click', ()=>overlay.classList.add('hidden'));
+document.getElementById('closeAddBtn').addEventListener('click', ()=>overlay.classList.add('hidden'));
 overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.classList.add('hidden'); });
 
 document.getElementById('bookForm').addEventListener('submit', async (e)=>{
