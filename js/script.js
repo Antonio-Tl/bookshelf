@@ -332,8 +332,9 @@ function queueCovers(list){
   pumpCovers();
 }
 
+const COVER_CONCURRENCY = 6; // Erste Ladung ohne Cache: mehr parallele Lookups statt 2 nacheinander.
 function pumpCovers(){
-  while(coverActive < 2 && coverQueue.length){
+  while(coverActive < COVER_CONCURRENCY && coverQueue.length){
     const b = coverQueue.shift();
     coverActive++;
     processCover(b).finally(()=>{
@@ -369,21 +370,20 @@ async function processCover(b){
     entry.done = true;
     saveCoverCache();
   } else if(!entry.done){
-    let chosen = null, first = null, analyzed = 0;
-    for(const id of entry.candidates || []){
-      const info = await analyzeCover(coverUrl(id, 'M'));
-      if(info.error) continue;
-      analyzed++;
-      if(!first) first = { id, info };
-      if(!info.photo){ chosen = { id, info }; break; }
-    }
+    // Alle Kandidaten parallel laden statt nacheinander: Bildladen ist die Wartezeit, nicht die Analyse.
+    const results = await Promise.all((entry.candidates || []).map(id=>
+      analyzeCover(coverUrl(id, 'M')).then(info=>({ id, info }))
+    ));
+    const okResults = results.filter(r=>!r.info.error);
+    const first = okResults[0] || null;
+    const chosenFound = okResults.find(r=>!r.info.photo);
     // Alle Bilder fehlgeschlagen = vermutlich Netzproblem: nicht als erledigt merken, beim nächsten Laden erneut.
-    if((entry.candidates || []).length && !analyzed){
+    if(results.length && !okResults.length){
       coverGaveUp.add(coverKey(b));
       refreshBookVisual(b);
       return;
     }
-    chosen = chosen || first;
+    const chosen = chosenFound || first;
     if(chosen){
       const i = chosen.info;
       Object.assign(entry, {
