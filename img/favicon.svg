@@ -1,17 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="oak" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#dcbb91"/>
-      <stop offset="0.35" stop-color="#c79f70"/>
-      <stop offset="0.36" stop-color="#7e5631"/>
-      <stop offset="0.45" stop-color="#b98b5b"/>
+      <stop offset="0" stop-color="#dcbb91"/><stop offset="0.35" stop-color="#c79f70"/>
+      <stop offset="0.36" stop-color="#7e5631"/><stop offset="0.48" stop-color="#b98b5b"/>
       <stop offset="1" stop-color="#94673c"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="#ece6dc"/>
   <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.25" fill="none" stroke="#c3b6a2" stroke-width="1.5"/>
-  <rect x="13" y="19" width="10" height="30" rx="1.5" fill="#231c15"/>
-  <rect x="25" y="13" width="10" height="36" rx="1.5" fill="#2f6b55"/>
-  <rect x="38" y="20" width="10" height="29" rx="1.5" fill="#4a3f33" transform="rotate(-12 38 49)"/>
-  <rect x="9" y="47" width="46" height="8" rx="1.5" fill="url(#oak)"/>
+  <g transform="translate(8.5 6.5) scale(0.74)">
+    <rect x="10" y="18" width="9" height="32" rx="1" fill="#231c15"/>
+    <rect x="21" y="11" width="9" height="39" rx="1" fill="#4a3f33"/>
+    <path d="M33 12 L52 17 L52 50 L33 50 Z" fill="#2f6b55"/>
+    <path d="M33 12 L36.2 12.85 L36.2 50 L33 50 Z" fill="#000" opacity="0.22"/>
+    <rect x="6" y="49.5" width="52" height="6.5" rx="1" fill="url(#oak)"/>
+  </g>
 </svg>

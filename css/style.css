@@ -412,29 +412,19 @@ button {
   border-radius: 8px;
 }
 .brand-mark {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 20px;
-}
-.brand-mark i {
   display: block;
-  width: 5px;
-  border-radius: 1px;
-  background: var(--ink);
+  width: 28px;
+  height: 24px;
 }
-.brand-mark i:nth-child(1) {
-  height: 14px;
+/* Auf dunklen Designs die Negativ-Variante mit hellen Buchrücken zeigen. */
+.brand-mark-negativ,
+html[data-theme="dark"] .brand-mark:not(.brand-mark-negativ),
+html[data-theme="midnight"] .brand-mark:not(.brand-mark-negativ) {
+  display: none;
 }
-.brand-mark i:nth-child(2) {
-  height: 20px;
-  background: var(--red);
-}
-.brand-mark i:nth-child(3) {
-  height: 16px;
-  transform: rotate(-12deg);
-  transform-origin: bottom left;
-  margin-left: 1px;
+html[data-theme="dark"] .brand-mark-negativ,
+html[data-theme="midnight"] .brand-mark-negativ {
+  display: block;
 }
 .auth-bar {
   margin-left: auto;
