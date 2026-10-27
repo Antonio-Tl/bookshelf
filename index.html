@@ -95,6 +95,7 @@
         <div class="profile-links">
           <button type="button" class="profile-link hidden" id="myShelfBtn">Mein Regal</button>
           <button type="button" class="profile-link" id="accountBtn">Profil und Konto</button>
+          <button type="button" class="profile-link" id="profileSettingsBtn">Einstellungen</button>
           <a class="profile-link hidden" id="adminBtn" href="?view=admin" data-route="admin">Verwaltung</a>
         </div>
         <div class="profile-actions">
@@ -389,6 +390,7 @@
         <button type="button" class="btn btn-secondary" id="setCategoriesBtn">Kategorien verwalten</button>
         <button type="button" class="btn btn-secondary hidden" id="setUsernameBtn">Profil und Konto</button>
         <button type="button" class="btn btn-secondary" id="setShareBtn">Regal-Link teilen</button>
+        <button type="button" class="btn btn-secondary" id="setTourBtn">Einführung ansehen</button>
       </div>
     </section>
 
@@ -602,6 +604,23 @@
       <button type="submit" class="btn btn-primary" id="askConfirm">OK</button>
     </div>
   </form>
+</div>
+
+<div class="tour hidden" id="tour" role="dialog" aria-modal="true" aria-labelledby="tourTitle" aria-describedby="tourText">
+  <div class="tour-spot" id="tourSpot"></div>
+  <div class="tour-card" id="tourCard">
+    <div class="tour-dots" id="tourDots" aria-hidden="true"></div>
+    <p class="visually-hidden" id="tourCount"></p>
+    <h2 id="tourTitle"></h2>
+    <p class="tour-text" id="tourText"></p>
+    <div class="tour-actions">
+      <button type="button" class="btn btn-ghost" id="tourSkip">Überspringen</button>
+      <div class="tour-nav">
+        <button type="button" class="btn btn-secondary" id="tourBack">Zurück</button>
+        <button type="button" class="btn btn-primary" id="tourNext">Weiter</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>

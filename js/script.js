@@ -1181,6 +1181,7 @@ document.getElementById('saveUsernameBtn').addEventListener('click', async ()=>{
   usernameModalOverlay.classList.add('hidden');
   loadSocial();
   await goToUser(val);
+  startTour();
 });
 document.getElementById('f-username').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('saveUsernameBtn').click(); }
@@ -3562,6 +3563,10 @@ function openSettings(){
   settingsOverlay.classList.remove('hidden');
 }
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('profileSettingsBtn').addEventListener('click', ()=>{
+  document.getElementById('profilePanel').classList.add('hidden');
+  openSettings();
+});
 document.getElementById('settingsCloseBtn').addEventListener('click', ()=>settingsOverlay.classList.add('hidden'));
 settingsOverlay.addEventListener('click', e=>{ if(e.target === settingsOverlay) settingsOverlay.classList.add('hidden'); });
 
@@ -3598,6 +3603,192 @@ document.getElementById('setDevResetBtn').addEventListener('click', ()=>{
   settingsOverlay.classList.add('hidden');
   resetSandbox();
 });
+document.getElementById('setTourBtn').addEventListener('click', ()=>{
+  settingsOverlay.classList.add('hidden');
+  startTour();
+});
+
+// ---- Einführung: kurze Tour nach dem ersten Login, jederzeit überspringbar ----
+const tourEl = document.getElementById('tour');
+const tourSpot = document.getElementById('tourSpot');
+const tourCard = document.getElementById('tourCard');
+const tourNext = document.getElementById('tourNext');
+const tourBack = document.getElementById('tourBack');
+const TOUR_STEPS = [
+  {
+    title: ()=>{
+      const p = currentProfile || viewedProfile;
+      return p && p.username ? `Willkommen, ${shownName(p)}!` : 'Willkommen!';
+    },
+    text: 'Das ist dein Regal. In ein paar Schritten siehst du, wo alles ist. Du kannst die Tour jederzeit überspringen.',
+  },
+  {
+    target: ()=>document.getElementById('openAddBtn'),
+    title: 'Bücher hinzufügen',
+    text: 'Tipp einen Titel ein, und das Regal schlägt passende Bücher vor. Cover, Autor, Seiten und Klappentext kommen von allein.',
+  },
+  {
+    // Ein ganzes Brett ist zu hoch, um das Kärtchen daneben zu setzen; deshalb das erste Buch, im leeren Regal der Hinweis.
+    target: ()=>document.querySelector('#shelves [data-book]') || document.getElementById('shelves'),
+    // In der Cover-Ansicht gibt es keine Bretter, nur Raster pro Reihe.
+    title: ()=>viewMode === 'grid' ? 'Sortiert nach Reihen' : 'Ein Brett pro Reihe',
+    text: ()=>viewMode === 'grid'
+      ? 'Bände einer Reihe stehen zusammen, ein Einzelband ist eine Reihe mit einem Buch. Über „Regal“ stellst du sie als Buchrücken ins Regal. Tipp ein Buch an, um Sterne, Notizen und Lesedatum zu setzen.'
+      : 'Jede Reihe bekommt ihr eigenes Regalbrett, ein Einzelband ist eine Reihe mit einem Buch. Tipp ein Buch an, um Sterne, Notizen und Lesedatum zu setzen.',
+  },
+  {
+    target: ()=>document.getElementById('openCatBtn'),
+    title: 'Kategorien',
+    text: 'Lege Kategorien wie Fantasy oder Krimi an. Sie gelten für ganze Reihen und erscheinen als Filter über dem Regal.',
+  },
+  {
+    target: ()=>document.getElementById('userSearchBox'),
+    title: 'Andere Regale entdecken',
+    text: 'Finde Freunde über ihren Namen und folge ihren Regalen. Die Glocke meldet sich, wenn sie ein neues Buch bewerten.',
+  },
+  {
+    target: ()=>document.getElementById('shareBtn'),
+    title: 'Regal teilen',
+    text: 'Dein Regal hat einen eigenen Link. Andere stöbern darin, ohne sich anmelden zu müssen.',
+  },
+  {
+    // Der Knopf steckt in der Seitenleiste; nur zeigen, wenn dieser Browser die Installation auch anbietet.
+    when: ()=>!installBtn.classList.contains('hidden'),
+    menu: true,
+    target: ()=>installBtn,
+    title: 'Auch als App',
+    text: 'Leg dir das Bücherregal auf den Startbildschirm. Es öffnet sich dann wie eine App, ohne Browserleiste. Den Knopf findest du jederzeit hier im Menü.',
+  },
+];
+let tourSteps = [];
+let tourIndex = 0;
+let tourFrame = 0;
+let tourReturnFocus = null;
+
+function tourTarget(step){
+  const el = step.target && step.target();
+  if(!el) return null;
+  const r = el.getBoundingClientRect();
+  return r.width && r.height ? el : null;
+}
+
+function startTour(){
+  closeToc();
+  closeDetail();
+  // Ziele, die gerade nicht sichtbar sind (z. B. auf dem Handy), fallen einfach weg.
+  tourSteps = TOUR_STEPS.filter(s=>s.when ? s.when() : !s.target || tourTarget(s));
+  tourIndex = 0;
+  tourReturnFocus = document.activeElement;
+  document.getElementById('tourDots').innerHTML = tourSteps.map(()=>'<i></i>').join('');
+  tourEl.classList.remove('hidden');
+  showTourStep();
+}
+
+function endTour(){
+  tourEl.classList.add('hidden');
+  closeToc();
+  if(tourReturnFocus && tourReturnFocus.isConnected) tourReturnFocus.focus();
+}
+
+function showTourStep(){
+  const step = tourSteps[tourIndex];
+  const last = tourIndex === tourSteps.length - 1;
+  document.getElementById('tourTitle').textContent = typeof step.title === 'function' ? step.title() : step.title;
+  document.getElementById('tourText').textContent = typeof step.text === 'function' ? step.text() : step.text;
+  document.getElementById('tourCount').textContent = `Schritt ${tourIndex + 1} von ${tourSteps.length}`;
+  document.querySelectorAll('#tourDots i').forEach((d, i)=>d.classList.toggle('on', i === tourIndex));
+  tourBack.classList.toggle('hidden', tourIndex === 0);
+  document.getElementById('tourSkip').classList.toggle('hidden', last);
+  tourNext.textContent = last ? 'Los geht’s' : 'Weiter';
+
+  if(step.menu) openToc(); else closeToc();
+  const el = !step.menu && tourTarget(step);
+  if(el && !el.closest('.topbar')){
+    // Ziel und Kärtchen sollen zusammen ins Bild passen, ohne dass das Kärtchen das Ziel verdeckt (auf dem Handy oft knapp).
+    const r = el.getBoundingClientRect(), ch = tourCard.offsetHeight, { top, bottom } = tourInsets();
+    const head = document.querySelector('.topbar').offsetHeight + TOUR_PAD;
+    const vh = window.innerHeight;
+    const visible = r.top - TOUR_PAD >= head && r.bottom + TOUR_PAD <= vh - bottom;
+    const roomBelow = r.bottom + TOUR_PAD + TOUR_GAP + ch <= vh - bottom;
+    const roomAbove = r.top - TOUR_PAD - TOUR_GAP - ch >= top;
+    if(!visible || !(roomBelow || roomAbove)){
+      const fitsUnderHead = head + r.height + 2 * TOUR_PAD + TOUR_GAP + ch <= vh - bottom;
+      const delta = fitsUnderHead ? r.top - TOUR_PAD - head : r.top + r.height / 2 - vh / 2;
+      window.scrollBy({ top: delta, behavior: 'smooth' });
+    }
+  }
+  placeTour();
+  tourNext.focus({ preventScroll: true });
+}
+
+const TOUR_GAP = 14, TOUR_PAD = 6, TOUR_EDGE = 16;
+// Abstand zu den Rändern, auf dem iPhone zusätzlich zu Notch und Home-Balken (aus dem Padding von .tour).
+function tourInsets(){
+  const cs = getComputedStyle(tourEl);
+  return { top: TOUR_EDGE + parseFloat(cs.paddingTop), bottom: TOUR_EDGE + parseFloat(cs.paddingBottom) };
+}
+
+function placeTour(){
+  const step = tourSteps[tourIndex];
+  const el = step && tourTarget(step);
+  const vw = window.innerWidth, vh = window.innerHeight, gap = TOUR_GAP, pad = TOUR_PAD, edge = TOUR_EDGE;
+  const insets = tourInsets();
+  tourEl.classList.toggle('is-center', !el);
+  const cw = tourCard.offsetWidth, ch = tourCard.offsetHeight;
+
+  if(!el){
+    tourSpot.style.cssText = `left:${vw / 2}px; top:${vh / 2}px; width:0; height:0;`;
+    tourCard.style.left = Math.max(edge, (vw - cw) / 2) + 'px';
+    tourCard.style.top = Math.max(insets.top, (vh - ch) / 2) + 'px';
+    return;
+  }
+
+  const r = el.getBoundingClientRect();
+  const top = Math.max(r.top - pad, 0), bottom = Math.min(r.bottom + pad, vh);
+  const left = Math.max(r.left - pad, 0), right = Math.min(r.right + pad, vw);
+  tourSpot.style.cssText = `left:${left}px; top:${top}px; width:${right - left}px; height:${Math.max(bottom - top, 0)}px;`;
+
+  // Unter dem Ziel, sonst darüber, sonst unten am Rand.
+  let y = bottom + gap;
+  if(y + ch > vh - insets.bottom) y = top - gap - ch >= insets.top ? top - gap - ch : vh - insets.bottom - ch;
+  const x = Math.min(Math.max((left + right) / 2 - cw / 2, edge), vw - edge - cw);
+  tourCard.style.left = x + 'px';
+  tourCard.style.top = Math.max(y, insets.top) + 'px';
+}
+
+function scheduleTourPlace(){
+  if(tourEl.classList.contains('hidden') || tourFrame) return;
+  tourFrame = requestAnimationFrame(()=>{ tourFrame = 0; placeTour(); });
+}
+window.addEventListener('resize', scheduleTourPlace);
+window.addEventListener('scroll', scheduleTourPlace, { passive: true });
+tocPanel.addEventListener('transitionend', scheduleTourPlace); // Seitenleiste fährt ein oder aus
+
+tourNext.addEventListener('click', ()=>{
+  if(tourIndex >= tourSteps.length - 1){ endTour(); return; }
+  tourIndex++;
+  showTourStep();
+});
+tourBack.addEventListener('click', ()=>{
+  if(tourIndex === 0) return;
+  tourIndex--;
+  showTourStep();
+});
+document.getElementById('tourSkip').addEventListener('click', endTour);
+
+// Vor allen anderen Tastenkürzeln, damit Escape nur die Tour schließt und Tab im Kärtchen bleibt.
+window.addEventListener('keydown', e=>{
+  if(tourEl.classList.contains('hidden')) return;
+  if(e.key === 'Escape'){ e.preventDefault(); e.stopImmediatePropagation(); endTour(); return; }
+  if(e.key === 'ArrowRight'){ e.preventDefault(); tourNext.click(); return; }
+  if(e.key === 'ArrowLeft'){ e.preventDefault(); tourBack.click(); return; }
+  if(e.key === 'Tab'){
+    const btns = [...tourCard.querySelectorAll('button:not(.hidden)')];
+    const i = btns.indexOf(document.activeElement);
+    e.preventDefault();
+    btns[(i + (e.shiftKey ? -1 : 1) + btns.length) % btns.length].focus();
+  }
+}, true);
 
 // ---- Als App installieren (PWA) ----
 const installBtn = document.getElementById('installBtn');

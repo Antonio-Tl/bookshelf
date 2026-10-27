@@ -2653,6 +2653,90 @@ select:focus {
   transform: translate(-50%, 0);
 }
 
+/* ---------- Einführung ---------- */
+/* Über Dialogen und Cover-Zoom, unter dem Toast. Die Ebene fängt alle Klicks ab, damit die Tour nicht versehentlich verlassen wird. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  /* Wird nur ausgelesen: Abstand des Kärtchens zu Notch und Home-Balken */
+  padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+  animation: fade-in 0.2s ease;
+}
+.tour-spot {
+  position: fixed;
+  border-radius: var(--r-control);
+  box-shadow: 0 0 0 2px var(--red), 0 0 0 9999px rgba(20, 20, 20, 0.5);
+  pointer-events: none;
+  transition:
+    left 0.4s var(--ease-out),
+    top 0.4s var(--ease-out),
+    width 0.4s var(--ease-out),
+    height 0.4s var(--ease-out);
+}
+.tour.is-center .tour-spot {
+  box-shadow: 0 0 0 9999px rgba(20, 20, 20, 0.5);
+}
+.tour-card {
+  position: fixed;
+  width: min(360px, calc(100vw - 32px));
+  padding: 20px 20px 16px;
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  transition:
+    left 0.4s var(--ease-out),
+    top 0.4s var(--ease-out);
+}
+.tour-card h2 {
+  margin: 12px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.tour-text {
+  margin: 6px 0 0;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.tour-dots {
+  display: flex;
+  gap: 5px;
+}
+.tour-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+  transition:
+    width 0.3s var(--ease-out),
+    background-color 0.3s ease;
+}
+.tour-dots i.on {
+  width: 18px;
+  background: var(--red);
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 18px;
+}
+.tour-actions > .btn-ghost {
+  margin-left: -10px;
+}
+.tour-nav {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
 /* ---------- responsive ---------- */
 /* ---------- Startseite ---------- */
 body[data-route="home"] #tocMenuBtn,
