@@ -10,10 +10,13 @@ name: Supabase Backup
 #
 # Wiederherstellen in ein (neues) Supabase-Projekt:
 #   gpg -d bookshelf-JJJJ-MM-TT.tar.gz.gpg | tar -xz
+#   # Fehler zu Supabase-eigenen Rollen (z. B. "supabase_admin" is a reserved role) sind hier normal.
+#   psql --file roles.sql --dbname "postgresql://…"
 #   psql --single-transaction --variable ON_ERROR_STOP=1 \
-#     --file roles.sql --file schema.sql \
+#     --file schema.sql \
 #     --command 'SET session_replication_role = replica' --file data.sql \
 #     --dbname "postgresql://…"
+# Ob das klappt, prüft supabase-restore-test.yml jede Woche.
 
 on:
   schedule:

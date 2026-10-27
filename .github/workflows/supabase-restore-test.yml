@@ -55,12 +55,14 @@ jobs:
 
       - name: Restore
         run: |
-          # Gleiche Reihenfolge wie in der Anleitung in supabase-backup.yml.
-          { cat restore/roles.sql restore/schema.sql
+          # Gleiche Schritte wie in der Anleitung in supabase-backup.yml.
+          psql_local(){ docker exec -i "$DB_CONTAINER" psql "postgresql://postgres:postgres@localhost:5432/postgres" "$@"; }
+          # roles.sql ändert auch Supabase-eigene Rollen (z. B. supabase_admin); diese Fehler sind erwartet.
+          psql_local --quiet -f - < restore/roles.sql
+          { cat restore/schema.sql
             echo 'SET session_replication_role = replica;'
             cat restore/data.sql
-          } | docker exec -i "$DB_CONTAINER" psql "postgresql://postgres:postgres@localhost:5432/postgres" \
-                --single-transaction --variable ON_ERROR_STOP=1 --quiet -f -
+          } | psql_local --single-transaction --variable ON_ERROR_STOP=1 --quiet -f -
 
       - name: Check restored data
         run: |
