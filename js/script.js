@@ -2177,18 +2177,37 @@ async function renderMfaGate(){
   for(const f of (factors.all || []).filter(f=>f.status === 'unverified')){
     await supabaseClient.auth.mfa.unenroll({ factorId: f.id });
   }
-  const { data: enroll, error: enrollErr } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Bücherregal Admin' });
+  const { data: enroll, error: enrollErr } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Bücherregal Admin', issuer: 'Bücherregal' });
   if(currentRoute !== 'admin') return;
   if(enrollErr){
     showAdminGate(gateHtml('Zwei-Faktor nicht verfügbar', 'Aktiviere in Supabase unter Authentication → Multi-Factor die App-Authentifizierung (TOTP) und lade die Seite neu.'));
     return;
   }
+  const qrSrc = await mfaQrSrc(enroll.totp);
+  if(currentRoute !== 'admin') return;
   showAdminGate(gateHtml('Zwei-Faktor einrichten',
     'Die Verwaltung ist zusätzlich mit einem Code aus einer Authenticator-App geschützt, zum Beispiel Google Authenticator, 1Password oder Authy. Scanne den QR-Code und gib den angezeigten Code ein.',
-    `<img class="mfa-qr" src="${escapeHtml(enroll.totp.qr_code)}" alt="QR-Code für die Authenticator-App">
+    `<img class="mfa-qr" src="${escapeHtml(qrSrc)}" alt="QR-Code für die Authenticator-App">
      <p class="mfa-secret">Oder den Schlüssel von Hand eingeben:<code>${escapeHtml(enroll.totp.secret)}</code></p>
      ${codeFormHtml()}`));
   bindCodeForm(enroll.id);
+}
+
+// Supabase schreibt die E-Mail als Kontonamen in den QR-Code. Die App soll aber nur
+// „Bücherregal“ und „Admin“ zeigen, also den otpauth-Link umschreiben und den QR-Code
+// selbst erzeugen. Der Schlüssel bleibt derselbe, nur die Anzeige in der App ändert sich.
+async function mfaQrSrc(totp){
+  try {
+    const uri = new URL(totp.uri);
+    uri.pathname = '/' + encodeURIComponent('Bücherregal') + ':Admin';
+    uri.searchParams.set('issuer', 'Bücherregal');
+    uri.searchParams.set('image', new URL('img/favicon-512.png', location.href).href);
+    const { default: QRCode } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm');
+    const svg = await QRCode.toString(uri.href, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' });
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  } catch(e){
+    return totp.qr_code;
+  }
 }
 
 function bindCodeForm(factorId){
