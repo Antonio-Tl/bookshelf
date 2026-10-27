@@ -1,17 +1,15 @@
 name: Supabase Restore Test
 
-# Prüft jede Woche, ob sich das neueste Backup aus "Supabase Backup" wirklich wiederherstellen lässt:
-# herunterladen, mit BACKUP_PASSPHRASE entschlüsseln und in eine leere Supabase-Instanz auf dem
-# Runner einspielen. Die echte Datenbank wird dabei nicht angefasst. Schlägt der Test fehl,
-# schickt GitHub eine E-Mail.
+# Prüft nach jedem erfolgreichen Lauf von "Supabase Backup", ob sich das Backup wirklich
+# wiederherstellen lässt: herunterladen, mit BACKUP_PASSPHRASE entschlüsseln und in eine leere
+# Supabase-Instanz auf dem Runner einspielen. Die echte Datenbank wird dabei nicht angefasst.
+# Schlägt der Test fehl, schickt GitHub eine E-Mail.
 
 on:
-  schedule:
-    - cron: '47 4 * * 0'
+  workflow_run:
+    workflows: ['Supabase Backup']
+    types: [completed]
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths: ['.github/workflows/supabase-restore-test.yml']
 
 permissions:
   actions: read
@@ -19,6 +17,7 @@ permissions:
 
 jobs:
   restore:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -30,8 +29,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          # Beim automatischen Start der Backup-Lauf, der ihn ausgelöst hat; von Hand das neueste Backup.
+          RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          id=$(gh run list --workflow supabase-backup.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          id=${RUN_ID:-$(gh run list --workflow supabase-backup.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')}
           test -n "$id" || { echo "::error::Kein erfolgreiches Backup gefunden"; exit 1; }
           gh run download "$id" --dir dl
           find dl -type f

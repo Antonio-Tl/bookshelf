@@ -22,6 +22,10 @@ on:
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch: {}
+  # Änderungen am Workflow gleich einmal ausprobieren.
+  push:
+    branches: [main]
+    paths: ['.github/workflows/supabase-backup.yml']
 
 jobs:
   backup:
@@ -40,7 +44,9 @@ jobs:
           mkdir backup
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/roles.sql --role-only
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
-          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --use-copy --data-only
+          # Nur App-Tabellen und Nutzer: Storage nutzt die App nicht, und dessen Tabellen lassen sich
+          # beim Wiederherstellen nicht beschreiben.
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --use-copy --data-only --schema public,auth
 
       - name: Encrypt
         env:
