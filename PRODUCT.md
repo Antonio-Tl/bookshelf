@@ -8,7 +8,7 @@ web
 
 ## Users
 
-An open community: anyone can sign in with Google, claim a username, and keep their own shelf. Visitors without an account can open any shelf by link (`?u=<username>`) or find people through the user search. The default landing shelf is `@antonio`.
+An open community: anyone can sign in with Google, claim a username, and keep their own shelf. Visitors without an account can open any shelf by link (`?u=<username>`) or find public profiles through the user search. Profiles are public by default; a private profile is left out of the search and the overview but still opens by link. The overview (`?view=regale`) only lists public profiles that opted in, plus three demo shelves (`@lenamarie`, `@jonas_kr`, `@sophie_liest`). The default landing shelf is `@antonio`.
 
 ## Product Purpose
 
@@ -29,7 +29,7 @@ Not a reading tracker with lists and progress bars: books live as spines on shel
 ## Capabilities and Constraints
 
 - Static HTML/CSS/vanilla JS served as files (`index.html`, `css/style.css`, `js/script.js`), Supabase for auth (Google OAuth), data, and row-level security. No build step.
-- Data model: profiles (username, display name, avatar, created_at), shelves (label, is_series), books (title, author, series_order, rating 0–5, notes, summary, date_read, page_count), categories, shelf_categories.
+- Data model: profiles (username, display name, avatar, created_at, is_private, listed), shelves (label, is_series), books (title, author, series_order, rating 0–5, notes, summary, date_read, page_count), categories, shelf_categories.
 - UI copy is German.
 - `buecherregal.html` is a legacy standalone prototype, not part of the live app.
 

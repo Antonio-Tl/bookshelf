@@ -536,6 +536,24 @@
     </section>
 
     <section class="settings-group">
+      <h3>Sichtbarkeit</h3>
+      <div class="setting-row">
+        <span><b>Profil</b><small id="accPrivacyHint"></small></span>
+        <div class="seg" role="group" aria-label="Profil">
+          <button type="button" data-privacy="public" aria-pressed="false">Öffentlich</button>
+          <button type="button" data-privacy="private" aria-pressed="false">Privat</button>
+        </div>
+      </div>
+      <div class="setting-row" id="accListedRow">
+        <span><b>In der Übersicht zeigen</b><small>Dein Regal erscheint unter „Bücherregale ansehen“ auf der Startseite. Nur wenn du hier zustimmst.</small></span>
+        <div class="seg" role="group" aria-label="In der Übersicht zeigen">
+          <button type="button" data-listed="true" aria-pressed="false">Ja</button>
+          <button type="button" data-listed="false" aria-pressed="false">Nein</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-group">
       <h3>Konto</h3>
       <div class="setting-row">
         <span><b>Konto löschen</b><small>Löscht dein Profil, dein Regal und alle Bücher endgültig.</small></span>

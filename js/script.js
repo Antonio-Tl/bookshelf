@@ -502,6 +502,8 @@ function genCoverHtml(b, group){
 }
 
 // ---- Buchsuche (Google Books + Open Library) ----
+// Online läuft Google Books über den Cloudflare-Worker /api/books (worker.js), der den Key als Secret hält.
+// Ein Key in config.js (nur für lokales Testen) geht stattdessen direkt zu Google.
 const GB_KEY = window.GOOGLE_BOOKS_API_KEY || '';
 let gbUnavailable = false;
 
@@ -524,11 +526,13 @@ function gbCover(info){
 }
 
 async function searchGoogleBooks(q){
-  if(!GB_KEY || gbUnavailable) return [];
+  if(gbUnavailable) return [];
   try {
-    const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books&key=${encodeURIComponent(GB_KEY)}`);
-    // Gesperrt oder Kontingent leer: für diese Sitzung nur noch Open Library fragen.
-    if(r.status === 403 || r.status === 429){ gbUnavailable = true; return []; }
+    const r = await fetch(GB_KEY
+      ? `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books&key=${encodeURIComponent(GB_KEY)}`
+      : `/api/books?q=${encodeURIComponent(q)}`);
+    // Gesperrt, Kontingent leer oder kein Worker (lokaler Server): für diese Sitzung nur noch Open Library fragen.
+    if([403, 404, 429, 503].includes(r.status) || !(r.headers.get('content-type') || '').includes('json')){ gbUnavailable = true; return []; }
     if(!r.ok) return [];
     const j = await r.json();
     return (j.items || []).map(item=>{
@@ -1202,6 +1206,7 @@ async function runUserSearch(q){
     .from('profiles')
     .select('username, display_name, avatar_url')
     .not('username', 'is', null)
+    .eq('is_private', false)
     .or(`username.ilike.*${term}*,display_name.ilike.*${term}*`)
     .limit(8);
 
@@ -1308,8 +1313,9 @@ async function loadViewedUserByUsername(username){
   document.getElementById('clearSearchBtn').classList.remove('show');
 
   shelfLoading = true;
+  // Über die Datenbankfunktion statt der Tabelle: so öffnet der Link auch private Regale.
   const { data, error } = await supabaseClient
-    .from('profiles').select('*').eq('username', username.toLowerCase()).maybeSingle();
+    .rpc('profile_by_username', { p_username: username.toLowerCase() }).maybeSingle();
 
   shelfLoadError = !!error;
   if(error || !data){
@@ -1345,16 +1351,22 @@ const browseIndex = new Map(); // id -> {book, group}, für Bücher außerhalb d
 let directory = null;          // [{profile, groups, bookCount}], Antonio zuerst
 let directoryLoading = null;
 
+// Nur Regale, die ausdrücklich in der Übersicht stehen wollen. Alle anderen öffentlichen
+// findet man über „Leute finden“, private nur per Link.
 async function loadDirectory(){
   if(directory) return directory;
   if(directoryLoading) return directoryLoading;
   directoryLoading = (async ()=>{
-    const [{ data: profiles, error: pErr }, { data: shelfRows, error: sErr }, { data: bookRows, error: bErr }] = await Promise.all([
-      supabaseClient.from('profiles').select('id, username, display_name, avatar_url, created_at').not('username', 'is', null),
-      supabaseClient.from('shelves').select('id, user_id, label'),
-      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read').limit(5000),
-    ]);
-    if(pErr || sErr || bErr){ directoryLoading = null; return null; }
+    const { data: profiles, error: pErr } = await supabaseClient
+      .from('profiles').select('id, username, display_name, avatar_url, created_at')
+      .not('username', 'is', null).eq('listed', true).eq('is_private', false);
+    if(pErr){ directoryLoading = null; return null; }
+    const ids = (profiles || []).map(p=>p.id);
+    const [{ data: shelfRows, error: sErr }, { data: bookRows, error: bErr }] = ids.length ? await Promise.all([
+      supabaseClient.from('shelves').select('id, user_id, label').in('user_id', ids),
+      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read').in('user_id', ids).limit(5000),
+    ]) : [{ data: [] }, { data: [] }];
+    if(sErr || bErr){ directoryLoading = null; return null; }
     directory = (profiles || []).map(profile=>{
       const own = (bookRows || []).filter(b=>b.user_id === profile.id);
       const groups = (shelfRows || [])
@@ -1517,11 +1529,11 @@ async function renderBrowse(){
     return;
   }
   const q = document.getElementById('browseSearch').value.trim().toLowerCase();
-  const shown = q ? list.filter(e=>e.profile.username.includes(q)) : list;
+  const shown = q ? list.filter(e=>e.profile.username.includes(q) || shownName(e.profile).toLowerCase().includes(q)) : list;
   document.getElementById('browseCount').textContent = `${list.length} ${list.length === 1 ? 'Regal' : 'Regale'}`;
   rows.innerHTML = shown.length
     ? shown.map(readerRowHtml).join('')
-    : `<p class="cards-error">Kein Regal mit „${escapeHtml(q)}“ gefunden.</p>`;
+    : `<p class="cards-error">Kein Regal mit „${escapeHtml(q)}“ in der Übersicht. Über „Leute finden“ oben suchst du in allen öffentlichen Regalen.</p>`;
   rows.querySelectorAll('.reader-row[data-user]').forEach(row=>{
     row.addEventListener('click', e=>{
       if(e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -1651,6 +1663,50 @@ function syncDisplayRow(){
   document.getElementById('accDisplayBtn').disabled = !!ownBan;
 }
 
+function syncPrivacyRows(){
+  const priv = !!currentProfile.is_private;
+  document.querySelectorAll('[data-privacy]').forEach(b=>{
+    b.setAttribute('aria-pressed', b.getAttribute('data-privacy') === (priv ? 'private' : 'public'));
+    b.disabled = !!ownBan;
+  });
+  document.querySelectorAll('[data-listed]').forEach(b=>{
+    b.setAttribute('aria-pressed', b.getAttribute('data-listed') === String(!!currentProfile.listed));
+    b.disabled = !!ownBan;
+  });
+  document.getElementById('accPrivacyHint').textContent = priv
+    ? 'Nicht in der Übersicht und nicht über „Leute finden“. Wer deinen Link hat, sieht dein Regal trotzdem.'
+    : 'Andere finden dich über „Leute finden“.';
+  document.getElementById('accListedRow').classList.toggle('hidden', priv);
+}
+
+async function saveVisibility(patch, success){
+  const { data, error } = await supabaseClient.from('profiles').update(patch).eq('id', currentUser.id).select().single();
+  if(error){ showToast(dbErrorText(error, 'Fehler beim Speichern')); syncPrivacyRows(); return; }
+  currentProfile = data;
+  directory = null;
+  if(viewedProfile && viewedProfile.id === currentUser.id) Object.assign(viewedProfile, { is_private: data.is_private, listed: data.listed });
+  syncPrivacyRows();
+  render();
+  showToast(success);
+}
+
+document.querySelectorAll('[data-privacy]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const priv = btn.getAttribute('data-privacy') === 'private';
+    if(priv === !!currentProfile.is_private) return;
+    // Wer privat wird, verlässt auch die Übersicht; zurück dorthin nur mit neuer Zustimmung.
+    saveVisibility(priv ? { is_private: true, listed: false } : { is_private: false },
+      priv ? 'Profil ist jetzt privat' : 'Profil ist jetzt öffentlich');
+  });
+});
+document.querySelectorAll('[data-listed]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const listed = btn.getAttribute('data-listed') === 'true';
+    if(listed === !!currentProfile.listed) return;
+    saveVisibility({ listed }, listed ? 'Dein Regal steht jetzt in der Übersicht' : 'Dein Regal steht nicht mehr in der Übersicht');
+  });
+});
+
 function closeAccountForms(){
   document.getElementById('accDisplayForm').classList.add('hidden');
   document.getElementById('accDisplayRow').classList.remove('hidden');
@@ -1681,6 +1737,7 @@ async function openAccount(){
     : 'Zur Bestätigung „löschen“ eintippen';
   syncDisplayRow();
   syncRenameRow();
+  syncPrivacyRows();
   closeAccountForms();
   accountOverlay.classList.remove('hidden');
 
@@ -2180,7 +2237,7 @@ function renderHeader(owner){
   const since = viewedProfile.created_at
     ? ' · seit ' + new Date(viewedProfile.created_at).toLocaleDateString('de-DE', {month:'long', year:'numeric'})
     : '';
-  sub.textContent = '@' + viewedProfile.username + since;
+  sub.textContent = '@' + viewedProfile.username + since + (owner && viewedProfile.is_private ? ' · privat, nur per Link' : '');
   shareBtn.classList.remove('hidden');
   document.title = owner ? 'Mein Bücherregal' : `${displayName} Bücherregal`;
 

@@ -35,6 +35,7 @@ self.addEventListener('fetch', event=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   if(url.origin !== self.location.origin) return; // Supabase, Open Library usw. nicht anfassen
+  if(url.pathname.startsWith('/api/')) return;    // Suchantworten nicht im App-Cache sammeln
 
   event.respondWith(
     fetch(req)

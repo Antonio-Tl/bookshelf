@@ -1,3 +1,5 @@
-js/config.js
+
 .claude
 supabase
+.dev.vars
+.wrangler

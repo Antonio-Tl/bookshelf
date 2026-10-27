@@ -1,9 +1,8 @@
 // Vorlage für js/config.js
-// 1. Diese Datei zu js/config.js kopieren.
-// 2. Werte aus Supabase eintragen: Project Settings -> API -> Project URL / anon public key.
-// js/config.js wird per .gitignore nicht eingecheckt (auch wenn der anon key
-// grundsätzlich öffentlich sein darf, da Row Level Security ihn absichert).
+// Werte aus Supabase eintragen: Project Settings -> API -> Project URL / publishable key.
+// Der Key darf öffentlich sein, Row Level Security sichert die Daten ab.
 window.SUPABASE_URL = 'https://DEIN-PROJEKT.supabase.co';
 window.SUPABASE_ANON_KEY = 'DEIN-ANON-KEY';
-// Optional: Google Books API Key (Browser-Key, auf eigene Domains und die Books API beschränken).
-window.GOOGLE_BOOKS_API_KEY = '';
+// Google Books läuft online über worker.js mit dem Laufzeit-Secret GOOGLE_BOOKS_API_KEY am Worker.
+// Nur zum lokalen Testen ohne `wrangler dev`: hier einen auf localhost beschränkten Browser-Key eintragen.
+// window.GOOGLE_BOOKS_API_KEY = '';

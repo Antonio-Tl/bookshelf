@@ -1,0 +1,14 @@
+// Cloudflare Worker "bookshelf": statische Seite plus worker.js für /api/*.
+// Der Name muss zum Worker im Dashboard passen, sonst legt `wrangler deploy` einen neuen an.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bookshelf",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    // Nur die API geht durch den Worker; Seiten, Bilder und Skripte liefert Cloudflare direkt aus.
+    "run_worker_first": ["/api/*"]
+  }
+}

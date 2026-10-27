@@ -1,0 +1,13 @@
+# Nicht als statische Dateien ausliefern
+worker.js
+wrangler.jsonc
+.dev.vars
+.wrangler
+.git
+.github
+.claude
+.impeccable
+.vscode
+.DS_Store
+supabase
+node_modules
