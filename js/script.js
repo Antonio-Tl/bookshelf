@@ -738,14 +738,19 @@ async function findCoverOptions(title, author, preset = [], seriesLabel = ''){
   return list.slice(0, 14);
 }
 
-async function findDescription(title, author){
+// Seitenzahl und Klappentext eines vorhandenen Buchs nachschlagen; nur was gebraucht wird, wird gesucht.
+async function findBookDetails(title, author, { pages = true, description = true } = {}){
   const res = await searchBooks([title, author].filter(Boolean).join(' '));
   const hits = res.filter(c=>titleMatches(c.title, title));
-  for(const c of hits){
-    const d = await fetchDescription(c);
-    if(d) return d;
+  const found = { pages: null, description: '' };
+  if(pages) found.pages = (hits.find(c=>c.pages) || {}).pages || null;
+  if(description){
+    for(const c of hits){
+      const d = await fetchDescription(c);
+      if(d){ found.description = d; break; }
+    }
   }
-  return '';
+  return found;
 }
 
 // Wiederverwendbare Cover-Auswahl: "" = automatisch suchen, "none" = bewusst kein Cover, sonst Bild-URL.
@@ -2755,6 +2760,14 @@ function closeDetail(){
   syncSelection();
 }
 
+// Im Bearbeitungsmodus: Vorschlag, fehlende Seitenzahl und fehlenden Klappentext automatisch einzufügen.
+function missingDetailsHtml(book){
+  const noPages = !book.page_count, noSummary = !book.summary;
+  if(!noPages && !noSummary) return '';
+  const what = noPages && noSummary ? 'Seitenzahl und Klappentext fehlen' : noPages ? 'Die Seitenzahl fehlt' : 'Der Klappentext fehlt';
+  return `<p class="fill-missing"><span>${what} noch.</span><button type="button" class="btn btn-secondary fill-missing-btn">Automatisch einfügen</button></p>`;
+}
+
 function buildDetailCard(book, group, owner){
   const wrap = document.createElement('div');
   wrap.className = 'detail';
@@ -2800,9 +2813,9 @@ function buildDetailCard(book, group, owner){
     ? `<div class="detail-edit-fields">
          <label class="field"><span>Titel</span><input type="text" class="f-edit-title" value="${escapeHtml(book.title)}"></label>
          <label class="field"><span>Autor:in</span><input type="text" class="f-edit-author" value="${escapeHtml(book.author||'')}"></label>
+         ${missingDetailsHtml(book)}
          <label class="field"><span>Seitenzahl</span><input type="number" class="f-pages" min="1" inputmode="numeric" placeholder="${v.pages && v.pagesEstimated ? 'ca. ' + v.pages : 'optional'}" value="${book.page_count||''}"></label>
          <label class="field"><span>Klappentext</span><textarea class="f-summary" rows="5" placeholder="Worum geht's? (optional)">${escapeHtml(book.summary||'')}</textarea></label>
-         ${book.summary ? '' : '<button type="button" class="link-btn summary-search">Klappentext automatisch suchen</button>'}
          <div class="detail-edit-actions">
            <button type="button" class="btn btn-ghost cancel-edit-btn">Abbrechen</button>
            <button type="button" class="btn btn-primary save-edit-btn">Speichern</button>
@@ -2847,20 +2860,31 @@ function buildDetailCard(book, group, owner){
     const coverBtn = wrap.querySelector('.cover-btn');
     if(coverBtn) coverBtn.addEventListener('click', ()=>openCoverModal(book));
 
-    // Im Bearbeitungsmodus: gefundenen Klappentext nur ins Feld setzen, gespeichert wird mit „Speichern“.
-    const summaryBtn = wrap.querySelector('.summary-search');
-    if(summaryBtn) summaryBtn.addEventListener('click', async ()=>{
-      summaryBtn.disabled = true;
-      summaryBtn.textContent = 'Suche …';
-      const text = await findDescription(book.title, book.author);
-      if(!text){
-        showToast('Kein Klappentext gefunden');
-        summaryBtn.disabled = false;
-        summaryBtn.textContent = 'Klappentext automatisch suchen';
+    // Fehlende Seitenzahl / fehlenden Klappentext nur in die leeren Felder setzen; gespeichert wird mit „Speichern“.
+    const fillBtn = wrap.querySelector('.fill-missing-btn');
+    if(fillBtn) fillBtn.addEventListener('click', async ()=>{
+      const pagesInput = wrap.querySelector('.f-pages');
+      const summaryInput = wrap.querySelector('.f-summary');
+      const wantPages = !pagesInput.value.trim();
+      const wantSummary = !summaryInput.value.trim();
+      const hint = wrap.querySelector('.fill-missing');
+      if(!wantPages && !wantSummary){ hint.remove(); return; }
+      fillBtn.disabled = true;
+      fillBtn.textContent = 'Suche …';
+      const found = await findBookDetails(book.title, book.author, { pages: wantPages, description: wantSummary });
+      if(!fillBtn.isConnected) return;
+      // Keine Seitenzahl gefunden: die Schätzung aus der Cover-Suche übernehmen.
+      const pages = found.pages || (wantPages && v.pagesEstimated ? v.pages : null);
+      if(wantPages && pages) pagesInput.value = pages;
+      if(wantSummary && found.description) summaryInput.value = found.description;
+      const missing = [wantPages && !pages && 'Seitenzahl', wantSummary && !found.description && 'Klappentext'].filter(Boolean);
+      if(missing.length === (wantPages + wantSummary)){
+        showToast('Leider nichts gefunden');
+        fillBtn.disabled = false;
+        fillBtn.textContent = 'Automatisch einfügen';
         return;
       }
-      wrap.querySelector('.f-summary').value = text;
-      summaryBtn.remove();
+      hint.innerHTML = `<span>${missing.length ? `Eingefügt, aber ${missing[0] === 'Seitenzahl' ? 'keine Seitenzahl' : 'kein Klappentext'} gefunden.` : 'Eingefügt.'} Prüfen und speichern.</span>`;
     });
 
     if(isEditing){

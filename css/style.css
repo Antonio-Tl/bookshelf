@@ -1894,8 +1894,27 @@ html select {
   outline: 2px solid var(--red);
   outline-offset: 4px;
 }
-.detail-edit-fields .summary-search {
-  margin-top: 8px;
+.fill-missing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 14px 0 0;
+  padding: 10px 10px 10px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.fill-missing .btn {
+  height: 34px;
+  padding: 0 14px;
+}
+.fill-missing + .field {
+  margin-top: 12px;
 }
 
 /* Cover groß: dunkle Fläche, ein Klick irgendwo schließt. */
