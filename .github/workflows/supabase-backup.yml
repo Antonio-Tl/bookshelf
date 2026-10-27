@@ -1,0 +1,62 @@
+name: Supabase Backup
+
+# Sichert jede Nacht Rollen, Schema und Daten (inkl. auth.users) der Supabase-Datenbank.
+# Die Dumps werden mit BACKUP_PASSPHRASE verschlüsselt und 30 Tage als Artifact des Laufs aufbewahrt.
+#
+# Secrets (Repo -> Settings -> Secrets and variables -> Actions):
+#   SUPABASE_DB_URL    Supabase -> Connect -> "Session pooler" (IPv4; die direkte Verbindung ist
+#                      im Free-Tarif nur per IPv6 erreichbar, das können die GitHub-Runner nicht)
+#   BACKUP_PASSPHRASE  langes Passwort, nur zum Entschlüsseln. Ohne es sind die Backups wertlos.
+#
+# Wiederherstellen in ein (neues) Supabase-Projekt:
+#   gpg -d bookshelf-JJJJ-MM-TT.tar.gz.gpg | tar -xz
+#   psql --single-transaction --variable ON_ERROR_STOP=1 \
+#     --file roles.sql --file schema.sql \
+#     --command 'SET session_replication_role = replica' --file data.sql \
+#     --dbname "postgresql://…"
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          test -n "$SUPABASE_DB_URL" || { echo "::error::Secret SUPABASE_DB_URL fehlt"; exit 1; }
+          mkdir backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/roles.sql --role-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --use-copy --data-only
+
+      - name: Encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          test -n "$BACKUP_PASSPHRASE" || { echo "::error::Secret BACKUP_PASSPHRASE fehlt"; exit 1; }
+          name="bookshelf-$(date -u +%Y-%m-%d)"
+          # Passphrase über einen eigenen Dateideskriptor, damit sie nicht in der Kommandozeile steht.
+          tar -czf - -C backup . \
+            | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+                  --symmetric --cipher-algo AES256 -o "$name.tar.gz.gpg" 3<<<"$BACKUP_PASSPHRASE"
+          rm -rf backup
+          echo "BACKUP_NAME=$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_NAME }}
+          path: ${{ env.BACKUP_NAME }}.tar.gz.gpg
+          retention-days: 30
+          # Verschlüsselte Daten lassen sich nicht weiter komprimieren.
+          compression-level: 0
+          if-no-files-found: error
