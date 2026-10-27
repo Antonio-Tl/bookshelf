@@ -1,0 +1,71 @@
+name: Supabase Restore Test
+
+# Prüft jede Woche, ob sich das neueste Backup aus "Supabase Backup" wirklich wiederherstellen lässt:
+# herunterladen, mit BACKUP_PASSPHRASE entschlüsseln und in eine leere Supabase-Instanz auf dem
+# Runner einspielen. Die echte Datenbank wird dabei nicht angefasst. Schlägt der Test fehl,
+# schickt GitHub eine E-Mail.
+
+on:
+  schedule:
+    - cron: '47 4 * * 0'
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['.github/workflows/supabase-restore-test.yml']
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Download latest backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          id=$(gh run list --workflow supabase-backup.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          test -n "$id" || { echo "::error::Kein erfolgreiches Backup gefunden"; exit 1; }
+          gh run download "$id" --dir dl
+          find dl -type f
+
+      - name: Decrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          file=$(find dl -name '*.tar.gz.gpg' | head -n 1)
+          mkdir restore
+          gpg --batch --pinentry-mode loopback --passphrase-fd 3 -d "$file" 3<<<"$BACKUP_PASSPHRASE" \
+            | tar -xz -C restore
+          ls -l restore
+
+      - name: Start empty local Supabase
+        run: |
+          supabase init
+          # Nur Datenbank, Auth und API; der Rest wird für den Test nicht gebraucht.
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api,postgres-meta,supavisor
+          echo "DB_CONTAINER=$(docker ps --filter name=supabase_db_ --format '{{.Names}}')" >> "$GITHUB_ENV"
+
+      - name: Restore
+        run: |
+          # Gleiche Reihenfolge wie in der Anleitung in supabase-backup.yml.
+          { cat restore/roles.sql restore/schema.sql
+            echo 'SET session_replication_role = replica;'
+            cat restore/data.sql
+          } | docker exec -i "$DB_CONTAINER" psql "postgresql://postgres:postgres@localhost:5432/postgres" \
+                --single-transaction --variable ON_ERROR_STOP=1 --quiet -f -
+
+      - name: Check restored data
+        run: |
+          for t in auth.users public.profiles public.shelves public.books; do
+            n=$(docker exec "$DB_CONTAINER" psql "postgresql://postgres:postgres@localhost:5432/postgres" -tAc "select count(*) from $t")
+            echo "$t: $n Zeilen"
+            test "$n" -gt 0 || { echo "::error::$t ist nach dem Wiederherstellen leer"; exit 1; }
+          done
