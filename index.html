@@ -59,6 +59,13 @@
       </button>
       <div class="theme-menu hidden" id="themeMenu" role="menu" aria-label="Design"></div>
     </div>
+    <div class="notif-picker hidden" id="notifPicker">
+      <button type="button" class="icon-btn" id="notifBtn" aria-label="Mitteilungen" aria-haspopup="dialog" aria-expanded="false" title="Mitteilungen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="notif-badge hidden" id="notifBadge"></span>
+      </button>
+      <div class="notif-menu hidden" id="notifMenu" role="dialog" aria-label="Mitteilungen"></div>
+    </div>
     <div class="user-search-box-wrap">
       <div class="search-box user-search-box" id="userSearchBox">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -236,10 +243,14 @@
     </div>
     <div class="shelf-head-side">
       <dl class="stats" id="shelfStats"></dl>
-      <button class="btn btn-secondary hidden" id="shareBtn" title="Regal teilen">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-        <span>Teilen</span>
-      </button>
+      <div class="shelf-head-actions">
+        <button type="button" class="btn btn-primary hidden" id="followBtn" aria-pressed="false"></button>
+        <button type="button" class="icon-btn follow-notify hidden" id="followNotifyBtn" aria-pressed="true"></button>
+        <button class="btn btn-secondary hidden" id="shareBtn" title="Regal teilen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          <span>Teilen</span>
+        </button>
+      </div>
     </div>
   </section>
 
@@ -415,6 +426,10 @@
       <button type="button" class="btn btn-primary" id="coverSaveBtn">Speichern</button>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay cover-zoom hidden" id="coverZoomOverlay" role="dialog" aria-modal="true" aria-label="Cover, zum Schließen klicken" tabindex="-1">
+  <img id="coverZoomImg" alt="">
 </div>
 
 <div class="modal-overlay hidden" id="catModalOverlay">

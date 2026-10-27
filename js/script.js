@@ -42,6 +42,8 @@ try {
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
 const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
 const ICON_IMAGE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg>';
+const ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+const ICON_BELL_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.7 3A6 6 0 0 1 18 8c0 2.8.5 4.8 1.1 6.2"/><path d="M17 17H3s3-2 3-9c0-.9.2-1.8.6-2.6"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
 const ICON_SLIDERS ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.2" fill="#fff"/><circle cx="15" cy="17" r="2.2" fill="#fff"/></svg>';
 
 // Buchfarben für Bände ohne gefundenes Cover; Index über den Reihennamen, damit eine Reihe einheitlich bleibt.
@@ -903,7 +905,7 @@ function setThemeMenu(open){
   themeBtn.setAttribute('aria-expanded', open);
   if(open) renderThemeMenu();
 }
-themeBtn.addEventListener('click', e=>{ e.stopPropagation(); setThemeMenu(themeMenu.classList.contains('hidden')); });
+themeBtn.addEventListener('click', e=>{ e.stopPropagation(); setNotifMenu(false); setThemeMenu(themeMenu.classList.contains('hidden')); });
 document.addEventListener('click', e=>{ if(!document.getElementById('themePicker').contains(e.target)) setThemeMenu(false); });
 themeMenu.addEventListener('keydown', e=>{ if(e.key === 'Escape'){ e.stopPropagation(); setThemeMenu(false); themeBtn.focus(); } });
 darkQuery.addEventListener('change', ()=>{ if(savedTheme() === 'auto') applyTheme('auto'); });
@@ -1018,10 +1020,12 @@ async function handleSession(session){
       if(target === 'admin') navigate('?view=admin');
       else goToUser(currentProfile.username);
     }
+    loadSocial();
   } else {
     currentProfile = null;
     isAdminMember = false;
     ownBan = null;
+    resetSocial();
   }
   // Login/Logout auf localhost wechselt zwischen Testkopie und echten Daten.
   if(DEV_LOCAL && viewedProfile) await loadShelfData(viewedProfile.id);
@@ -1133,6 +1137,7 @@ document.getElementById('adminBtn').addEventListener('click', ()=>document.getEl
 
 document.getElementById('userChipTrigger').addEventListener('click', (e)=>{
   e.stopPropagation();
+  setNotifMenu(false);
   document.getElementById('profilePanel').classList.toggle('hidden');
 });
 document.addEventListener('click', (e)=>{
@@ -1169,6 +1174,7 @@ document.getElementById('saveUsernameBtn').addEventListener('click', async ()=>{
   setPref(AFTER_LOGIN_KEY, '');
   directory = null;
   usernameModalOverlay.classList.add('hidden');
+  loadSocial();
   await goToUser(val);
 });
 document.getElementById('f-username').addEventListener('keydown', (e)=>{
@@ -1239,6 +1245,260 @@ document.addEventListener('click', (e)=>{
       userSearchBox.classList.remove('expanded');
     }
   }
+});
+
+// ---- Folgen und Mitteilungen ----
+// Wem man folgt, liefert my_follows(). Mitteilungen legt die Datenbank selbst an, sobald ein gefolgtes Konto
+// ein Buch im Regal hat und es zum ersten Mal bewertet (supabase/012_follows_notifications.sql).
+const notifPicker = document.getElementById('notifPicker');
+const notifBtn = document.getElementById('notifBtn');
+const notifMenu = document.getElementById('notifMenu');
+const notifBadge = document.getElementById('notifBadge');
+let follows = [];          // [{id, username, display_name, avatar_url, notify}]
+let notifications = [];    // Zeilen aus my_notifications(), neueste zuerst
+let socialReady = false;   // false ohne Login oder solange die Tabellen in Supabase noch fehlen
+let notifChannel = null;
+let notifChannelUser = null;
+let notifSeen = new Set(); // beim Öffnen ungelesen: bleiben hervorgehoben, bis das Menü wieder zu ist
+
+async function loadSocial(){
+  if(!(currentUser && currentProfile && currentProfile.username)){ resetSocial(); return; }
+  const userId = currentUser.id;
+  const [f, n] = await Promise.all([
+    supabaseClient.rpc('my_follows'),
+    supabaseClient.rpc('my_notifications', { p_limit: 40 }),
+  ]);
+  if(!currentUser || currentUser.id !== userId) return;
+  // Ohne die Migration bleibt alles ausgeblendet, statt Fehler zu zeigen.
+  socialReady = !f.error && !n.error;
+  follows = f.data || [];
+  notifications = n.data || [];
+  if(socialReady) subscribeNotifications();
+  renderSocialUI();
+}
+
+async function loadNotifications(){
+  if(!socialReady) return;
+  const { data, error } = await supabaseClient.rpc('my_notifications', { p_limit: 40 });
+  if(error || !socialReady) return;
+  notifications = data || [];
+  renderSocialUI();
+}
+
+function resetSocial(){
+  follows = [];
+  notifications = [];
+  socialReady = false;
+  if(notifChannel) supabaseClient.removeChannel(notifChannel);
+  notifChannel = null;
+  notifChannelUser = null;
+  setNotifMenu(false);
+  renderSocialUI();
+}
+
+// Neue Mitteilungen live empfangen; die Zeile selbst holt loadNotifications() mit Buch und Absender.
+function subscribeNotifications(){
+  if(notifChannel && notifChannelUser === currentUser.id) return;
+  if(notifChannel) supabaseClient.removeChannel(notifChannel);
+  notifChannelUser = currentUser.id;
+  notifChannel = supabaseClient.channel('notifications:' + currentUser.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUser.id}` }, ()=>loadNotifications())
+    .subscribe();
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadNotifications(); });
+
+function renderSocialUI(){
+  notifPicker.classList.toggle('hidden', !socialReady);
+  const unread = socialReady ? notifications.filter(n=>!n.read_at).length : 0;
+  notifBadge.textContent = unread > 9 ? '9+' : String(unread);
+  notifBadge.classList.toggle('hidden', !unread);
+  notifBtn.setAttribute('aria-label', unread ? `Mitteilungen, ${unread} neu` : 'Mitteilungen');
+  if(!notifMenu.classList.contains('hidden')) renderNotifMenu();
+  renderFollowButtons();
+}
+
+function followOf(profileId){
+  return follows.find(f=>f.id === profileId) || null;
+}
+
+function renderFollowButtons(){
+  const btn = document.getElementById('followBtn');
+  const bell = document.getElementById('followNotifyBtn');
+  const show = socialReady && !ownBan && !!viewedProfile && viewedProfile.id !== currentUser.id;
+  const f = show ? followOf(viewedProfile.id) : null;
+  btn.classList.toggle('hidden', !show);
+  bell.classList.toggle('hidden', !f);
+  if(!show) return;
+  btn.textContent = f ? 'Gefolgt' : 'Folgen';
+  btn.classList.toggle('btn-primary', !f);
+  btn.classList.toggle('btn-secondary', !!f);
+  btn.setAttribute('aria-pressed', !!f);
+  btn.title = f ? 'Nicht mehr folgen' : `${shownName(viewedProfile)} folgen`;
+  if(f){
+    bell.innerHTML = f.notify ? ICON_BELL : ICON_BELL_OFF;
+    bell.setAttribute('aria-pressed', f.notify);
+    bell.setAttribute('aria-label', `Mitteilungen bei neuen Büchern: ${f.notify ? 'an' : 'aus'}`);
+    bell.title = f.notify ? 'Mitteilungen an' : 'Mitteilungen aus';
+  }
+}
+
+async function toggleFollow(){
+  if(!socialReady || !viewedProfile) return;
+  const target = viewedProfile;
+  const btn = document.getElementById('followBtn');
+  const f = followOf(target.id);
+  btn.disabled = true;
+  const { error } = f
+    ? await supabaseClient.from('follows').delete().eq('follower_id', currentUser.id).eq('followee_id', target.id)
+    : await supabaseClient.from('follows').insert({ follower_id: currentUser.id, followee_id: target.id });
+  btn.disabled = false;
+  if(error){ showToast(f ? 'Entfolgen hat nicht geklappt' : 'Folgen hat nicht geklappt'); return; }
+  if(f){
+    follows = follows.filter(x=>x !== f);
+    showToast(`Du folgst ${shownName(target)} nicht mehr`);
+  } else {
+    const { id, username, display_name, avatar_url } = target;
+    follows = [...follows, { id, username, display_name, avatar_url, notify: true }]
+      .sort((a, b)=>shownName(a).localeCompare(shownName(b), 'de'));
+    showToast(`Du folgst jetzt ${shownName(target)}`);
+  }
+  renderSocialUI();
+}
+
+async function setFollowNotify(profileId, notify){
+  const f = followOf(profileId);
+  if(!f) return;
+  const { error } = await supabaseClient.from('follows').update({ notify }).eq('follower_id', currentUser.id).eq('followee_id', profileId);
+  if(error){ showToast('Fehler beim Speichern'); return; }
+  f.notify = notify;
+  renderSocialUI();
+  showToast(`Mitteilungen für ${shownName(f)} ${notify ? 'an' : 'aus'}`);
+}
+
+document.getElementById('followBtn').addEventListener('click', toggleFollow);
+document.getElementById('followNotifyBtn').addEventListener('click', ()=>{
+  const f = viewedProfile && followOf(viewedProfile.id);
+  if(f) setFollowNotify(f.id, !f.notify);
+});
+
+const relTime = new Intl.RelativeTimeFormat('de', { numeric: 'auto' });
+function timeAgo(iso){
+  const s = (new Date(iso).getTime() - Date.now()) / 1000;
+  if(s > -60) return 'gerade eben';
+  if(s > -3600) return relTime.format(Math.round(s / 60), 'minute');
+  if(s > -86400) return relTime.format(Math.round(s / 3600), 'hour');
+  if(s > -7 * 86400) return relTime.format(Math.round(s / 86400), 'day');
+  return fmtDate(iso);
+}
+
+function miniAvatarHtml(p){
+  return p.avatar_url
+    ? `<img class="notif-avatar" src="${escapeHtml(p.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+    : `<span class="notif-avatar" aria-hidden="true">${escapeHtml(shownName(p).charAt(0).toUpperCase())}</span>`;
+}
+
+function notifItemHtml(n){
+  const entry = coverCache[coverKey(n)];
+  const cover = entry && entry.src ? entry.src : null;
+  const isNew = !n.read_at || notifSeen.has(n.id);
+  return `<li><button type="button" class="notif-item ${isNew ? 'is-new' : ''}" data-notif="${escapeHtml(n.id)}">
+    ${miniAvatarHtml(n)}
+    <span class="notif-text">
+      <span><b>${escapeHtml(shownName(n))}</b> hat <b>${escapeHtml(n.title)}</b> ins Regal gestellt und bewertet</span>
+      <span class="notif-stars" aria-label="${n.rating} von 5 Sternen">${[1,2,3,4,5].map(i=>starsSVG(i <= n.rating)).join('')}</span>
+      <small>${escapeHtml(timeAgo(n.created_at))}</small>
+    </span>
+    ${cover ? `<img class="notif-cover" src="${escapeHtml(cover)}" alt="" loading="lazy">` : ''}
+  </button></li>`;
+}
+
+function followRowHtml(f){
+  const name = escapeHtml(shownName(f));
+  return `<li class="follow-row">
+    <button type="button" class="follow-go" data-follow-user="${escapeHtml(f.username)}">
+      ${miniAvatarHtml(f)}
+      <span class="follow-names"><b>${name}</b><small>@${escapeHtml(f.username)}</small></span>
+    </button>
+    <button type="button" class="icon-btn sm follow-bell" data-follow-bell="${escapeHtml(f.id)}" aria-pressed="${f.notify}" aria-label="Mitteilungen für ${name}: ${f.notify ? 'an' : 'aus'}" title="${f.notify ? 'Mitteilungen an' : 'Mitteilungen aus'}">${f.notify ? ICON_BELL : ICON_BELL_OFF}</button>
+  </li>`;
+}
+
+function renderNotifMenu(){
+  const list = notifications.length
+    ? `<ol class="notif-list">${notifications.map(notifItemHtml).join('')}</ol>`
+    : '<p class="notif-empty">Noch nichts Neues. Stellt jemand, dem du folgst, ein Buch ins Regal und bewertet es, steht es hier.</p>';
+  const people = follows.length
+    ? `<ul class="follow-list">${follows.map(followRowHtml).join('')}</ul>`
+    : '<p class="notif-empty">Du folgst noch niemandem. Öffne ein Regal und tippe auf „Folgen“.</p>';
+  notifMenu.innerHTML = `
+    <section class="notif-section"><h3 class="notif-head">Mitteilungen</h3>${list}</section>
+    <section class="notif-section"><h3 class="notif-head">Ich folge${follows.length ? ` <span>${follows.length}</span>` : ''}</h3>${people}</section>`;
+}
+
+// Beim Öffnen frisch laden und alles als gelesen markieren; neu Hinzugekommenes bleibt bis zum Schließen hervorgehoben.
+async function markNotificationsRead(){
+  await loadNotifications();
+  const unread = notifications.filter(n=>!n.read_at);
+  if(!unread.length || notifMenu.classList.contains('hidden')) return;
+  unread.forEach(n=>notifSeen.add(n.id));
+  const now = new Date().toISOString();
+  const { error } = await supabaseClient.from('notifications').update({ read_at: now })
+    .eq('user_id', currentUser.id).is('read_at', null);
+  if(error) return;
+  unread.forEach(n=>{ n.read_at = now; });
+  renderSocialUI();
+}
+
+function setNotifMenu(open){
+  if(open === !notifMenu.classList.contains('hidden')) return;
+  notifMenu.classList.toggle('hidden', !open);
+  notifBtn.setAttribute('aria-expanded', open);
+  if(open){
+    notifSeen = new Set(notifications.filter(n=>!n.read_at).map(n=>n.id));
+    renderNotifMenu();
+    markNotificationsRead();
+  } else {
+    notifSeen = new Set();
+  }
+}
+
+async function openNotification(n){
+  setNotifMenu(false);
+  await goToUser(n.username);
+  if(!bookIndex.has(String(n.book_id))){ showToast('Das Buch steht nicht mehr im Regal'); return; }
+  selectedId = n.book_id;
+  displayedId = n.book_id;
+  editingBookId = null;
+  render();
+  const el = document.querySelector(`#shelves [data-book="${CSS.escape(String(n.book_id))}"]`);
+  if(el) revealAfterTurn(el);
+}
+
+notifBtn.addEventListener('click', ()=>{
+  setThemeMenu(false);
+  document.getElementById('profilePanel').classList.add('hidden');
+  setNotifMenu(notifMenu.classList.contains('hidden'));
+});
+notifMenu.addEventListener('click', e=>{
+  const bell = e.target.closest('[data-follow-bell]');
+  if(bell){
+    const f = followOf(bell.getAttribute('data-follow-bell'));
+    if(f) setFollowNotify(f.id, !f.notify);
+    return;
+  }
+  const person = e.target.closest('[data-follow-user]');
+  if(person){
+    setNotifMenu(false);
+    goToUser(person.getAttribute('data-follow-user'));
+    return;
+  }
+  const item = e.target.closest('[data-notif]');
+  const n = item && notifications.find(x=>String(x.id) === item.getAttribute('data-notif'));
+  if(n) openNotification(n);
+});
+notifMenu.addEventListener('keydown', e=>{ if(e.key === 'Escape'){ e.stopPropagation(); setNotifMenu(false); notifBtn.focus(); } });
+document.addEventListener('click', e=>{
+  if(e.target instanceof Element && e.target.isConnected && !notifPicker.contains(e.target)) setNotifMenu(false);
 });
 
 // ---- Regal-Routing (welches Profil wird angezeigt) ----
@@ -2344,6 +2604,7 @@ function render(){
   document.getElementById('devBanner').classList.toggle('hidden', !devSandboxActive());
   renderAuthUI();
   renderHeader(owner);
+  renderFollowButtons();
   syncViewButtons();
   document.getElementById('headerActions').classList.toggle('hidden', !owner);
 
@@ -2518,13 +2779,14 @@ function buildDetailCard(book, group, owner){
     ? `<label class="detail-row"><span class="row-label">Gelesen am</span><input type="date" class="f-date" value="${escapeHtml(book.date_read||'')}"></label>`
     : (book.date_read ? `<p class="detail-row"><span class="row-label">Gelesen am</span><span class="row-value">${escapeHtml(formatDate(book.date_read))}</span></p>` : '');
 
-  const pagesBlockHtml = owner
-    ? `<label class="detail-row"><span class="row-label">Seitenzahl</span><input type="number" class="f-pages" min="1" placeholder="${v.pages && v.pagesEstimated ? 'ca. ' + v.pages : 'optional'}" value="${book.page_count||''}"></label>`
-    : (pagesText ? `<p class="detail-row"><span class="row-label">Umfang</span><span class="row-value">${escapeHtml(pagesText)}</span></p>` : '');
+  // Seitenzahl und Klappentext ändert der Besitzer nur im Bearbeitungsmodus (Stift), dort stehen sie bei Titel und Autor.
+  const pagesBlockHtml = !isEditing && pagesText
+    ? `<p class="detail-row"><span class="row-label">Umfang</span><span class="row-value">${escapeHtml(pagesText)}</span></p>`
+    : '';
 
-  const summaryBlockHtml = owner
-    ? `<div class="detail-block"><label><span class="row-label">Klappentext</span><textarea class="f-summary" rows="3" placeholder="Worum geht's? (optional)">${escapeHtml(book.summary||'')}</textarea></label>${book.summary ? '' : '<button type="button" class="link-btn summary-search">Klappentext automatisch suchen</button>'}</div>`
-    : (book.summary ? `<div class="detail-block"><span class="row-label">Klappentext</span><p class="detail-text">${escapeHtml(book.summary)}</p></div>` : '');
+  const summaryBlockHtml = !isEditing && book.summary
+    ? `<div class="detail-block"><span class="row-label">Klappentext</span><p class="detail-text">${escapeHtml(book.summary)}</p></div>`
+    : '';
 
   const notesBlockHtml = owner
     ? `<label class="detail-block"><span class="row-label">Notizen</span><textarea class="f-notes" rows="3" placeholder="Deine Gedanken zum Buch …">${escapeHtml(book.notes||'')}</textarea></label>`
@@ -2538,6 +2800,9 @@ function buildDetailCard(book, group, owner){
     ? `<div class="detail-edit-fields">
          <label class="field"><span>Titel</span><input type="text" class="f-edit-title" value="${escapeHtml(book.title)}"></label>
          <label class="field"><span>Autor:in</span><input type="text" class="f-edit-author" value="${escapeHtml(book.author||'')}"></label>
+         <label class="field"><span>Seitenzahl</span><input type="number" class="f-pages" min="1" inputmode="numeric" placeholder="${v.pages && v.pagesEstimated ? 'ca. ' + v.pages : 'optional'}" value="${book.page_count||''}"></label>
+         <label class="field"><span>Klappentext</span><textarea class="f-summary" rows="5" placeholder="Worum geht's? (optional)">${escapeHtml(book.summary||'')}</textarea></label>
+         ${book.summary ? '' : '<button type="button" class="link-btn summary-search">Klappentext automatisch suchen</button>'}
          <div class="detail-edit-actions">
            <button type="button" class="btn btn-ghost cancel-edit-btn">Abbrechen</button>
            <button type="button" class="btn btn-primary save-edit-btn">Speichern</button>
@@ -2549,10 +2814,10 @@ function buildDetailCard(book, group, owner){
   wrap.innerHTML = `
     <div class="detail-hero" style="--c:${v.rgb.join(',')}">
       <div class="detail-hero-actions">
-        ${owner && !isEditing ? `<button type="button" class="icon-btn cover-btn" aria-label="Cover ändern" title="Cover ändern">${ICON_IMAGE}</button><button type="button" class="icon-btn edit-btn" aria-label="Titel und Autor bearbeiten" title="Bearbeiten">${ICON_EDIT}</button>` : ''}
+        ${owner && !isEditing ? `<button type="button" class="icon-btn cover-btn" aria-label="Cover ändern" title="Cover ändern">${ICON_IMAGE}</button><button type="button" class="icon-btn edit-btn" aria-label="Buch bearbeiten" title="Bearbeiten">${ICON_EDIT}</button>` : ''}
         <button type="button" class="icon-btn close-x" aria-label="Schließen">${ICON_CLOSE}</button>
       </div>
-      <div class="detail-cover ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''}" data-book="${escapeHtml(book.id)}" style="${escapeHtml(visualStyle(v, true))}">${genCoverHtml(book, group)}</div>
+      <div class="detail-cover ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''}" data-book="${escapeHtml(book.id)}" style="${escapeHtml(visualStyle(v, true))}" role="button" tabindex="0" aria-label="Cover vergrößern">${genCoverHtml(book, group)}</div>
     </div>
     <div class="detail-body">
       ${titleBlockHtml}
@@ -2570,12 +2835,19 @@ function buildDetailCard(book, group, owner){
 
   wrap.querySelector('.close-x').addEventListener('click', closeDetail);
 
+  const coverEl = wrap.querySelector('.detail-cover');
+  coverEl.addEventListener('click', ()=>openCoverZoom(book, group));
+  coverEl.addEventListener('keydown', e=>{
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openCoverZoom(book, group); }
+  });
+
   if(owner){
     renderCategoryToggleList(wrap.querySelector('.f-shelf-category-list'), group.key, group.categoryIds);
 
     const coverBtn = wrap.querySelector('.cover-btn');
     if(coverBtn) coverBtn.addEventListener('click', ()=>openCoverModal(book));
 
+    // Im Bearbeitungsmodus: gefundenen Klappentext nur ins Feld setzen, gespeichert wird mit „Speichern“.
     const summaryBtn = wrap.querySelector('.summary-search');
     if(summaryBtn) summaryBtn.addEventListener('click', async ()=>{
       summaryBtn.disabled = true;
@@ -2587,10 +2859,8 @@ function buildDetailCard(book, group, owner){
         summaryBtn.textContent = 'Klappentext automatisch suchen';
         return;
       }
-      const { error } = await db('books').update({ summary: text }).eq('id', book.id);
-      if(error){ showToast('Fehler beim Speichern'); return; }
-      await refreshAndRender();
-      showToast('Klappentext ergänzt');
+      wrap.querySelector('.f-summary').value = text;
+      summaryBtn.remove();
     });
 
     if(isEditing){
@@ -2598,10 +2868,15 @@ function buildDetailCard(book, group, owner){
       wrap.querySelector('.save-edit-btn').addEventListener('click', async ()=>{
         const titleInput = wrap.querySelector('.f-edit-title');
         const authorInput = wrap.querySelector('.f-edit-author');
+        const pagesInput = wrap.querySelector('.f-pages');
         const newTitle = titleInput.value.trim();
         if(!newTitle){ showToast('Bitte einen Titel eingeben'); titleInput.focus(); return; }
         const newAuthor = authorInput.value.trim();
-        const { error } = await db('books').update({ title: newTitle, author: newAuthor }).eq('id', book.id);
+        const pagesVal = pagesInput.value.trim();
+        const pageCount = pagesVal ? parseInt(pagesVal, 10) : null;
+        if(pagesVal && !(pageCount > 0)){ showToast('Seitenzahl muss größer als 0 sein'); pagesInput.focus(); return; }
+        const summary = wrap.querySelector('.f-summary').value.trim() || null;
+        const { error } = await db('books').update({ title: newTitle, author: newAuthor, page_count: pageCount, summary }).eq('id', book.id);
         if(error){ showToast('Fehler beim Speichern'); return; }
         editingBookId = null;
         await refreshAndRender();
@@ -2623,18 +2898,6 @@ function buildDetailCard(book, group, owner){
     });
     wrap.querySelector('.f-date').addEventListener('change', async (e)=>{
       const { error } = await db('books').update({date_read: e.target.value || null}).eq('id', book.id);
-      if(error){ showToast('Fehler beim Speichern'); return; }
-      await refreshAndRender();
-    });
-    wrap.querySelector('.f-pages').addEventListener('change', async (e)=>{
-      const val = e.target.value.trim();
-      const pageCount = val ? parseInt(val, 10) : null;
-      const { error } = await db('books').update({page_count: pageCount}).eq('id', book.id);
-      if(error){ showToast('Fehler beim Speichern'); return; }
-      await refreshAndRender();
-    });
-    wrap.querySelector('.f-summary').addEventListener('change', async (e)=>{
-      const { error } = await db('books').update({summary: e.target.value.trim() || null}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
     });
@@ -2951,6 +3214,28 @@ document.getElementById('coverSaveBtn').addEventListener('click', async ()=>{
   showToast('Cover gespeichert');
 });
 
+// ---- Cover groß ansehen (Klick aufs Cover in den Buchdetails) ----
+const coverZoomOverlay = document.getElementById('coverZoomOverlay');
+const coverZoomImg = document.getElementById('coverZoomImg');
+
+function openCoverZoom(book, group){
+  const v = bookVisual(book, group.label);
+  if(!v.has) return;
+  // Bis das große Bild da ist, steht das kleine (schon geladene) als Hintergrund dahinter.
+  coverZoomImg.style.setProperty('--cover-sm', `url('${v.url}')`);
+  coverZoomImg.style.aspectRatio = v.ratio.toFixed(3);
+  coverZoomImg.onerror = ()=>{ coverZoomImg.onerror = null; coverZoomImg.src = v.url; };
+  coverZoomImg.src = v.urlLarge;
+  coverZoomImg.alt = `Cover von „${book.title}“`;
+  coverZoomOverlay.classList.remove('hidden');
+  coverZoomOverlay.focus();
+}
+function closeCoverZoom(){
+  coverZoomOverlay.classList.add('hidden');
+  coverZoomImg.removeAttribute('src');
+}
+coverZoomOverlay.addEventListener('click', closeCoverZoom);
+
 // ---- Category management modal ----
 const catOverlay = document.getElementById('catModalOverlay');
 
@@ -3209,6 +3494,7 @@ document.addEventListener('keydown', (e)=>{
   if(e.key !== 'Escape') return;
   const openModal = [...document.querySelectorAll('.modal-overlay')].find(m=>!m.classList.contains('hidden') && m !== usernameModalOverlay);
   if(openModal){ openModal.classList.add('hidden'); return; }
+  if(!notifMenu.classList.contains('hidden')){ setNotifMenu(false); notifBtn.focus(); return; }
   if(tocPanel.classList.contains('open')){ closeToc(); return; }
   if(selectedId != null) closeDetail();
 });

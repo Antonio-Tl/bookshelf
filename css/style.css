@@ -395,6 +395,10 @@ button {
   -webkit-backdrop-filter: saturate(1.4) blur(14px);
   border-bottom: 1px solid var(--line);
 }
+/* Offene Menüs der Kopfleiste liegen über der Buch-Schublade (z-index 47), sonst verschwinden sie darunter. */
+.topbar:has(.profile-panel:not(.hidden), .theme-menu:not(.hidden), .notif-menu:not(.hidden), .user-search-results:not(.hidden)) {
+  z-index: 48;
+}
 .brand {
   display: flex;
   align-items: center;
@@ -596,6 +600,199 @@ button {
   color: var(--dim);
   font-size: 12px;
 }
+/* Mitteilungen (Glocke neben dem Design-Knopf) */
+.notif-picker {
+  position: relative;
+}
+.notif-picker > .icon-btn {
+  position: relative;
+}
+.notif-badge {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--r-pill);
+  background: var(--red);
+  box-shadow: 0 0 0 2px var(--wall);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.notif-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 360px;
+  max-height: min(560px, calc(100vh - 90px));
+  max-height: min(560px, calc(100dvh - 90px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  animation: pop-in 0.2s var(--ease-out);
+  transform-origin: top right;
+}
+.notif-section + .notif-section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+}
+.notif-head {
+  margin: 0;
+  padding: 8px 10px 6px;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.notif-head span {
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.notif-list,
+.follow-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notif-empty {
+  margin: 0;
+  padding: 4px 10px 10px;
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.notif-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  padding: 9px 10px 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  font-size: 13.5px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.notif-item:hover {
+  background: var(--surface-2);
+}
+.notif-item.is-new {
+  background: var(--tint);
+}
+.notif-item.is-new::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 21px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.notif-item b {
+  font-weight: 650;
+}
+.notif-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.notif-text small {
+  color: var(--dim);
+  font-size: 12px;
+}
+.notif-stars {
+  display: flex;
+  gap: 1px;
+}
+.notif-stars svg {
+  width: 12px;
+  height: 12px;
+}
+.notif-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--wall-2);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+.notif-cover {
+  width: 34px;
+  aspect-ratio: 0.66;
+  border-radius: 1px 3px 3px 1px;
+  object-fit: cover;
+  background: var(--wall-2);
+  box-shadow: 0 2px 6px -2px rgba(20, 20, 20, 0.35);
+}
+.follow-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.follow-go {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.follow-go:hover {
+  background: var(--surface-2);
+}
+.follow-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+}
+.follow-names b {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.follow-names small {
+  color: var(--dim);
+  font-size: 12.5px;
+}
+.follow-bell[aria-pressed="false"],
+.follow-notify[aria-pressed="false"] {
+  color: var(--dim);
+}
+.follow-bell {
+  margin-right: 4px;
+}
+
 .user-search-results {
   position: absolute;
   top: calc(100% + 8px);
@@ -878,6 +1075,15 @@ h1 {
   display: flex;
   align-items: flex-end;
   gap: 28px;
+}
+.shelf-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.shelf-head-actions .follow-notify {
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 .stats {
   display: flex;
@@ -1680,6 +1886,40 @@ html select {
 }
 .detail-cover .gen-cover b {
   font-size: min(18px, 16cqi);
+}
+.detail-cover.has-cover:not(.is-loading) {
+  cursor: zoom-in;
+}
+.detail-cover:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 4px;
+}
+.detail-edit-fields .summary-search {
+  margin-top: 8px;
+}
+
+/* Cover groß: dunkle Fläche, ein Klick irgendwo schließt. */
+.modal-overlay.cover-zoom {
+  z-index: 60;
+  align-items: center;
+  padding: 24px;
+  background: rgba(12, 12, 12, 0.82);
+  cursor: zoom-out;
+}
+.cover-zoom:focus {
+  outline: none;
+}
+.cover-zoom img {
+  display: block;
+  width: auto;
+  height: min(86vh, 900px);
+  height: min(86dvh, 900px);
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 3px 8px 8px 3px;
+  background: var(--cover-sm, none) center / cover;
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.7);
+  animation: modal-in 0.38s var(--ease-out);
 }
 @keyframes cover-in {
   from {
@@ -3405,6 +3645,24 @@ a.reader-row:hover .reader-go {
   .user-search-box.expanded input {
     opacity: 1;
     pointer-events: auto;
+  }
+  /* Platz für das aufgeklappte Suchfeld */
+  .auth-bar:has(.user-search-box.expanded) .notif-picker {
+    display: none;
+  }
+  .notif-menu {
+    position: fixed;
+    top: 64px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+  .shelf-head-side {
+    flex-wrap: wrap;
+    row-gap: 14px;
+  }
+  .shelf-head-actions {
+    margin-left: auto;
   }
   .google-btn span,
   .chip-name {

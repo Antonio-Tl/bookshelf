@@ -20,7 +20,8 @@ Not a reading tracker with lists and progress bars: books live as spines on shel
 
 ## Operating Context
 
-- Owners edit inline: rating stars, read date, page count, blurb and notes save on change; title/author via an edit mode; series rename and category assignment via the series label.
+- Owners edit inline: rating stars, read date and notes save on change; title, author, page count and blurb via the edit mode (pencil); series rename and category assignment via the series label.
+- Signed-in readers can follow other shelves. Followed shelves are listed under the bell next to the theme button, which also shows a notification when a followed account adds a book and rates it (per-follow toggle, on by default).
 - Adding a book: title, author, optional page count and blurb, optional series (existing series reuse their categories), categories.
 - Visitors see a read-only view with a banner naming whose shelf it is, plus a share action (native share or copied link).
 - Navigation aids: in-shelf search by series or title, category filter, a table of contents of series with scroll-spy.
@@ -29,7 +30,7 @@ Not a reading tracker with lists and progress bars: books live as spines on shel
 ## Capabilities and Constraints
 
 - Static HTML/CSS/vanilla JS served as files (`index.html`, `css/style.css`, `js/script.js`), Supabase for auth (Google OAuth), data, and row-level security. No build step.
-- Data model: profiles (username, display name, avatar, created_at, is_private, listed), shelves (label, is_series), books (title, author, series_order, rating 0–5, notes, summary, date_read, page_count), categories, shelf_categories.
+- Data model: profiles (username, display name, avatar, created_at, is_private, listed), shelves (label, is_series), books (title, author, series_order, rating 0–5, notes, summary, date_read, page_count), categories, shelf_categories, follows (follower, followee, notify), notifications (created by a trigger on the first rating of a book).
 - UI copy is German.
 - `buecherregal.html` is a legacy standalone prototype, not part of the live app.
 
