@@ -907,8 +907,6 @@ const THEMES = [
   { id: 'midnight', name: 'Mitternacht', note: 'Nachtblau, Messingbrett', wall: '#0e1726', shelf: '#cfa962', accent: '#e2b65a' },
   { id: 'sage', name: 'Salbei', note: 'Ruhiges Grün, weißes Brett', wall: '#e3e9e2', shelf: '#f8f9f6', accent: '#1d6b66' },
 ];
-const themeMenu = document.getElementById('themeMenu');
-const themeBtn = document.getElementById('themeBtn');
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 function savedTheme(){
@@ -920,30 +918,24 @@ function applyTheme(choice){
   const meta = document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--wall').trim());
 }
-function renderThemeMenu(){
+// Auswahl mit Farbmustern in den Einstellungen.
+function renderThemeChoices(el){
   const current = savedTheme();
-  themeMenu.innerHTML = THEMES.map(t=>`
-    <button type="button" class="theme-item" role="menuitemradio" aria-checked="${t.id === current}" data-theme-id="${t.id}">
+  el.innerHTML = THEMES.map(t=>`
+    <button type="button" class="theme-item" role="radio" aria-checked="${t.id === current}" data-theme-id="${t.id}">
       <span class="theme-swatch" style="background:${t.wall}"><i style="background:${t.accent}"></i><b style="background:${t.shelf}"></b></span>
       <span class="theme-text"><span class="theme-name">${t.name}</span><span class="theme-note">${t.note}</span></span>
     </button>`).join('');
-  themeMenu.querySelectorAll('.theme-item').forEach(btn=>{
+  el.querySelectorAll('.theme-item').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.getAttribute('data-theme-id');
-      try { localStorage.setItem(THEME_KEY, id); } catch(e){}
+      setPref(THEME_KEY, id);
       applyTheme(id);
-      renderThemeMenu();
+      renderThemeChoices(el);
+      el.querySelector(`[data-theme-id="${id}"]`).focus();
     });
   });
 }
-function setThemeMenu(open){
-  themeMenu.classList.toggle('hidden', !open);
-  themeBtn.setAttribute('aria-expanded', open);
-  if(open) renderThemeMenu();
-}
-themeBtn.addEventListener('click', e=>{ e.stopPropagation(); setNotifMenu(false); setThemeMenu(themeMenu.classList.contains('hidden')); });
-document.addEventListener('click', e=>{ if(!document.getElementById('themePicker').contains(e.target)) setThemeMenu(false); });
-themeMenu.addEventListener('keydown', e=>{ if(e.key === 'Escape'){ e.stopPropagation(); setThemeMenu(false); themeBtn.focus(); } });
 darkQuery.addEventListener('change', ()=>{ if(savedTheme() === 'auto') applyTheme('auto'); });
 applyTheme(savedTheme());
 
@@ -1119,6 +1111,7 @@ function loginHintDismissed(){
 
 function renderAuthUI(){
   updateHomeCta();
+  updateHomeBtn();
   const loginBtn = document.getElementById('googleLoginBtn');
   const userChip = document.getElementById('userChip');
   const myShelfBtn = document.getElementById('myShelfBtn');
@@ -1193,6 +1186,38 @@ document.getElementById('googleLoginBtn').addEventListener('click', signInWithGo
 document.getElementById('devResetBtn').addEventListener('click', resetSandbox);
 document.getElementById('loginHintAction').addEventListener('click', signInWithGoogle);
 document.getElementById('logoutBtn').addEventListener('click', signOut);
+// ---- Mein-Regal-Knopf in der Kopfleiste ----
+// Führt von überall (fremdes Regal, Übersicht, Startseite, offenes Buch) zurück ins eigene Regal.
+// Lokal ohne Login gilt das Regal aus dem Testmodus als eigenes, wie beim Knopf auf der Startseite.
+const homeBtn = document.getElementById('homeBtn');
+function ownShelfName(){
+  if(currentProfile && currentProfile.username) return currentProfile.username;
+  return DEV_LOCAL && !currentUser ? devAs : null;
+}
+function onOwnShelf(){
+  const name = ownShelfName();
+  return currentRoute === 'shelf' && !!name && !!viewedProfile && viewedProfile.username === name;
+}
+function updateHomeBtn(){
+  homeBtn.classList.toggle('hidden', !ownShelfName());
+  if(onOwnShelf()) homeBtn.setAttribute('aria-current', 'page');
+  else homeBtn.removeAttribute('aria-current');
+}
+homeBtn.addEventListener('click', ()=>{
+  const name = ownShelfName();
+  if(!name) return;
+  closeToc();
+  document.getElementById('profilePanel').classList.add('hidden');
+  if(onOwnShelf()){
+    if(selectedId != null) closeDetail();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  // Auch aus einem fremden Regal oben anfangen, nicht an dessen Scroll-Position.
+  window.scrollTo(0, 0);
+  goToUser(name);
+});
+
 document.getElementById('myShelfBtn').addEventListener('click', ()=>{
   document.getElementById('profilePanel').classList.add('hidden');
   if(currentProfile && currentProfile.username) goToUser(currentProfile.username);
@@ -1541,7 +1566,6 @@ async function openNotification(n){
 }
 
 notifBtn.addEventListener('click', ()=>{
-  setThemeMenu(false);
   document.getElementById('profilePanel').classList.add('hidden');
   setNotifMenu(notifMenu.classList.contains('hidden'));
 });
@@ -1592,6 +1616,7 @@ function showRoute(route){
   document.getElementById('browseView').classList.toggle('hidden', route !== 'browse');
   document.getElementById('adminView').classList.toggle('hidden', route !== 'admin');
   document.getElementById('shelfView').classList.toggle('hidden', route !== 'shelf');
+  updateHomeBtn();
   if(route !== 'shelf'){
     selectedId = null;
     closeToc();
@@ -3879,7 +3904,7 @@ function scanRowHtml(b, i){
 function renderScanList(){
   if(!scanItems.length){
     scanBody.innerHTML = '';
-    scanLede.textContent = 'Auf dem Foto wurden keine Bücher erkannt. Am besten klappt ein scharfes Foto von einem einzelnen Regalbrett.';
+    scanLede.textContent = 'Auf dem Foto wurde kein Buch erkannt!';
     updateScanSave();
     return;
   }
@@ -4629,8 +4654,7 @@ const setFace = document.getElementById('setFace');
 
 function openSettings(){
   closeToc();
-  setTheme.innerHTML = THEMES.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  setTheme.value = savedTheme();
+  renderThemeChoices(setTheme);
   setSort.value = getPref(SORT_KEY, 'alpha');
   setFace.value = getPref(FACE_KEY, 'first');
   settingsOverlay.querySelectorAll('[data-set-view]').forEach(b=>b.setAttribute('aria-pressed', b.getAttribute('data-set-view') === viewMode));
@@ -4650,7 +4674,6 @@ document.getElementById('profileSettingsBtn').addEventListener('click', ()=>{
 document.getElementById('settingsCloseBtn').addEventListener('click', ()=>settingsOverlay.classList.add('hidden'));
 settingsOverlay.addEventListener('click', e=>{ if(e.target === settingsOverlay) settingsOverlay.classList.add('hidden'); });
 
-setTheme.addEventListener('change', ()=>{ setPref(THEME_KEY, setTheme.value); applyTheme(setTheme.value); });
 setSort.addEventListener('change', ()=>{ setPref(SORT_KEY, setSort.value); render(); });
 setFace.addEventListener('change', ()=>{ setPref(FACE_KEY, setFace.value); displayedId = null; render(); });
 settingsOverlay.querySelectorAll('[data-set-view]').forEach(btn=>{
