@@ -266,12 +266,21 @@
       <div class="filter-bar" id="filterBar"></div>
       <div class="toolbar-end">
         <div class="seg" role="group" aria-label="Ansicht">
-          <button type="button" data-view="shelf" aria-pressed="true">Regal</button>
-          <button type="button" data-view="grid" aria-pressed="false">Cover</button>
+          <button type="button" data-view="shelf" aria-pressed="true" aria-label="Regal">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v14M9.5 4v14M14 6.5l3.5 11.5"/><path d="M3 20h18"/></svg>
+            <span>Regal</span>
+          </button>
+          <button type="button" data-view="grid" aria-pressed="false" aria-label="Cover">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6.5" height="7" rx="1.2"/><rect x="13.5" y="4" width="6.5" height="7" rx="1.2"/><rect x="4" y="13" width="6.5" height="7" rx="1.2"/><rect x="13.5" y="13" width="6.5" height="7" rx="1.2"/></svg>
+            <span>Cover</span>
+          </button>
         </div>
         <div class="header-actions hidden" id="headerActions">
-          <button class="btn btn-secondary" id="openCatBtn">Kategorien</button>
-          <button class="btn btn-primary" id="openAddBtn">
+          <button class="btn btn-secondary" id="openCatBtn" aria-label="Kategorien">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor"/></svg>
+            <span>Kategorien</span>
+          </button>
+          <button class="btn btn-primary" id="openAddBtn" aria-label="Buch hinzufügen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             <span>Buch</span>
           </button>
