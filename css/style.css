@@ -2397,6 +2397,94 @@ select:focus {
   border-top: 1px solid var(--line-soft);
   background: var(--surface);
 }
+
+/* Regal scannen: Prüfliste der erkannten Bücher */
+.modal-scan .modal-add-head .modal-title-row {
+  margin-bottom: 0;
+}
+.modal-scan .scan-again {
+  margin-right: auto;
+}
+.scan-loading {
+  width: 28px;
+  height: 28px;
+  margin: 48px auto;
+  border-radius: 50%;
+  border: 3px solid var(--spin-track);
+  border-top-color: var(--spin-head);
+  animation: spin 0.8s linear infinite;
+}
+.scan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.scan-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-control);
+}
+.scan-item.is-unsure {
+  border-color: var(--line-strong);
+  background: var(--tint);
+}
+.scan-item.is-owned {
+  opacity: 0.65;
+}
+.scan-check {
+  width: 20px;
+  height: 20px;
+  margin: 11px 0 0;
+  accent-color: var(--red);
+}
+.scan-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.scan-fields .scan-title {
+  font-weight: 650;
+}
+.scan-sub {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.scan-sub input {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+.scan-note {
+  color: var(--dim);
+  font-size: 12.5px;
+}
+.scan-item.is-unsure .scan-note {
+  color: var(--ink);
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .scan-sub {
+    grid-template-columns: 1fr;
+  }
+  /* Drei Knöpfe passen nicht nebeneinander: Speichern volle Breite, die anderen darunter. */
+  .modal-scan .modal-add-foot {
+    flex-wrap: wrap;
+  }
+  .modal-scan #saveScanBtn {
+    flex: 1 0 100%;
+    order: -1;
+  }
+}
+
 .add-book-card {
   display: grid;
   grid-template-columns: 116px minmax(0, 1fr);
@@ -3674,10 +3762,10 @@ a.reader-row:hover .reader-go {
   /* Zwei feste Zeilen: Suche mit den Aktionen, darunter Ansicht und Filter. */
   .toolbar {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     grid-template-areas:
-      "search search cat add"
-      "view   chips  chips chips";
+      "search search cat scan add"
+      "view   chips  chips chips chips";
     gap: 12px 8px;
     align-items: center;
     padding: 8px 0 14px;
@@ -3692,6 +3780,9 @@ a.reader-row:hover .reader-go {
   #openCatBtn {
     grid-area: cat;
   }
+  #openScanBtn {
+    grid-area: scan;
+  }
   #openAddBtn {
     grid-area: add;
   }
@@ -3705,16 +3796,19 @@ a.reader-row:hover .reader-go {
     height: 36px;
   }
   #openCatBtn,
+  #openScanBtn,
   #openAddBtn {
     width: 40px;
     padding: 0;
   }
   #openCatBtn span,
+  #openScanBtn span,
   #openAddBtn span,
   .toolbar .seg span {
     display: none;
   }
-  #openCatBtn svg {
+  #openCatBtn svg,
+  #openScanBtn svg {
     display: block;
     width: 18px;
     height: 18px;

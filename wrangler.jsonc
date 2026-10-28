@@ -10,5 +10,11 @@
     "binding": "ASSETS",
     // Nur die API geht durch den Worker; Seiten, Bilder und Skripte liefert Cloudflare direkt aus.
     "run_worker_first": ["/api/*"]
+  },
+  // Öffentliche Werte (stehen auch in js/config.js); /api/scan prüft damit das Login.
+  // Geheim und nur per `wrangler secret put` bzw. lokal in .dev.vars: GOOGLE_BOOKS_API_KEY, GEMINI_API_KEY.
+  "vars": {
+    "SUPABASE_URL": "https://zlbedwktggcdyfvaerop.supabase.co",
+    "SUPABASE_ANON_KEY": "sb_publishable_Xr6uYfqtFsOy8pzgU4Tgvw_qpvol_Aj"
   }
 }

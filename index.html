@@ -280,6 +280,11 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor"/></svg>
             <span>Kategorien</span>
           </button>
+          <button class="btn btn-secondary" id="openScanBtn" aria-label="Regal fotografieren und Bücher erkennen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.5-2h5.6l1.5 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span>Scannen</span>
+          </button>
+          <input type="file" id="scanFileInput" accept="image/*" class="visually-hidden" tabindex="-1" aria-hidden="true">
           <button class="btn btn-primary" id="openAddBtn" aria-label="Buch hinzufügen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             <span>Buch</span>
@@ -353,6 +358,24 @@
         <button type="submit" class="btn btn-primary">Ins Regal stellen</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="scanOverlay">
+  <div class="modal modal-add modal-scan" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
+    <div class="modal-add-head">
+      <div class="modal-title-row">
+        <h2 id="scanTitle">Regal scannen</h2>
+        <button type="button" class="icon-btn" id="closeScanBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+      </div>
+      <p class="modal-lede" id="scanLede" aria-live="polite"></p>
+    </div>
+    <div class="modal-add-body" id="scanBody"></div>
+    <div class="modal-actions modal-add-foot">
+      <button type="button" class="btn btn-ghost scan-again" id="scanAgainBtn">Anderes Foto</button>
+      <button type="button" class="btn btn-ghost" id="cancelScanBtn">Abbrechen</button>
+      <button type="button" class="btn btn-primary" id="saveScanBtn" disabled>Ins Regal stellen</button>
+    </div>
   </div>
 </div>
 

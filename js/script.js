@@ -3222,6 +3222,177 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
   showToast('„' + title + '“ steht jetzt im Regal');
 });
 
+// ---- Regal scannen ----
+// Ein Foto vom Regal geht verkleinert an /api/scan (worker.js, Gemini). Die erkannten Bücher erscheinen
+// als Prüfliste; erst nach Bestätigung landen sie im Regal, wie beim Neues-Buch-Dialog ohne Reihe
+// jeweils mit dem Titel als Regal. Cover sucht die App danach automatisch.
+const scanOverlay = document.getElementById('scanOverlay');
+const scanInput = document.getElementById('scanFileInput');
+const scanBody = document.getElementById('scanBody');
+const scanLede = document.getElementById('scanLede');
+const saveScanBtn = document.getElementById('saveScanBtn');
+let scanItems = [];
+let scanSeq = 0;
+
+function pickScanPhoto(){
+  scanInput.value = '';
+  scanInput.click();
+}
+function closeScan(){
+  scanSeq++;
+  scanOverlay.classList.add('hidden');
+}
+document.getElementById('openScanBtn').addEventListener('click', pickScanPhoto);
+document.getElementById('scanAgainBtn').addEventListener('click', pickScanPhoto);
+document.getElementById('closeScanBtn').addEventListener('click', closeScan);
+document.getElementById('cancelScanBtn').addEventListener('click', closeScan);
+scanOverlay.addEventListener('click', e=>{ if(e.target === scanOverlay) closeScan(); });
+scanInput.addEventListener('change', ()=>{ if(scanInput.files[0]) runScan(scanInput.files[0]); });
+
+// Handyfotos sind oft 10 MB groß; auf 2000 px reicht für die Buchrücken und hält die Anfrage klein.
+async function photoToJpegBase64(file){
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bmp.width * scale);
+  canvas.height = Math.round(bmp.height * scale);
+  canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  if(bmp.close) bmp.close();
+  const blob = await new Promise(res=>canvas.toBlob(res, 'image/jpeg', 0.85));
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for(let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+function scanErrorText(res){
+  if(!res) return 'Das Foto konnte nicht gelesen werden. Prüf deine Verbindung und versuch es nochmal.';
+  if(res.status === 429 || res.status === 503) return 'Die Erkennung ist gerade ausgelastet. Versuch es in einer Minute nochmal.';
+  if(res.status === 401) return 'Zum Scannen musst du angemeldet sein.';
+  if(res.status === 413) return 'Das Foto ist zu groß.';
+  if(res.status === 404 || res.status === 405) return 'Scannen geht nur über den Worker: online oder lokal mit „wrangler dev“.';
+  return 'Das hat nicht geklappt. Versuch es nochmal oder mit einem anderen Foto.';
+}
+
+async function runScan(file){
+  const seq = ++scanSeq;
+  scanItems = [];
+  scanLede.textContent = 'Das Foto wird gelesen. Das dauert meist nur ein paar Sekunden.';
+  scanBody.innerHTML = '<div class="scan-loading" aria-hidden="true"></div>';
+  updateScanSave();
+  document.getElementById('series-list').innerHTML = shelves.filter(s=>s.is_series).map(s=>`<option value="${escapeHtml(s.label)}">`).join('');
+  scanOverlay.classList.remove('hidden');
+
+  let image;
+  try { image = await photoToJpegBase64(file); } catch(e){
+    if(seq !== scanSeq) return;
+    scanBody.innerHTML = '';
+    scanLede.textContent = 'Das Bild ließ sich nicht öffnen. Nimm bitte ein JPEG- oder PNG-Foto.';
+    return;
+  }
+  let res = null;
+  try {
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ image }),
+    });
+  } catch(e){ res = null; }
+  if(seq !== scanSeq) return;
+  if(!res || !res.ok || !(res.headers.get('content-type') || '').includes('json')){
+    scanBody.innerHTML = '';
+    scanLede.textContent = scanErrorText(res && res.ok ? { status: 404 } : res);
+    return;
+  }
+
+  const { buecher = [] } = await res.json();
+  if(seq !== scanSeq) return;
+  const owned = new Set(books.map(b=>normTitle(b.title)));
+  scanItems = buecher.map(b=>{
+    // Eine schon vorhandene Reihe mit gleichem Namen übernehmen, damit die Bücher dort einsortiert werden.
+    const known = b.reihe ? shelves.find(s=>s.is_series && normTitle(s.label) === normTitle(b.reihe)) : null;
+    const isOwned = owned.has(normTitle(b.titel));
+    // Unsicher gelesene Titel sind oft falsch; die muss man bewusst anhaken.
+    return { titel: b.titel, autor: b.autor, reihe: known ? known.label : b.reihe, unsicher: b.unsicher, owned: isOwned, checked: !isOwned && !b.unsicher };
+  });
+  renderScanList();
+}
+
+function renderScanList(){
+  if(!scanItems.length){
+    scanBody.innerHTML = '';
+    scanLede.textContent = 'Auf dem Foto wurden keine Bücher erkannt. Am besten klappt ein scharfes Foto von einem einzelnen Regalbrett.';
+    updateScanSave();
+    return;
+  }
+  const unsure = scanItems.filter(b=>b.unsicher).length;
+  scanLede.textContent = `${scanItems.length} Bücher erkannt${unsure ? `, ${unsure} davon unsicher` : ''}. Korrigier, was nicht stimmt, und wähl aus, was ins Regal soll.`;
+  scanBody.innerHTML = `<ul class="scan-list">${scanItems.map((b, i)=>`
+    <li class="scan-item${b.unsicher ? ' is-unsure' : ''}${b.owned ? ' is-owned' : ''}">
+      <input type="checkbox" class="scan-check" data-i="${i}" ${b.checked ? 'checked' : ''} aria-label="„${escapeHtml(b.titel)}“ übernehmen">
+      <div class="scan-fields">
+        <input type="text" class="scan-title" data-i="${i}" data-k="titel" value="${escapeHtml(b.titel)}" aria-label="Titel">
+        <div class="scan-sub">
+          <input type="text" data-i="${i}" data-k="autor" value="${escapeHtml(b.autor)}" placeholder="Autor" aria-label="Autor">
+          <input type="text" data-i="${i}" data-k="reihe" value="${escapeHtml(b.reihe)}" placeholder="Reihe (leer: Einzelband)" list="series-list" aria-label="Reihe">
+        </div>
+        ${b.owned ? '<small class="scan-note">Steht schon in deinem Regal</small>' : b.unsicher ? '<small class="scan-note">Unsicher gelesen: Titel prüfen und dann anhaken</small>' : ''}
+      </div>
+    </li>`).join('')}</ul>`;
+  updateScanSave();
+}
+
+scanBody.addEventListener('input', e=>{
+  const i = e.target.getAttribute('data-i');
+  const k = e.target.getAttribute('data-k');
+  if(i !== null && k) scanItems[i][k] = e.target.value;
+});
+scanBody.addEventListener('change', e=>{
+  if(!e.target.classList.contains('scan-check')) return;
+  scanItems[e.target.getAttribute('data-i')].checked = e.target.checked;
+  updateScanSave();
+});
+
+function updateScanSave(){
+  const n = scanItems.filter(b=>b.checked && b.titel.trim()).length;
+  saveScanBtn.disabled = n === 0;
+  saveScanBtn.textContent = n === 1 ? '1 Buch ins Regal stellen' : n > 1 ? `${n} Bücher ins Regal stellen` : 'Ins Regal stellen';
+}
+
+saveScanBtn.addEventListener('click', async ()=>{
+  if(!isOwnerView()) return;
+  const chosen = scanItems.filter(b=>b.checked && b.titel.trim());
+  if(!chosen.length) return;
+  saveScanBtn.disabled = true;
+  let added = 0;
+  for(const b of chosen){
+    const title = b.titel.trim();
+    const author = b.autor.trim();
+    const label = b.reihe.trim() || title;
+    let shelf = shelves.find(s=>s.is_series && s.label.toLowerCase() === label.toLowerCase());
+    if(!shelf){
+      const { data, error } = await db('shelves').insert({ label, is_series: true }).select().single();
+      if(error) break;
+      shelf = { ...data, categoryIds: [] };
+      shelves.push(shelf);
+    }
+    const same = books.filter(x=>x.shelf_id === shelf.id);
+    const seriesOrder = same.length ? Math.max(...same.map(x=>x.series_order || 0)) + 1 : 1;
+    const { data: newBook, error } = await db('books')
+      .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating: 0, notes: '', summary: null, date_read: null, page_count: null, cover_url: null })
+      .select().single();
+    if(error) break;
+    books.push(newBook);
+    added++;
+  }
+  await refreshAndRender();
+  scanOverlay.classList.add('hidden');
+  showToast(added === chosen.length
+    ? (added === 1 ? '1 Buch steht jetzt im Regal' : `${added} Bücher stehen jetzt im Regal`)
+    : `${added} von ${chosen.length} Büchern gespeichert, dann ist ein Fehler aufgetreten`);
+});
+
 // ---- Cover nachträglich ändern ----
 const coverOverlay = document.getElementById('coverModalOverlay');
 const editPicker = createCoverPicker(document.getElementById('editCoverPicker'));
