@@ -2823,6 +2823,39 @@ select:focus {
   border-top-color: var(--spin-head);
   animation: spin 0.8s linear infinite;
 }
+/* Ergebnis-Kopf: Anzahl groß wie die Zahlen im Regal-Kopf, daneben die Aufteilung */
+.scan-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+}
+.scan-summary > b {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.scan-summary > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.scan-summary strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.scan-summary small {
+  color: var(--dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
 .scan-section {
   margin-top: 20px;
 }

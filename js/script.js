@@ -3719,14 +3719,24 @@ function renderScanList(){
     updateScanSave();
     return;
   }
-  scanLede.textContent = `${scanItems.length} ${scanItems.length === 1 ? 'Buch' : 'Bücher'} auf dem Foto erkannt. Die Erkennung kann sich irren, schau also kurz über die Liste und hak an, was ins Regal soll.`;
+  scanLede.textContent = 'Die Erkennung kann sich irren, schau also kurz über die Liste und hak an, was ins Regal soll.';
   const idx = pick=>scanItems.map((b, i)=>i).filter(i=>pick(scanItems[i]));
   const fresh = idx(b=>!b.owned && !b.unsicher);
   const unsure = idx(b=>!b.owned && b.unsicher);
   const owned = idx(b=>b.owned);
   const rows = list=>`<ul class="scan-rows">${list.map(i=>scanRowHtml(scanItems[i], i)).join('')}</ul>`;
   const allOn = fresh.length && fresh.every(i=>scanItems[i].checked);
+  // Die Zahl groß wie im Regal-Kopf, darunter die Aufteilung auf die Abschnitte.
+  const split = [
+    fresh.length && `${fresh.length} neu`,
+    unsure.length && `${unsure.length} zu prüfen`,
+    owned.length && `${owned.length} schon im Regal`,
+  ].filter(Boolean).join(' · ');
   scanBody.innerHTML = `
+    <div class="scan-summary">
+      <b>${scanItems.length}</b>
+      <span><strong>${scanItems.length === 1 ? 'Buch erkannt' : 'Bücher erkannt'}</strong>${split ? `<small>${escapeHtml(split)}</small>` : ''}</span>
+    </div>
     ${fresh.length ? `<section class="scan-section">
       <div class="scan-section-head"><h3>Neu <span>${fresh.length}</span></h3>
         <button type="button" class="link-btn" data-all="${allOn ? 'off' : 'on'}">${allOn ? 'Alle abwählen' : 'Alle auswählen'}</button></div>
