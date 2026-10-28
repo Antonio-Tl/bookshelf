@@ -60,7 +60,7 @@ async function searchBooks(request, env, ctx){
   return res;
 }
 
-// POST /api/scan { image: <JPEG als Base64> } liest die Buchrücken auf einem Regalfoto mit Gemini.
+// POST /api/scan { image: <Foto als Base64>, mime } liest die Buchrücken auf einem Regalfoto mit Gemini.
 // Der Key liegt als Secret GEMINI_API_KEY am Worker. Nur für Premium-Konten und Admins und nur
 // innerhalb des Tageslimits: der Worker ruft dafür claim_scan() in Supabase mit dem Login des
 // Nutzers auf (supabase/014_scan_limit.sql). Ohne Prüfung nur unter `wrangler dev` mit SCAN_SKIP_AUTH=1
@@ -69,7 +69,10 @@ async function searchBooks(request, env, ctx){
 // Fest statt "gemini-flash-lite-latest": der Alias wechselt ohne Ankündigung das Modell (und damit die
 // Geschwindigkeit). Minimales Nachdenken war im Test spürbar schneller und erkannte genauso viel.
 const SCAN_MODEL = 'gemini-3.5-flash-lite';
-const SCAN_MAX_BASE64 = 6 * 1024 * 1024;
+// Meist ein im Browser auf 2000 px verkleinertes JPEG (unter 1 MB). Kann der Browser das Foto nicht lesen
+// (HEIC in Chrome, Riesenfotos auf schwachen Handys), kommt die Originaldatei bis 10 MB, also ~14 MB als Base64.
+const SCAN_MAX_BASE64 = 14 * 1024 * 1024;
+const SCAN_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 const SCAN_PROMPT = `Das Foto zeigt ein Bücherregal. Liste jedes Buch auf, dessen Rücken oder Cover zu sehen ist:
 von links nach rechts, oberstes Regalbrett zuerst. Gib Titel und Autor so an, wie sie gedruckt sind
 (Originalsprache beibehalten, normale Groß-/Kleinschreibung statt GROSSBUCHSTABEN).
@@ -119,9 +122,10 @@ async function scanShelf(request, env){
   // Erst das Foto prüfen, dann zählen: ein kaputter Upload soll kein Kontingent kosten.
   // Zu große Anfragen gar nicht erst einlesen.
   if(Number(request.headers.get('Content-Length') || 0) > SCAN_MAX_BASE64 + 1024) return json({ error: 'too large' }, 413);
-  let image;
-  try { ({ image } = await request.json()); } catch(e){ return json({ error: 'bad request' }, 400); }
+  let image, mime;
+  try { ({ image, mime = 'image/jpeg' } = await request.json()); } catch(e){ return json({ error: 'bad request' }, 400); }
   if(typeof image !== 'string' || !image) return json({ error: 'bad request' }, 400);
+  if(!SCAN_MIME_TYPES.includes(mime)) return json({ error: 'unsupported type' }, 415);
   if(image.length > SCAN_MAX_BASE64) return json({ error: 'too large' }, 413);
 
   if(!local){
@@ -139,7 +143,7 @@ async function scanShelf(request, env){
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
         body: JSON.stringify({
-          contents: [{ parts: [{ inline_data: { mime_type: 'image/jpeg', data: image } }, { text: SCAN_PROMPT }] }],
+          contents: [{ parts: [{ inline_data: { mime_type: mime, data: image } }, { text: SCAN_PROMPT }] }],
           generationConfig: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'minimal' } },
         }),
       });

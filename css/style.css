@@ -236,6 +236,8 @@ body {
 }
 html {
   scrollbar-color: var(--scroll-thumb) var(--wall);
+  /* Kein Doppeltipp-Zoom auf dem Handy (Pinch-Zoom: Viewport-Tag und theme.js) */
+  touch-action: manipulation;
 }
 body {
   min-height: 100vh;
@@ -3458,6 +3460,10 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
 }
 .modal-scan .scan-again {
   margin-right: auto;
+}
+/* Während das Foto gelesen wird, geht das Fenster nur über „Abbrechen“ zu */
+.is-busy #closeScanBtn {
+  visibility: hidden;
 }
 .scan-loading {
   width: 28px;

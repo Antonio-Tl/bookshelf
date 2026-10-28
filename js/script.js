@@ -707,8 +707,12 @@ function genreOfCategory(name){
 
 // Erkannte Genres -> IDs vorhandener Kategorien plus höchstens vier Namen, für die es noch keine gibt.
 function suggestCategories(raw){
+  return categoriesForGenres(detectGenres(raw));
+}
+// Dasselbe für schon erkannte Genres (Namen aus GENRE_RULES).
+function categoriesForGenres(genres){
   const ids = new Set(), fresh = [];
-  detectGenres(raw).forEach(g=>{
+  genres.forEach(g=>{
     const hit = categories.find(c=>genreOfCategory(c.name) === g);
     if(hit) ids.add(hit.id); else fresh.push(g);
   });
@@ -731,12 +735,14 @@ function titleMatches(a, b){
 }
 
 // Cover-Vorschläge: passende Treffer beider Quellen plus englische/deutsche Ausgaben des Open-Library-Werks.
-async function findCoverOptions(title, author, preset = [], seriesLabel = ''){
+// hitsOut: optionale Liste, in die die passenden Suchtreffer kommen (der Scan liest daraus die Genres).
+async function findCoverOptions(title, author, preset = [], seriesLabel = '', hitsOut = null){
   const list = [];
   const push = (u, label)=>{ const s = safeImageUrl(u); if(s && !list.some(o=>o.url === s)) list.push({ url: s, label }); };
   preset.forEach(o=>push(o.url, o.label));
   const res = await searchBooks([title, author].filter(Boolean).join(' '));
   const hits = res.filter(c=>titleMatches(c.title, title));
+  if(hitsOut) hitsOut.push(...hits);
   // Kein Treffer für den (oft deutschen) Titel: Cover der Original-Reihe desselben Autors anbieten.
   if(!hits.some(c=>c.cover) && seriesLabel && author){
     const series = await searchOpenLibrary(`${seriesLabel} ${author}`);
@@ -3638,8 +3644,16 @@ function pickScanPhoto(){
 function hasPremium(){
   return canUsePremium || devPremium();
 }
+// Solange das Foto gelesen wird, schließt nur „Abbrechen“ das Fenster (kein X, kein Escape).
+function setScanBusy(on){
+  scanOverlay.classList.toggle('is-busy', on);
+}
+function scanIsBusy(){
+  return !scanOverlay.classList.contains('hidden') && scanOverlay.classList.contains('is-busy');
+}
 function closeScan(){
   scanSeq++;
+  setScanBusy(false);
   scanOverlay.classList.add('hidden');
 }
 document.getElementById('openScanBtn').addEventListener('click', ()=>{
@@ -3647,25 +3661,115 @@ document.getElementById('openScanBtn').addEventListener('click', ()=>{
   else openSupport('scan');
 });
 document.getElementById('scanAgainBtn').addEventListener('click', pickScanPhoto);
-document.getElementById('closeScanBtn').addEventListener('click', closeScan);
+document.getElementById('closeScanBtn').addEventListener('click', ()=>{ if(!scanIsBusy()) closeScan(); });
 document.getElementById('cancelScanBtn').addEventListener('click', closeScan);
-scanOverlay.addEventListener('click', e=>{ if(e.target === scanOverlay) closeScan(); });
+// Kein Schließen per Klick daneben: weder mitten im Scan noch mit der fertigen Liste, die sonst weg wäre.
 scanInput.addEventListener('change', ()=>{ if(scanInput.files[0]) runScan(scanInput.files[0]); });
 
 // Handyfotos sind oft 10 MB groß; auf 2000 px reicht für die Buchrücken und hält die Anfrage klein.
-async function photoToJpegBase64(file){
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bmp.width * scale);
-  canvas.height = Math.round(bmp.height * scale);
-  canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  if(bmp.close) bmp.close();
-  const blob = await new Promise(res=>canvas.toBlob(res, 'image/jpeg', 0.85));
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+// Was der Browser lesen kann (JPEG, PNG, WebP, AVIF, GIF, BMP, je nach Browser auch HEIC, TIFF, JPEG XL),
+// wird hier verkleinert und als JPEG geschickt. Klappt das nicht, etwa HEIC vom iPhone in Chrome oder ein
+// 50-Megapixel-Foto, für das dem Handy der Speicher fehlt, geht die Datei unverändert an den Worker, sofern
+// Gemini das Format selbst lesen kann.
+const SCAN_MAX_PX = 2000;
+const SCAN_MAX_RAW_BYTES = 10 * 1024 * 1024;
+
+function bytesToBase64(bytes){
   let bin = '';
   for(let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   return btoa(bin);
+}
+
+// Das Format an den ersten Bytes erkennen: file.type ist bei HEIC und Dateien aus Cloud-Ordnern oft leer.
+async function sniffImageType(file){
+  const b = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const ascii = (from, to)=>String.fromCharCode(...b.subarray(from, to));
+  if(b[0] === 0xFF && b[1] === 0xD8) return 'image/jpeg';
+  if(b[0] === 0x89 && ascii(1, 4) === 'PNG') return 'image/png';
+  if(ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp';
+  if(ascii(4, 8) === 'ftyp'){
+    const brand = ascii(8, 12);
+    if(/^(heic|heix|heim|heis|hevc|hevx|hevm|hevs)$/.test(brand)) return 'image/heic';
+    if(/^(mif1|msf1|heif)$/.test(brand)) return 'image/heif';
+    if(/^avi[fs]$/.test(brand)) return 'image/avif';
+  }
+  return file.type || '';
+}
+
+// Erst die Maße lesen, dann gleich verkleinert dekodieren: ein volles 50-MP-Bild braucht 200 MB Speicher.
+function loadImageElement(url){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+// -> { source, width, height, url? }; url ist die Objekt-Adresse des <img>, die erst nach dem Zeichnen frei wird.
+async function decodePhoto(file){
+  const fit = (w, h)=>{
+    const scale = Math.min(1, SCAN_MAX_PX / Math.max(w, h));
+    return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+  };
+  const url = URL.createObjectURL(file);
+  let img;
+  try { img = await loadImageElement(url); } catch(e){ img = null; }
+  if(!img || !img.naturalWidth){
+    // Manche Browser lesen das Bild nur über createImageBitmap, nicht als <img>.
+    URL.revokeObjectURL(url);
+    const bmp = await createImageBitmap(file);
+    return { source: bmp, ...fit(bmp.width, bmp.height) };
+  }
+  const size = fit(img.naturalWidth, img.naturalHeight);
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image', resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'high' });
+    // Dreht ein Browser hochkant fotografierte Bilder erst nach dem Verkleinern, wäre das Ergebnis verzerrt.
+    if(bmp.width === size.width && bmp.height === size.height){
+      URL.revokeObjectURL(url);
+      return { source: bmp, ...size };
+    }
+    bmp.close();
+  } catch(e){}
+  return { source: img, ...size, url };
+}
+
+async function photoToJpegBase64(file){
+  const photo = await decodePhoto(file);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = photo.width;
+    canvas.height = photo.height;
+    const ctx = canvas.getContext('2d');
+    // Transparente PNGs sonst mit schwarzem Hintergrund.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(photo.source, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(res=>canvas.toBlob(res, 'image/jpeg', 0.85));
+    if(blob) return bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
+    // Ältere Android-Browser liefern bei toBlob manchmal null.
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    if(!dataUrl.startsWith('data:image/jpeg')) throw new Error('no jpeg');
+    return dataUrl.slice(dataUrl.indexOf(',') + 1);
+  } finally {
+    if(photo.source.close) photo.source.close();
+    if(photo.url) URL.revokeObjectURL(photo.url);
+  }
+}
+
+// Formate, die Gemini auch ohne Umwandlung im Browser liest.
+const SCAN_RAW_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+
+// -> { image, mime } oder ein Fehler mit .reason ('unsupported' | 'too_large').
+async function photoToScanImage(file){
+  try {
+    return { image: await photoToJpegBase64(file), mime: 'image/jpeg' };
+  } catch(e){
+    const type = await sniffImageType(file).catch(()=>file.type);
+    const fail = reason=>Object.assign(new Error(reason), { reason });
+    if(!SCAN_RAW_TYPES.includes(type)) throw fail('unsupported');
+    if(file.size > SCAN_MAX_RAW_BYTES) throw fail('too_large');
+    return { image: bytesToBase64(new Uint8Array(await file.arrayBuffer())), mime: type };
+  }
 }
 
 // code: das "error"-Feld aus der Antwort des Workers, z. B. die Tageslimits aus claim_scan().
@@ -3677,6 +3781,7 @@ function scanErrorText(res, code){
   if(res.status === 401) return 'Zum Scannen musst du angemeldet sein.';
   if(res.status === 403) return 'Regal scannen ist eine Premium-Funktion.';
   if(res.status === 413) return 'Das Foto ist zu groß.';
+  if(res.status === 415) return 'Dieses Bildformat kann die Erkennung nicht lesen. Nimm bitte ein Foto als JPG, PNG, WebP oder HEIC.';
   if(res.status === 404 || res.status === 405) return 'Scannen geht nur über den Worker: online oder lokal mit „wrangler dev“.';
   return 'Das hat nicht geklappt. Versuch es nochmal oder mit einem anderen Foto.';
 }
@@ -3693,13 +3798,17 @@ async function runScan(file){
     }
   }, 12000);
   updateScanSave();
+  setScanBusy(true);
   scanOverlay.classList.remove('hidden');
 
-  let image;
-  try { image = await photoToJpegBase64(file); } catch(e){
+  let photo;
+  try { photo = await photoToScanImage(file); } catch(e){
     if(seq !== scanSeq) return;
+    setScanBusy(false);
     scanBody.innerHTML = '';
-    scanLede.textContent = 'Das Bild ließ sich nicht öffnen. Nimm bitte ein JPEG- oder PNG-Foto.';
+    scanLede.textContent = e.reason === 'too_large'
+      ? 'Das Foto ist zu groß. Nimm bitte eins mit weniger als 10 MB, zum Beispiel ein normales Handyfoto statt eines 50-MP-Fotos.'
+      : 'Dieses Bildformat kann die Erkennung nicht lesen. Nimm bitte ein Foto als JPG, PNG, WebP oder HEIC.';
     return;
   }
   let res = null;
@@ -3708,20 +3817,22 @@ async function runScan(file){
     res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-      body: JSON.stringify({ image }),
+      body: JSON.stringify(photo),
     });
   } catch(e){ res = null; }
   if(seq !== scanSeq) return;
   if(!res || !res.ok || !(res.headers.get('content-type') || '').includes('json')){
     const code = res && !res.ok ? ((await res.json().catch(()=>null)) || {}).error : null;
     if(seq !== scanSeq) return;
+    setScanBusy(false);
     scanBody.innerHTML = '';
     scanLede.textContent = scanErrorText(res && res.ok ? { status: 404 } : res, code);
     return;
   }
 
-  const { buecher = [] } = await res.json();
+  const { buecher = [] } = await res.json().catch(()=>({}));
   if(seq !== scanSeq) return;
+  setScanBusy(false);
   const owned = new Set(books.map(b=>normTitle(b.title)));
   scanItems = buecher.map(b=>{
     // Eine schon vorhandene Reihe mit gleichem Namen übernehmen, damit die Bücher dort einsortiert werden.
@@ -3732,7 +3843,7 @@ async function runScan(file){
     return { titel: b.titel, autor: b.autor, reihe: known ? known.label : b.reihe, unsicher: b.unsicher, owned: isOwned,
       checked: !isOwned && !b.unsicher, editing: unsure,
       // coverChoice wie beim Cover-Picker: "" = automatisch, "none" = kein Cover, sonst Bild-URL.
-      coverOptions: null, coverChoice: '', coverLoading: true, coverReq: 0 };
+      coverOptions: null, coverChoice: '', coverLoading: true, coverReq: 0, genres: [] };
   });
   scanOwnedOpen = false;
   renderScanList();
@@ -3758,7 +3869,7 @@ function scanRowHtml(b, i){
     <label class="scan-pick">
       <input type="checkbox" class="scan-check" data-i="${i}" ${b.checked ? 'checked' : ''}>
       <span class="scan-cover" aria-hidden="true">${scanThumbHtml(b)}</span>
-      <span class="scan-text"><b>${escapeHtml(b.titel)}</b>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}</span>
+      <span class="scan-text"><b>${escapeHtml(b.titel)}</b>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}${scanGenresHtml(b)}</span>
     </label>
     <button type="button" class="icon-btn sm scan-edit" data-edit="${i}" aria-expanded="${b.editing}" aria-label="„${escapeHtml(b.titel)}“ bearbeiten">${ICON_SCAN_EDIT}</button>
     ${editor}
@@ -3772,7 +3883,7 @@ function renderScanList(){
     updateScanSave();
     return;
   }
-  scanLede.textContent = 'Die Erkennung kann sich irren, schau also kurz über die Liste und hak an, was ins Regal soll.';
+  scanLede.textContent = 'Die Erkennung kann sich irren, schau also kurz über die Liste und hak an, was ins Regal soll. Gefundene Genres kommen als Kategorien mit.';
   const idx = pick=>scanItems.map((b, i)=>i).filter(i=>pick(scanItems[i]));
   const fresh = idx(b=>!b.owned && !b.unsicher);
   const unsure = idx(b=>!b.owned && b.unsicher);
@@ -3818,6 +3929,17 @@ function updateScanThumb(i){
   const slot = scanBody.querySelector(`.scan-row[data-i="${i}"] .scan-cover`);
   if(slot) slot.innerHTML = scanThumbHtml(scanItems[i]);
 }
+// Die drei spezifischsten Genres als Chips unter Titel und Autor.
+function scanGenresHtml(b){
+  return b.genres.length ? `<span class="suggest-genres">${b.genres.slice(0, 3).map(g=>`<span>${escapeHtml(g)}</span>`).join('')}</span>` : '';
+}
+function updateScanGenres(i){
+  const text = scanBody.querySelector(`.scan-row[data-i="${i}"] .scan-text`);
+  if(!text) return;
+  const old = text.querySelector('.suggest-genres');
+  if(old) old.remove();
+  text.insertAdjacentHTML('beforeend', scanGenresHtml(scanItems[i]));
+}
 
 // Offene Bearbeiten-Bereiche bekommen dieselbe Cover-Auswahl wie der Neues-Buch-Dialog.
 const scanPickers = new Map();
@@ -3851,13 +3973,29 @@ async function searchScanCovers(i, seq){
   b.coverLoading = true;
   syncScanPicker(i);
   let options = [];
-  try { options = await findCoverOptions(b.titel, b.autor, [], b.reihe); } catch(e){ options = []; }
+  const hits = [];
+  try { options = await findCoverOptions(b.titel, b.autor, [], b.reihe, hits); } catch(e){ options = []; }
   // Liste inzwischen geschlossen, neu gescannt oder der Titel wurde seitdem wieder geändert.
   if(seq !== scanSeq || req !== b.coverReq) return;
   b.coverOptions = options;
   b.coverLoading = false;
+  b.genres = scanGenresFromHits(hits);
   updateScanThumb(i);
+  updateScanGenres(i);
   syncScanPicker(i);
+}
+// Genres wie im Neues-Buch-Dialog aus den Treffern der Buchdatenbanken; beim Speichern werden sie zu Kategorien.
+// Die Subjects von Open Library sind verrauscht (Dune steht dort auch unter Fantasy), deshalb
+// zählt nur, was mindestens die Hälfte der Treffer mit Genres nennt, höchstens drei, die häufigsten zuerst.
+function scanGenresFromHits(hits){
+  const lists = hits.map(c=>detectGenres(c.genres)).filter(l=>l.length);
+  const count = new Map();
+  lists.forEach(l=>l.forEach(g=>count.set(g, (count.get(g) || 0) + 1)));
+  const order = GENRE_RULES.map(r=>r.name);
+  return [...count.keys()]
+    .filter(g=>count.get(g) >= Math.ceil(lists.length / 2))
+    .sort((a, b)=>count.get(b) - count.get(a) || order.indexOf(a) - order.indexOf(b))
+    .slice(0, 3);
 }
 async function loadScanCovers(seq){
   const queue = scanItems.map((b, i)=>i).sort((a, b)=>scanItems[a].owned - scanItems[b].owned);
@@ -3911,6 +4049,23 @@ scanBody.addEventListener('toggle', e=>{
   if(e.target.classList && e.target.classList.contains('scan-owned')) scanOwnedOpen = e.target.open;
 }, true);
 
+// Erkannte Genres als Kategorien ans Regal hängen. Fehlt eine Kategorie, wird sie angelegt (höchstens
+// MAX_NEW_GENRES pro Buch, wie die Vorschläge im Neues-Buch-Dialog). Fehler hier halten das Speichern nicht auf.
+async function addScanGenres(shelf, genres){
+  if(!genres.length) return;
+  const { ids, fresh } = categoriesForGenres(genres);
+  for(const name of fresh){
+    const { data, error } = await db('categories').insert({ name }).select().single();
+    if(error || !data) continue;
+    categories = [...categories, data].sort((a, b)=>a.name.localeCompare(b.name, 'de'));
+    ids.add(data.id);
+  }
+  const missing = [...ids].filter(id=>!shelf.categoryIds.includes(id));
+  if(!missing.length) return;
+  const { error } = await db('shelf_categories').insert(missing.map(category_id=>({ shelf_id: shelf.id, category_id })));
+  if(!error) shelf.categoryIds.push(...missing);
+}
+
 function updateScanSave(){
   const n = scanItems.filter(b=>b.checked && b.titel.trim()).length;
   saveScanBtn.disabled = n === 0;
@@ -3923,6 +4078,9 @@ saveScanBtn.addEventListener('click', async ()=>{
   if(!chosen.length) return;
   saveScanBtn.disabled = true;
   let added = 0;
+  // Regale, die erst jetzt entstehen. Nur die bekommen Genres; bestehende Reihen behalten ihre Kategorien,
+  // wie im Neues-Buch-Dialog.
+  const freshShelves = new Set();
   for(const b of chosen){
     const title = b.titel.trim();
     const author = b.autor.trim();
@@ -3933,7 +4091,9 @@ saveScanBtn.addEventListener('click', async ()=>{
       if(error) break;
       shelf = { ...data, categoryIds: [] };
       shelves.push(shelf);
+      freshShelves.add(shelf.id);
     }
+    if(freshShelves.has(shelf.id)) await addScanGenres(shelf, b.genres);
     const same = books.filter(x=>x.shelf_id === shelf.id);
     const seriesOrder = same.length ? Math.max(...same.map(x=>x.series_order || 0)) + 1 : 1;
     const { data: newBook, error } = await db('books')
@@ -4384,6 +4544,7 @@ function updateBookDetailPanel(){
 document.addEventListener('keydown', (e)=>{
   if(e.key !== 'Escape') return;
   const openModal = [...document.querySelectorAll('.modal-overlay')].find(m=>!m.classList.contains('hidden') && m !== usernameModalOverlay);
+  if(openModal === scanOverlay){ if(!scanIsBusy()) closeScan(); return; }
   if(openModal){ openModal.classList.add('hidden'); return; }
   if(!notifMenu.classList.contains('hidden')){ setNotifMenu(false); notifBtn.focus(); return; }
   if(tocPanel.classList.contains('open')){ closeToc(); return; }
