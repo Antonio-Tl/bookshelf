@@ -2872,6 +2872,520 @@ select:focus {
   background: var(--surface);
 }
 
+/* Supporter: Unterstützen-Fenster und Kauf-Fenster */
+/* Kleines Stern-Abzeichen in der Ecke: Scannen ist ein Supporter-Extra. */
+#openScanBtn.is-locked {
+  position: relative;
+}
+#openScanBtn.is-locked::after {
+  content: "★";
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--red);
+  color: var(--on-red);
+  font-size: 10px;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--wall);
+}
+.support-badge,
+.buy-plan-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.support-badge {
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  background: var(--p-badge-bg);
+  color: var(--p-badge-fg);
+}
+.support-badge svg,
+.buy-plan-name svg {
+  width: 13px;
+  height: 13px;
+}
+.modal.support-modal {
+  max-width: 440px;
+  padding: 0;
+}
+.support-hero {
+  position: relative;
+  padding: 26px 24px 22px;
+  text-align: center;
+  box-shadow: none;
+}
+.support-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--p-dim);
+}
+.support-close:hover {
+  background: color-mix(in srgb, var(--p-fg) 10%, transparent);
+  color: var(--p-fg);
+}
+.support-hero h2 {
+  margin-top: 14px;
+  font-size: 26px;
+}
+.support-lede {
+  max-width: 34ch;
+  margin: 8px auto 0;
+  color: var(--p-dim);
+  font-size: 14.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.support-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 18px 20px 16px;
+}
+.support-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+.support-features li {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 6px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  background: var(--surface);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+/* Die Funktion, über die man gekommen ist */
+.support-features li.is-focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 1px var(--red);
+}
+.support-features b {
+  margin: 10px 6px 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.support-features small {
+  margin: 3px 6px 0;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.sf-visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 118px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+html[data-theme="dark"] .sf-visual,
+html[data-theme="midnight"] .sf-visual {
+  background: var(--wall-2);
+}
+/* Regal scannen im Kleinen: ein Buch im Sucher, es wird erkannt, dann gleitet das Ergebnis mit
+   „Hinzufügen“ herein und der Knopf wird angetippt. Alles im selben 6-s-Takt. */
+.sf-scan {
+  --sf-t: 6s;
+}
+/* Hochkant wie ein echtes Handy, mit Auslöser unten in der Mitte. */
+.sf-phone {
+  position: relative;
+  width: 64px;
+  height: 108px;
+  padding: 4px 4px 22px;
+  border-radius: 14px;
+  background: var(--ink);
+  box-shadow: 0 10px 20px -10px rgba(20, 20, 20, 0.6);
+  animation: sf-phone var(--sf-t) var(--ease-out) infinite;
+}
+.sf-phone::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--on-ink);
+  box-shadow: 0 0 0 1.5px var(--ink), 0 0 0 2.5px var(--on-ink);
+  animation: sf-shutter var(--sf-t) infinite;
+}
+.sf-spines {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border-radius: 10px;
+  background: var(--wall);
+  overflow: hidden;
+}
+/* Blitz beim Auslösen */
+.sf-spines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: sf-flash var(--sf-t) infinite;
+  pointer-events: none;
+}
+.sf-spines .thumb {
+  width: 34px;
+  height: 51px;
+  border-radius: 1px 3px 3px 1px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  animation: sf-mark var(--sf-t) infinite;
+}
+.sf-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  white-space: nowrap;
+  padding: 4px 9px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 11px;
+  font-weight: 650;
+  box-shadow: 0 6px 14px -6px rgba(20, 20, 20, 0.5);
+  opacity: 0;
+  animation: sf-chip var(--sf-t) var(--ease-out) infinite;
+}
+.sf-chip::before {
+  content: "✓ ";
+  color: var(--red);
+  font-weight: 800;
+}
+.sf-result {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  opacity: 0;
+  animation: sf-result var(--sf-t) var(--ease-out) infinite;
+}
+.sf-result-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.sf-result-row .thumb {
+  width: 20px;
+  height: 30px;
+  border-radius: 1px 2px 2px 1px;
+}
+.sf-result-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.sf-result-row b,
+.sf-result-row small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sf-result-row b {
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.sf-result-row small {
+  color: var(--dim);
+  font-size: 10px;
+}
+.sf-tick {
+  position: relative;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--red);
+}
+.sf-tick::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 2px;
+  width: 3.5px;
+  height: 7px;
+  border: solid var(--on-red);
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
+}
+.sf-add {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--red);
+  color: var(--on-red);
+  font-size: 11px;
+  font-weight: 650;
+  animation: sf-press var(--sf-t) infinite;
+}
+/* 0–14 %: Buch im Sucher · 15 %: Auslöser und Blitz · 20–42 %: erkannt · 42–58 %: Wechsel zum Ergebnis ·
+   72 %: Tipp auf „Hinzufügen“ · 92–100 %: zurück */
+@keyframes sf-shutter {
+  0%, 12%, 18%, 100% {
+    transform: none;
+  }
+  15% {
+    transform: scale(0.75);
+  }
+}
+@keyframes sf-flash {
+  0%, 15% {
+    opacity: 0;
+  }
+  16.5% {
+    opacity: 0.85;
+  }
+  21%, 100% {
+    opacity: 0;
+  }
+}
+@keyframes sf-phone {
+  0%, 42% {
+    opacity: 1;
+    transform: none;
+  }
+  56%, 92% {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.86);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sf-mark {
+  0%, 18% {
+    outline-color: transparent;
+  }
+  22%, 50% {
+    outline-color: var(--red);
+  }
+  56%, 100% {
+    outline-color: transparent;
+  }
+}
+@keyframes sf-chip {
+  0%, 22% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.9);
+  }
+  28%, 42% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  50%, 100% {
+    opacity: 0;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes sf-result {
+  0%, 44% {
+    opacity: 0;
+    transform: translate(30px, -50%) scale(0.92);
+  }
+  58%, 88% {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+  96%, 100% {
+    opacity: 0;
+    transform: translate(0, -50%) scale(0.96);
+  }
+}
+@keyframes sf-press {
+  0%, 70%, 78%, 100% {
+    transform: none;
+    filter: none;
+  }
+  74% {
+    transform: scale(0.93);
+    filter: brightness(0.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf-phone,
+  .sf-chip {
+    display: none;
+  }
+  .sf-result {
+    opacity: 1;
+    transform: translateY(-50%);
+    animation: none;
+  }
+  .sf-add {
+    animation: none;
+  }
+}
+
+/* Supporter-Knopf: im Eiche-Design in der Holzfarbe des Supporter-Tags; sonst in der Akzentfarbe. */
+html[data-theme="oak"] .btn-support {
+  background: var(--shelf-top);
+  color: var(--ink);
+}
+html[data-theme="oak"] .btn-support:hover:not(:disabled) {
+  background: var(--shelf-top-2);
+}
+/* Drei Lieblinge frontal auf einem Brett, jeder mit Schein in seiner Farbe */
+.sf-shelf {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 0 10px;
+  margin-top: 6px;
+}
+.sf-shelf::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--shelf-front, var(--steel));
+  box-shadow: 0 6px 10px -4px rgba(20, 20, 20, 0.4);
+}
+.sf-shelf .thumb {
+  display: block;
+  width: 40px;
+  height: 60px;
+  border-radius: 2px 4px 4px 2px;
+  box-shadow:
+    inset 2px 0 0 rgba(255, 255, 255, 0.16),
+    0 10px 20px -6px rgba(var(--c, 120, 120, 120), 0.75);
+}
+.sf-shelf .thumb:nth-child(2) {
+  width: 48px;
+  height: 72px;
+}
+@media (max-width: 380px) {
+  .sf-shelf {
+    gap: 5px;
+    padding: 0 6px;
+  }
+}
+.support-cta {
+  gap: 8px;
+  width: 100%;
+}
+.support-cta svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.25s var(--ease-out);
+}
+.support-cta:hover svg {
+  transform: translateX(3px);
+}
+.support-later {
+  align-self: center;
+  margin-top: 12px;
+  color: var(--dim);
+  font-size: 14px;
+  text-decoration: none;
+}
+.support-later:hover {
+  color: var(--ink);
+}
+.support-free {
+  margin: 8px 0 0;
+  color: var(--dim);
+  font-size: 12.5px;
+  text-align: center;
+}
+.buy-plan {
+  margin-top: 20px;
+  padding: 18px 20px;
+  border: 1.5px solid var(--red);
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--red-soft), transparent 60%), var(--surface);
+}
+.buy-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.buy-plan-name {
+  color: var(--red);
+}
+.buy-price {
+  color: var(--dim);
+  font-size: 14px;
+  font-weight: 600;
+}
+.buy-includes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14.5px;
+}
+.buy-includes li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.buy-includes li::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 11px;
+  margin: 0 4px 3px 5px;
+  border: solid var(--red);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.buy-soon {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--tint);
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+#buyConfirmBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* Regal scannen: Prüfliste der erkannten Bücher */
 .modal-scan .modal-add-head .modal-title-row {
   margin-bottom: 0;
@@ -3818,6 +4332,414 @@ a.btn {
   }
 }
 
+/* Supporter-Extras: Scannen und Vitrine, ohne Preis */
+/* Hebt sich als eigenes Panel ab: in hellen Designs dunkel, in dunklen eine Stufe heller, mit Schein in der Akzentfarbe. */
+.supporter-panel {
+  --p-bg: var(--ink);
+  --p-fg: var(--on-ink);
+  --p-dim: color-mix(in srgb, var(--on-ink) 66%, transparent);
+  --p-card: var(--surface);
+  --p-glow-a: color-mix(in srgb, var(--red) 34%, transparent);
+  --p-glow-b: color-mix(in srgb, var(--red) 14%, transparent);
+  --p-badge-bg: var(--red);
+  --p-badge-fg: var(--on-red);
+  background:
+    radial-gradient(ellipse 55% 70% at 100% 0%, var(--p-glow-a), transparent 70%),
+    radial-gradient(ellipse 40% 60% at 0% 100%, var(--p-glow-b), transparent 70%),
+    var(--p-bg);
+  color: var(--p-fg);
+  box-shadow: 0 30px 60px -30px rgba(20, 20, 20, 0.45);
+}
+.perks {
+  margin-top: 128px;
+  padding: 48px 44px 40px;
+  border-radius: 28px;
+}
+/* Eiche: dunkles Nussholz mit warmem Bernstein-Schein, wie eine Holzvitrine. */
+html[data-theme="oak"] .supporter-panel {
+  --p-bg: #34251a;
+  --p-dim: rgba(255, 245, 230, 0.72);
+  --p-glow-a: rgba(226, 172, 98, 0.34);
+  --p-glow-b: rgba(226, 172, 98, 0.14);
+  --p-badge-bg: var(--shelf-top);
+  --p-badge-fg: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 235, 200, 0.12),
+    0 30px 60px -30px rgba(70, 45, 20, 0.55);
+}
+html[data-theme="dark"] .supporter-panel,
+html[data-theme="midnight"] .supporter-panel {
+  --p-bg: var(--wall-2);
+  --p-fg: var(--ink);
+  --p-dim: var(--dim);
+  --p-card: var(--surface-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 35%, transparent);
+}
+html[data-theme="dark"] .perks .step-demo,
+html[data-theme="midnight"] .perks .step-demo {
+  background-color: var(--surface);
+}
+.perks-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  background: var(--p-badge-bg);
+  color: var(--p-badge-fg);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.perks-eyebrow svg {
+  width: 13px;
+  height: 13px;
+}
+.perks-lede {
+  max-width: 56ch;
+  margin: 12px 0 0;
+  color: var(--p-dim);
+  font-size: 16px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.perk-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 18px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.perk {
+  padding: 14px 14px 22px;
+  background: var(--p-card);
+  color: var(--ink);
+  border-radius: var(--r-card);
+}
+.perk .step-demo {
+  height: 220px;
+}
+.perk-kind {
+  display: inline-block;
+  margin: 18px 6px 0;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 700;
+}
+.perk h3 {
+  margin: 10px 6px 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.perk p {
+  margin: 8px 6px 0;
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.perks-cta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 28px;
+}
+
+/* Scannen: das Handy fotografiert das Regal, die Buchrücken werden nacheinander markiert, daneben
+   füllt sich die Trefferliste, am Ende ein Tipp auf „Ins Regal stellen“. Alles läuft im selben 6-s-Takt. */
+.demo-scan {
+  --ledge-h: 92px;
+  --spine-scale: 0.5;
+  --scan-t: 6s;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px;
+}
+.scan-phone {
+  position: relative;
+  flex: none;
+  width: 112px;
+  height: 188px;
+  padding: 6px 6px 30px;
+  border-radius: 20px;
+  background: var(--ink);
+  box-shadow: 0 16px 30px -16px rgba(20, 20, 20, 0.6);
+}
+.scan-shot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+  padding-bottom: 22px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--wall);
+}
+.demo-scan .ledge {
+  justify-content: center;
+  overflow: visible;
+  gap: 5px;
+  min-height: 0;
+  padding: 0 6px 3px;
+  pointer-events: none;
+}
+/* Das Brett geht über den ganzen Bildschirm, wie auf einem echten Foto. */
+.demo-scan .ledge-wrap {
+  width: 100%;
+}
+.demo-scan .ledge-wrap::after {
+  left: -8px;
+  right: -8px;
+}
+/* Rahmen um jeden erkannten Buchrücken, einer nach dem anderen. */
+.demo-scan .book .face.spine {
+  outline: 1.5px solid transparent;
+  outline-offset: 1.5px;
+  animation: scan-mark var(--scan-t) infinite;
+}
+.demo-scan .book:nth-child(2) .face.spine { animation-delay: 0.35s; }
+.demo-scan .book:nth-child(3) .face.spine { animation-delay: 0.7s; }
+.demo-scan .book:nth-child(4) .face.spine { animation-delay: 1.05s; }
+@keyframes scan-mark {
+  0%, 12% {
+    outline-color: transparent;
+  }
+  16%, 82% {
+    outline-color: var(--red);
+  }
+  90%, 100% {
+    outline-color: transparent;
+  }
+}
+.scan-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: scan-flash var(--scan-t) infinite;
+  pointer-events: none;
+}
+@keyframes scan-flash {
+  0%, 5% {
+    opacity: 0;
+  }
+  7% {
+    opacity: 0.85;
+  }
+  13%, 100% {
+    opacity: 0;
+  }
+}
+.scan-shutter {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  border-radius: 50%;
+  background: var(--on-ink);
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 3.5px var(--on-ink);
+  animation: scan-press var(--scan-t) infinite;
+}
+@keyframes scan-press {
+  0%, 3%, 9%, 100% {
+    transform: none;
+  }
+  6% {
+    transform: scale(0.8);
+  }
+}
+.scan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(210px, 100%);
+  min-width: 0;
+}
+.scan-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+}
+.scan-hits li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 5px;
+  border-radius: 7px;
+  opacity: 0;
+  animation: scan-hit var(--scan-t) infinite;
+}
+.scan-hits li:nth-child(2) { animation-delay: 0.35s; }
+.scan-hits li:nth-child(3) { animation-delay: 0.7s; }
+.scan-hits li:nth-child(4) { animation-delay: 1.05s; }
+@keyframes scan-hit {
+  0%, 14% {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  20%, 86% {
+    opacity: 1;
+    transform: none;
+  }
+  94%, 100% {
+    opacity: 0;
+  }
+}
+.scan-hits .thumb {
+  width: 18px;
+  height: 27px;
+}
+.scan-hit-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.scan-hits b,
+.scan-hits small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scan-hits b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.scan-hits small {
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.scan-tick {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: var(--red);
+}
+.scan-tick::after {
+  content: "";
+  position: absolute;
+  left: 5.5px;
+  top: 2.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--on-red);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.scan-go {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--red);
+  color: var(--on-red);
+  font-size: 12px;
+  font-weight: 650;
+  opacity: 0;
+  animation: scan-go var(--scan-t) infinite;
+}
+@keyframes scan-go {
+  0%, 40% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  46%, 62% {
+    opacity: 1;
+    transform: none;
+  }
+  65% {
+    transform: scale(0.94);
+  }
+  68%, 86% {
+    opacity: 1;
+    transform: none;
+  }
+  94%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Vitrine: drei Cover frontal, jedes mit farbigem Schein, auf einem dunklen Brett. */
+.demo-vitrine {
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 34px;
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, var(--wall-glow), transparent 75%), var(--surface-2);
+}
+.demo-vitrine .ledge-wrap {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+.demo-vitrine-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+  padding: 0 26px 3px;
+}
+.demo-vitrine-item {
+  position: relative;
+  display: block;
+}
+.demo-vitrine-item .thumb {
+  position: relative;
+  display: block;
+  width: 84px;
+  height: 126px;
+  border-radius: 2px 4px 4px 2px;
+  box-shadow:
+    inset 3px 0 0 rgba(255, 255, 255, 0.16),
+    inset 7px 0 7px -4px rgba(0, 0, 0, 0.3),
+    10px 14px 22px -12px rgba(20, 20, 20, 0.55);
+}
+.demo-vitrine-item:nth-child(2) .thumb {
+  width: 96px;
+  height: 144px;
+}
+.demo-vitrine-glow {
+  position: absolute;
+  inset: 8% -10% 12%;
+  border-radius: 50%;
+  background: rgb(var(--c, 120, 120, 120));
+  opacity: 0.5;
+  filter: blur(22px);
+}
+html[data-theme="dark"] .demo-vitrine-glow,
+html[data-theme="midnight"] .demo-vitrine-glow {
+  opacity: 0.75;
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-scan *,
+  .demo-scan .book .face.spine {
+    animation: none !important;
+  }
+  .scan-hits li,
+  .scan-go {
+    opacity: 1;
+  }
+}
+
 /* ---------- Übersicht: Leserliste ---------- */
 .reader-list {
   margin-top: 28px;
@@ -4727,6 +5649,30 @@ body:has(#homeView:not(.hidden)) .site-legal {
   }
   .steps {
     margin-top: 80px;
+  }
+  .perks {
+    margin-top: 80px;
+    padding: 32px 14px 24px;
+    border-radius: 22px;
+  }
+  .perks .section-title,
+  .perks-eyebrow,
+  .perks-lede,
+  .perks-note {
+    margin-left: 6px;
+    margin-right: 6px;
+  }
+  .demo-vitrine-row {
+    gap: 14px;
+    padding: 0 16px 3px;
+  }
+  .demo-vitrine-item .thumb {
+    width: 70px;
+    height: 105px;
+  }
+  .demo-vitrine-item:nth-child(2) .thumb {
+    width: 80px;
+    height: 120px;
   }
   .browse-search {
     width: 100%;

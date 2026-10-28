@@ -167,6 +167,43 @@
     </ol>
   </section>
 
+  <section class="perks supporter-panel" aria-labelledby="perksTitle">
+    <p class="perks-eyebrow"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>Supporter</p>
+    <h2 class="section-title" id="perksTitle">Unterstütz das Bücherregal und hol dir zwei Extras</h2>
+    <p class="perks-lede">Das Regal bleibt kostenlos, mit allem, was oben steht. Wer das Projekt unterstützen möchte, bekommt als Dankeschön zwei Funktionen obendrauf.</p>
+    <ul class="perk-list">
+      <li class="perk">
+        <div class="step-demo demo-scan" aria-hidden="true">
+          <div class="scan-phone">
+            <div class="scan-shot">
+              <div class="ledge-wrap"><div class="ledge" id="demoScan"></div></div>
+              <i class="scan-flash"></i>
+            </div>
+            <i class="scan-shutter"></i>
+          </div>
+          <div class="scan-list">
+            <ul class="scan-hits" id="demoFound"></ul>
+            <span class="scan-go">Ins Regal stellen</span>
+          </div>
+        </div>
+        <span class="perk-kind">Bequemer</span>
+        <h3>Regal scannen</h3>
+        <p>Abfotografieren statt abtippen: Halt die Kamera auf dein echtes Regal, und die Buchrücken werden erkannt. Du hakst nur noch ab, was ins Regal soll.</p>
+      </li>
+      <li class="perk">
+        <div class="step-demo demo-vitrine" aria-hidden="true">
+          <div class="ledge-wrap"><div class="demo-vitrine-row" id="demoVitrine"></div></div>
+        </div>
+        <span class="perk-kind">Persönlicher</span>
+        <h3>Vitrine</h3>
+        <p>Zeig deine persönlichen Favoriten: Bis zu drei Lieblingsbücher stehen ganz oben in deinem Regal, frontal und im Licht. Das Erste, was Besucher sehen.</p>
+      </li>
+    </ul>
+    <div class="perks-cta">
+      <button type="button" class="btn btn-primary btn-lg btn-support" id="perksBuyBtn">Supporter werden</button>
+    </div>
+  </section>
+
   <footer class="home-foot">
     <span>Bücherregal</span>
     <span>Buchdaten und Cover von Open Library und Google Books</span>
@@ -222,7 +259,7 @@
   </div>
 
   <div class="dev-banner hidden" id="devBanner" role="note">
-    <p><strong>Lokaler Testmodus</strong> · Du bearbeitest eine Kopie von Antonios Regal, Änderungen bleiben in diesem Browser.</p>
+    <p><strong>Lokaler Testmodus</strong> · Du bearbeitest eine Kopie von <span id="devBannerWho">Antonios Regal</span>, Änderungen bleiben in diesem Browser. Wechseln unter Einstellungen.</p>
     <button type="button" class="btn btn-secondary" id="devResetBtn">Zurücksetzen</button>
   </div>
 
@@ -375,6 +412,69 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="supportOverlay">
+  <div class="modal support-modal" role="dialog" aria-modal="true" aria-labelledby="supportTitle">
+    <div class="support-hero supporter-panel">
+      <button type="button" class="icon-btn support-close" id="supportCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+      <span class="support-badge"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>Supporter</span>
+      <h2 id="supportTitle">Jetzt Bücherregal unterstützen</h2>
+      <p class="support-lede" id="supportLede"></p>
+    </div>
+    <div class="support-body">
+      <ul class="support-features">
+        <li data-feature="scan">
+          <div class="sf-visual sf-scan" aria-hidden="true">
+            <div class="sf-phone"><div class="sf-spines" id="supportSpines"></div></div>
+            <span class="sf-chip">Erkannt</span>
+            <div class="sf-result">
+              <div class="sf-result-row" id="supportFound"></div>
+              <span class="sf-add">Hinzufügen</span>
+            </div>
+          </div>
+          <b>Regal scannen</b>
+          <small>Ein Foto statt zwanzig Titel abtippen.</small>
+        </li>
+        <li data-feature="vitrine">
+          <div class="sf-visual sf-vitrine" aria-hidden="true">
+            <div class="sf-shelf" id="supportCovers"></div>
+          </div>
+          <b>Vitrine</b>
+          <small>Deine drei Favoriten ganz oben im Regal.</small>
+        </li>
+      </ul>
+      <button type="button" class="btn btn-primary btn-lg btn-support support-cta" id="supportBuyBtn">Supporter werden<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg></button>
+      <button type="button" class="link-btn support-later" id="supportLaterBtn">Vielleicht später</button>
+      <p class="support-free">Dein Regal bleibt kostenlos, mit allem, was es heute kann.</p>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="buyOverlay">
+  <div class="modal buy-modal" role="dialog" aria-modal="true" aria-labelledby="buyTitle">
+    <div class="modal-title-row">
+      <h2 id="buyTitle">Supporter werden</h2>
+      <button type="button" class="icon-btn" id="buyCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    </div>
+    <p class="modal-lede">Danke, dass du das Bücherregal unterstützen möchtest.</p>
+    <div class="buy-plan">
+      <div class="buy-plan-head">
+        <span class="buy-plan-name"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>Supporter</span>
+        <span class="buy-price">Preis folgt</span>
+      </div>
+      <ul class="buy-includes">
+        <li>Regal scannen</li>
+        <li>Vitrine für deine Favoriten</li>
+        <li>Du hältst das Bücherregal am Laufen</li>
+      </ul>
+    </div>
+    <p class="buy-soon" role="note">Der Kauf ist noch nicht freigeschaltet. Schau bald wieder vorbei.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="buyBackBtn">Zurück</button>
+      <button type="button" class="btn btn-primary" id="buyConfirmBtn" disabled>Bald verfügbar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="settingsOverlay">
   <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal-title-row">
@@ -427,6 +527,9 @@
       <div class="setting-row"><span><b>Cover neu laden</b><small>Hilft, wenn Cover falsch oder veraltet angezeigt werden</small></span>
         <button type="button" class="btn btn-secondary" id="setReloadCoversBtn">Neu laden</button>
       </div>
+      <label class="setting-row hidden" id="setDevAsRow"><span><b>Testen als</b><small>Lokaler Testmodus: wessen Regal du bearbeitest</small></span>
+        <select id="setDevAs"></select>
+      </label>
       <div class="setting-row hidden" id="setDevRow"><span><b>Testdaten zurücksetzen</b><small>Lokaler Testmodus: Kopie auf den echten Stand bringen</small></span>
         <button type="button" class="btn btn-secondary" id="setDevResetBtn">Zurücksetzen</button>
       </div>

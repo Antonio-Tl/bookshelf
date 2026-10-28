@@ -942,19 +942,43 @@ darkQuery.addEventListener('change', ()=>{ if(savedTheme() === 'auto') applyThem
 applyTheme(savedTheme());
 
 // ---- Lokaler Testmodus ----
-// Auf localhost ist man ohne Login Besitzer von Antonios Regal. Alle Änderungen landen in einer
-// Kopie im localStorage; die echte Datenbank wird nie beschrieben (RLS würde es ohnehin ablehnen).
+// Auf localhost ist man ohne Login Besitzer eines Regals: Antonios (Admin mit Premium) oder eines der
+// Demo-Regale (ohne Premium), wählbar in den Einstellungen. Alle Änderungen landen in einer Kopie je
+// Regal im localStorage; die echte Datenbank wird nie beschrieben (RLS würde es ohnehin ablehnen).
 const DEV_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || location.hostname.endsWith('.localhost');
+const DEV_IDENTITIES = [DEFAULT_USERNAME, 'lenamarie', 'jonas_kr', 'sophie_liest'];
+const DEV_AS_KEY = 'bookshelf-dev-as';
 const SANDBOX_KEY = 'bookshelf-dev-sandbox-v1';
+let devAs = DEFAULT_USERNAME;
+try { if(DEV_IDENTITIES.includes(localStorage.getItem(DEV_AS_KEY))) devAs = localStorage.getItem(DEV_AS_KEY); } catch(e){}
 let sandbox = null;
-try { sandbox = JSON.parse(localStorage.getItem(SANDBOX_KEY)); } catch(e){ sandbox = null; }
+// Antonios Kopie behält ihren alten Schlüssel, damit vorhandene Testdaten bleiben.
+const sandboxKey = ()=>devAs === DEFAULT_USERNAME ? SANDBOX_KEY : `${SANDBOX_KEY}:${devAs}`;
+function loadSandbox(){
+  try { sandbox = JSON.parse(localStorage.getItem(sandboxKey())); } catch(e){ sandbox = null; }
+}
+loadSandbox();
 
 function devSandboxActive(){
-  return DEV_LOCAL && !currentUser && !!viewedProfile && viewedProfile.username === DEFAULT_USERNAME;
+  return DEV_LOCAL && !currentUser && !!viewedProfile && viewedProfile.username === devAs;
+}
+// Nur Antonio hat im Testmodus Premium; die Demo-Regale zeigen, was Leser ohne Premium sehen.
+function devPremium(){
+  return devSandboxActive() && devAs === DEFAULT_USERNAME;
+}
+
+async function setDevAs(username){
+  devAs = username;
+  try { localStorage.setItem(DEV_AS_KEY, username); } catch(e){}
+  loadSandbox();
+  selectedId = null;
+  displayedId = null;
+  goToUser(username);
+  showToast(username === DEFAULT_USERNAME ? 'Du testest als @antonio, mit Premium' : `Du testest als @${username}, ohne Premium`);
 }
 
 function saveSandbox(){
-  try { localStorage.setItem(SANDBOX_KEY, JSON.stringify(sandbox)); } catch(e){ showToast('Lokaler Speicher ist voll'); }
+  try { localStorage.setItem(sandboxKey(), JSON.stringify(sandbox)); } catch(e){ showToast('Lokaler Speicher ist voll'); }
 }
 
 function db(table){
@@ -1025,7 +1049,7 @@ function seedSandbox(profileId, cats, shelvesData, booksData, showcaseRow){
 
 async function resetSandbox(){
   sandbox = null;
-  try { localStorage.removeItem(SANDBOX_KEY); } catch(e){}
+  try { localStorage.removeItem(sandboxKey()); } catch(e){}
   selectedId = null;
   displayedId = null;
   await refreshAndRender();
@@ -1790,7 +1814,7 @@ document.getElementById('homeCreateBtn').addEventListener('click', ()=>{
   if(currentProfile && currentProfile.username){ goToUser(currentProfile.username); return; }
   if(currentUser){ openUsernameModal(); return; }
   // Lokal gibt es keinen Google-Login: der Testmodus macht Antonios Regal zum eigenen.
-  if(DEV_LOCAL){ goToUser(DEFAULT_USERNAME); return; }
+  if(DEV_LOCAL){ goToUser(devAs); return; }
   setPref(AFTER_LOGIN_KEY, '1');
   signInWithGoogle();
 });
@@ -1835,7 +1859,22 @@ function renderHero(entry){
   ).join('');
   const turnGroup = entry.groups.find(g=>g.items.length >= 3) || entry.groups[0];
   document.getElementById('demoTurn').innerHTML = turnGroup.items.slice(0, 4).map((b, i)=>staticBookHtml(b, turnGroup, i === 0)).join('');
-  queueCovers(groups.flatMap(g=>g.items.slice(0, 4)).concat(sameSeries.map(x=>x.b), turnGroup.items.slice(0, 4)));
+
+  // Supporter-Extras: ein „fotografiertes“ Regal aus verschiedenen Reihen und drei Lieblinge in der Vitrine.
+  const scanned = coverPicks(entry, 4);
+  document.getElementById('demoScan').innerHTML = scanned.map(({ b, g })=>staticBookHtml(b, g, false)).join('');
+  document.getElementById('demoFound').innerHTML = scanned.map(({ b, g })=>
+    `<li>${thumbHtml(b, g)}<span class="scan-hit-text"><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.author || '')}</small></span><i class="scan-tick"></i></li>`
+  ).join('');
+  const favs = (entry.showcase || []).concat(entry.groups.map(g=>({ b: g.items.reduce((a, x)=>(x.rating || 0) > (a.rating || 0) ? x : a), g }))
+    .sort((x, y)=>(y.b.rating || 0) - (x.b.rating || 0)))
+    .filter(({ b }, i, arr)=>arr.findIndex(x=>x.b.id === b.id) === i)
+    .slice(0, 3);
+  document.getElementById('demoVitrine').innerHTML = favs.map(({ b, g })=>{
+    const v = bookVisual(b, g.label);
+    return `<span class="demo-vitrine-item"><i style="${escapeHtml(visualStyle(v))}" data-book="${escapeHtml(b.id)}" class="demo-vitrine-glow"></i>${thumbHtml(b, g)}</span>`;
+  }).join('');
+  queueCovers(groups.flatMap(g=>g.items.slice(0, 4)).concat(sameSeries.map(x=>x.b), turnGroup.items.slice(0, 4), scanned.map(x=>x.b), favs.map(x=>x.b)));
   scheduleFit();
 }
 
@@ -2679,7 +2718,7 @@ const SHOWCASE_MAX = 3;
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"/></svg>';
 
 function canEditShowcase(){
-  return isOwnerView() && (canUsePremium || devSandboxActive());
+  return isOwnerView() && (canUsePremium || devPremium());
 }
 
 // Löst die gespeicherte Vitrine gegen das geladene Regal auf. Zwei Arten: eine Reihe mit bis zu drei
@@ -2850,13 +2889,14 @@ function tileHtml(b, group){
 function render(){
   const owner = isOwnerView();
   document.getElementById('devBanner').classList.toggle('hidden', !devSandboxActive());
+  document.getElementById('devBannerWho').textContent = devAs === DEFAULT_USERNAME ? 'Antonios Regal (mit Premium)' : `@${devAs} (ohne Premium)`;
   renderAuthUI();
   renderHeader(owner);
   renderFollowButtons();
   syncViewButtons();
   document.getElementById('headerActions').classList.toggle('hidden', !owner);
-  // Regal scannen ist Premium; im lokalen Testmodus immer da, damit es sich ohne Login ausprobieren lässt.
-  document.getElementById('openScanBtn').classList.toggle('hidden', !(canUsePremium || devSandboxActive()));
+  // Regal scannen ist Premium, der Knopf ist aber für alle da: ohne Premium führt er zum Unterstützen-Fenster.
+  document.getElementById('openScanBtn').classList.toggle('is-locked', !hasPremium());
 
   const container = document.getElementById('shelves');
   container.classList.toggle('grid-mode', viewMode === 'grid');
@@ -2937,7 +2977,7 @@ let fitFrame = 0;
 function scheduleFit(){
   cancelAnimationFrame(fitFrame);
   fitFrame = requestAnimationFrame(()=>{
-    document.querySelectorAll('#shelves .spine-title, #heroShelf .spine-title, #demoTurn .spine-title').forEach(t=>{
+    document.querySelectorAll('#shelves .spine-title, #heroShelf .spine-title, #demoTurn .spine-title, #demoScan .spine-title').forEach(t=>{
       t.style.fontSize = '';
       let size = parseFloat(getComputedStyle(t).fontSize);
       while(t.scrollWidth > t.clientWidth + 1 && size > 9){
@@ -3588,11 +3628,18 @@ function pickScanPhoto(){
   scanInput.value = '';
   scanInput.click();
 }
+// Im lokalen Testmodus als Antonio freigeschaltet, damit es sich ohne Login ausprobieren lässt.
+function hasPremium(){
+  return canUsePremium || devPremium();
+}
 function closeScan(){
   scanSeq++;
   scanOverlay.classList.add('hidden');
 }
-document.getElementById('openScanBtn').addEventListener('click', pickScanPhoto);
+document.getElementById('openScanBtn').addEventListener('click', ()=>{
+  if(hasPremium()) pickScanPhoto();
+  else openSupport('scan');
+});
 document.getElementById('scanAgainBtn').addEventListener('click', pickScanPhoto);
 document.getElementById('closeScanBtn').addEventListener('click', closeScan);
 document.getElementById('cancelScanBtn').addEventListener('click', closeScan);
@@ -4324,6 +4371,52 @@ document.addEventListener('keydown', (e)=>{
   if(selectedId != null) closeDetail();
 });
 
+// ---- Supporter: Unterstützen-Fenster und Kauf-Fenster ----
+// Das Kauf-Fenster zeigt schon, was man bekommt; der Kaufen-Knopf bleibt gesperrt, bis der Checkout angebunden ist.
+const supportOverlay = document.getElementById('supportOverlay');
+const buyOverlay = document.getElementById('buyOverlay');
+const SUPPORT_LEDES = {
+  scan: 'Regal scannen ist für Supporter. Unterstütz das Bücherregal und schalte es frei, zusammen mit der Vitrine.',
+  default: 'Unterstütz das Bücherregal und schalte zwei Extras frei.',
+};
+
+function openSupport(reason){
+  document.getElementById('supportLede').textContent = SUPPORT_LEDES[reason] || SUPPORT_LEDES.default;
+  // Die Vorschauen zeigen das eigene Regal: ein Buch, das erkannt und hinzugefügt wird, und die drei
+  // Lieblinge in der Vitrine. Ohne Bücher stehen neutrale Platzhalter da.
+  const all = [...bookIndex.values()];
+  const favs = [...all].sort((a, b)=>(b.book.rating || 0) - (a.book.rating || 0)).slice(0, 3);
+  const seen = all[0];
+  const thumb = seen ? thumbHtml(seen.book, seen.group) : '<span class="thumb"></span>';
+  document.getElementById('supportSpines').innerHTML = thumb;
+  document.getElementById('supportFound').innerHTML = `${thumb}<span class="sf-result-text"><b>${escapeHtml(seen ? seen.book.title : 'Dein Buch')}</b><small>${escapeHtml(seen ? seen.book.author || '' : '')}</small></span><i class="sf-tick"></i>`;
+  document.getElementById('supportCovers').innerHTML = favs.length
+    ? favs.map(({ book, group })=>thumbHtml(book, group)).join('')
+    : '<span class="thumb"></span>'.repeat(3);
+  supportOverlay.querySelectorAll('[data-feature]').forEach(li=>li.classList.toggle('is-focus', li.getAttribute('data-feature') === reason));
+  supportOverlay.classList.remove('hidden');
+  document.getElementById('supportBuyBtn').focus();
+}
+let buyFromSupport = false;
+function openBuy(){
+  buyFromSupport = !supportOverlay.classList.contains('hidden');
+  supportOverlay.classList.add('hidden');
+  buyOverlay.classList.remove('hidden');
+  document.getElementById('buyCloseBtn').focus();
+}
+document.getElementById('supportCloseBtn').addEventListener('click', ()=>supportOverlay.classList.add('hidden'));
+document.getElementById('supportLaterBtn').addEventListener('click', ()=>supportOverlay.classList.add('hidden'));
+document.getElementById('supportBuyBtn').addEventListener('click', openBuy);
+supportOverlay.addEventListener('click', e=>{ if(e.target === supportOverlay) supportOverlay.classList.add('hidden'); });
+document.getElementById('buyCloseBtn').addEventListener('click', ()=>buyOverlay.classList.add('hidden'));
+// „Zurück“ führt ins Unterstützen-Fenster, wenn man von dort kam, sonst schließt es einfach.
+document.getElementById('buyBackBtn').addEventListener('click', ()=>{
+  buyOverlay.classList.add('hidden');
+  if(buyFromSupport) supportOverlay.classList.remove('hidden');
+});
+buyOverlay.addEventListener('click', e=>{ if(e.target === buyOverlay) buyOverlay.classList.add('hidden'); });
+document.getElementById('perksBuyBtn').addEventListener('click', openBuy);
+
 // ---- Einstellungen ----
 const settingsOverlay = document.getElementById('settingsOverlay');
 const setTheme = document.getElementById('setTheme');
@@ -4341,6 +4434,8 @@ function openSettings(){
   document.getElementById('ownerSettings').classList.toggle('hidden', !owner);
   document.getElementById('setUsernameBtn').classList.toggle('hidden', !(owner && currentProfile));
   document.getElementById('setDevRow').classList.toggle('hidden', !devSandboxActive());
+  document.getElementById('setDevAsRow').classList.toggle('hidden', !(DEV_LOCAL && !currentUser));
+  setDevAsSelect.value = devAs;
   settingsOverlay.classList.remove('hidden');
 }
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
@@ -4383,6 +4478,12 @@ document.getElementById('setReloadCoversBtn').addEventListener('click', ()=>{
 document.getElementById('setDevResetBtn').addEventListener('click', ()=>{
   settingsOverlay.classList.add('hidden');
   resetSandbox();
+});
+const setDevAsSelect = document.getElementById('setDevAs');
+setDevAsSelect.innerHTML = DEV_IDENTITIES.map(u=>`<option value="${u}">@${u}${u === DEFAULT_USERNAME ? ' (Admin, Premium)' : ' (ohne Premium)'}</option>`).join('');
+setDevAsSelect.addEventListener('change', ()=>{
+  settingsOverlay.classList.add('hidden');
+  setDevAs(setDevAsSelect.value);
 });
 document.getElementById('setTourBtn').addEventListener('click', ()=>{
   settingsOverlay.classList.add('hidden');
