@@ -3336,7 +3336,9 @@ async function runScan(file){
     // Unsicher gelesene Titel sind oft falsch: abgewählt und gleich zum Bearbeiten offen.
     const unsure = b.unsicher && !isOwned;
     return { titel: b.titel, autor: b.autor, reihe: known ? known.label : b.reihe, unsicher: b.unsicher, owned: isOwned,
-      checked: !isOwned && !b.unsicher, editing: unsure, cover: null };
+      checked: !isOwned && !b.unsicher, editing: unsure,
+      // coverChoice wie beim Cover-Picker: "" = automatisch, "none" = kein Cover, sonst Bild-URL.
+      coverOptions: null, coverChoice: '', coverLoading: true, coverReq: 0 };
   });
   scanOwnedOpen = false;
   renderScanList();
@@ -3356,11 +3358,12 @@ function scanRowHtml(b, i){
         <label class="field"><span>Autor</span><input type="text" data-i="${i}" data-k="autor" value="${escapeHtml(b.autor)}"></label>
         <label class="field"><span>Reihe</span><input type="text" data-i="${i}" data-k="reihe" value="${escapeHtml(b.reihe)}" placeholder="leer: Einzelband" list="series-list"></label>
       </div>
+      <div class="field"><span>Cover</span><div class="cover-picker scan-cover-picker"></div></div>
     </div>` : '';
   return `<li class="scan-row${b.checked ? ' is-on' : ''}" data-i="${i}">
     <label class="scan-pick">
       <input type="checkbox" class="scan-check" data-i="${i}" ${b.checked ? 'checked' : ''}>
-      <span class="scan-cover" aria-hidden="true">${b.cover ? `<img src="${escapeHtml(b.cover)}" alt="">` : `<span>${escapeHtml(b.titel.charAt(0).toUpperCase())}</span>`}</span>
+      <span class="scan-cover" aria-hidden="true">${scanThumbHtml(b)}</span>
       <span class="scan-text"><b>${escapeHtml(b.titel)}</b>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}</span>
     </label>
     <button type="button" class="icon-btn sm scan-edit" data-edit="${i}" aria-expanded="${b.editing}" aria-label="„${escapeHtml(b.titel)}“ bearbeiten">${ICON_SCAN_EDIT}</button>
@@ -3394,34 +3397,77 @@ function renderScanList(){
     ${owned.length ? `<details class="scan-section scan-owned"${scanOwnedOpen ? ' open' : ''}>
       <summary class="scan-section-head"><h3>Schon in deinem Regal <span>${owned.length}</span></h3></summary>
       ${rows(owned)}</details>` : ''}`;
+  mountScanPickers();
   updateScanSave();
 }
 
-// Cover von Open Library nachladen: macht die Liste lebendig und zeigt nebenbei, ob ein Titel gefunden wurde.
-async function scanCoverFor(title, author){
-  try {
-    const q = new URLSearchParams({ title, limit: '1', fields: 'cover_i' });
-    if(author) q.set('author', author);
-    const r = await fetch(`https://openlibrary.org/search.json?${q}`);
-    const id = r.ok ? (await r.json()).docs?.[0]?.cover_i : null;
-    return id ? coverUrl(id, 'M') : null;
-  } catch(e){ return null; }
+// Vorschaubild der Zeile: das gewählte Cover, sonst der erste Vorschlag der Suche.
+function scanThumbHtml(b){
+  const url = b.coverChoice === 'none' ? null
+    : b.coverChoice || (b.coverOptions && b.coverOptions.length ? b.coverOptions[0].url : null);
+  return url
+    ? `<img src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer">`
+    : `<span>${escapeHtml((b.titel || '?').charAt(0).toUpperCase())}</span>`;
+}
+function updateScanThumb(i){
+  const slot = scanBody.querySelector(`.scan-row[data-i="${i}"] .scan-cover`);
+  if(slot) slot.innerHTML = scanThumbHtml(scanItems[i]);
+}
+
+// Offene Bearbeiten-Bereiche bekommen dieselbe Cover-Auswahl wie der Neues-Buch-Dialog.
+const scanPickers = new Map();
+function mountScanPickers(){
+  scanPickers.clear();
+  scanItems.forEach((b, i)=>{
+    const el = b.editing && scanBody.querySelector(`.scan-row[data-i="${i}"] .scan-cover-picker`);
+    if(!el) return;
+    let ready = false;
+    // Der Picker meldet auch beim ersten Zeichnen seinen (leeren) Wert; erst echte Klicks übernehmen.
+    const picker = createCoverPicker(el, st=>{ if(ready){ b.coverChoice = st.value; updateScanThumb(i); } });
+    picker.set(b.coverChoice, b.coverOptions || []);
+    if(b.coverLoading) picker.setLoading(true);
+    ready = true;
+    scanPickers.set(i, picker);
+  });
+}
+function syncScanPicker(i){
+  const picker = scanPickers.get(i);
+  if(!picker) return;
+  const b = scanItems[i];
+  picker.set(b.coverChoice, b.coverOptions || []);
+  picker.setLoading(!!b.coverLoading);
+}
+
+// Cover suchen wie im Neues-Buch-Dialog (Google Books und Open Library), drei Bücher gleichzeitig.
+// Ein gefundenes Cover zeigt nebenbei, ob der Titel richtig erkannt wurde.
+async function searchScanCovers(i, seq){
+  const b = scanItems[i];
+  const req = ++b.coverReq;
+  b.coverLoading = true;
+  syncScanPicker(i);
+  let options = [];
+  try { options = await findCoverOptions(b.titel, b.autor, [], b.reihe); } catch(e){ options = []; }
+  // Liste inzwischen geschlossen, neu gescannt oder der Titel wurde seitdem wieder geändert.
+  if(seq !== scanSeq || req !== b.coverReq) return;
+  b.coverOptions = options;
+  b.coverLoading = false;
+  updateScanThumb(i);
+  syncScanPicker(i);
 }
 async function loadScanCovers(seq){
   const queue = scanItems.map((b, i)=>i).sort((a, b)=>scanItems[a].owned - scanItems[b].owned);
   const next = async ()=>{
-    while(queue.length){
-      const i = queue.shift();
-      const b = scanItems[i];
-      const url = await scanCoverFor(b.titel, b.autor);
-      if(seq !== scanSeq) return;
-      if(!url) continue;
-      b.cover = url;
-      const slot = scanBody.querySelector(`.scan-row[data-i="${i}"] .scan-cover`);
-      if(slot) slot.innerHTML = `<img src="${escapeHtml(url)}" alt="">`;
-    }
+    while(queue.length && seq === scanSeq) await searchScanCovers(queue.shift(), seq);
   };
   await Promise.all([next(), next(), next()]);
+}
+
+// Nach dem Korrigieren von Titel oder Autor neu suchen, sobald man kurz aufhört zu tippen.
+const scanResearchTimers = new Map();
+function queueScanResearch(i){
+  clearTimeout(scanResearchTimers.get(i));
+  const seq = scanSeq;
+  scanResearchTimers.set(i, setTimeout(()=>searchScanCovers(i, seq), 700));
 }
 
 scanBody.addEventListener('input', e=>{
@@ -3432,6 +3478,7 @@ scanBody.addEventListener('input', e=>{
   // Titelzeile live mitschreiben, ohne die Liste neu zu bauen (sonst springt der Cursor raus).
   const row = scanBody.querySelector(`.scan-row[data-i="${i}"]`);
   if(row && k === 'titel') row.querySelector('.scan-text b').textContent = e.target.value;
+  if(k === 'titel' || k === 'autor') queueScanResearch(Number(i));
   updateScanSave();
 });
 scanBody.addEventListener('change', e=>{
@@ -3447,8 +3494,8 @@ scanBody.addEventListener('click', e=>{
   if(edit){
     const b = scanItems[edit.getAttribute('data-edit')];
     b.editing = !b.editing;
+    // Ohne Fokus ins Titelfeld, sonst klappt auf dem Handy sofort die Tastatur über die Cover.
     renderScanList();
-    if(b.editing) scanBody.querySelector(`.scan-row[data-i="${edit.getAttribute('data-edit')}"] .scan-editor input`).focus();
   } else if(all){
     const on = all.getAttribute('data-all') === 'on';
     scanItems.forEach(b=>{ if(!b.owned && !b.unsicher) b.checked = on; });
@@ -3485,7 +3532,7 @@ saveScanBtn.addEventListener('click', async ()=>{
     const same = books.filter(x=>x.shelf_id === shelf.id);
     const seriesOrder = same.length ? Math.max(...same.map(x=>x.series_order || 0)) + 1 : 1;
     const { data: newBook, error } = await db('books')
-      .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating: 0, notes: '', summary: null, date_read: null, page_count: null, cover_url: null })
+      .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating: 0, notes: '', summary: null, date_read: null, page_count: null, cover_url: b.coverChoice || null })
       .select().single();
     if(error) break;
     books.push(newBook);

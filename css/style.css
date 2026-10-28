@@ -2578,6 +2578,10 @@ select:focus {
   min-height: 38px;
   font-size: 14px;
 }
+/* Eigene Bild-URL gibt es im Neues-Buch-Dialog; hier bleibt es bei den gefundenen Covern. */
+.scan-editor .cp-url {
+  display: none;
+}
 @media (max-width: 640px) {
   .scan-editor {
     padding-left: 0;
