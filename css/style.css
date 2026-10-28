@@ -1305,6 +1305,245 @@ h1 {
   margin-left: -4px;
   color: var(--dim);
 }
+/* Private Reihen und Bücher: nur der Besitzer bekommt sie überhaupt geladen und sieht dieses Schloss. */
+.private-tag {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 600;
+}
+.private-tag svg {
+  width: 12px;
+  height: 12px;
+}
+.private-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  z-index: 3;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: 0 1px 3px rgba(20, 20, 20, 0.35);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.private-badge svg {
+  width: 11px;
+  height: 11px;
+}
+.rating-row .seg {
+  justify-self: start;
+}
+.tile .private-badge {
+  left: auto;
+  right: 6px;
+  bottom: auto;
+  top: 6px;
+  transform: none;
+}
+
+/* ---------- Vitrine ---------- */
+/* Erste Reihe über die ganze Breite, offen wie ein Titelbild: Überschrift mittig, größere Cover auf
+   einem eigenen kurzen Brett, jedes Cover leuchtet in seiner eigenen Farbe (--c) auf die Wand.
+   Darunter je ein Schildchen mit Titel und Sternen. */
+.vitrine {
+  --ledge-h: 250px;
+  --plaque-gap: 62px;
+  --glow: 0.5;
+  --spot: rgba(255, 255, 255, 0.6);
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-bottom: 34px;
+  border-bottom: 1px solid var(--line-soft);
+  /* Galerielicht auf der Wand hinter der Reihe. */
+  background: radial-gradient(ellipse 46% 58% at 50% 48%, var(--spot), transparent 72%);
+}
+html[data-theme="dark"] .vitrine,
+html[data-theme="midnight"] .vitrine {
+  --glow: 0.75;
+  --spot: rgba(255, 255, 255, 0.06);
+}
+.vitrine-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.vitrine-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.vitrine-eyebrow svg {
+  width: 13px;
+  height: 13px;
+}
+.vitrine-head .series-line {
+  justify-content: center;
+}
+.vitrine-head .series-title {
+  font-size: 26px;
+  letter-spacing: -0.035em;
+}
+/* Das Brett ist nur so breit wie die Bücher darauf. */
+.vitrine .ledge-wrap {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+.vitrine .ledge {
+  gap: 30px;
+  /* Viel Rand, weil die Ledge scrollt und den Schein sonst hart abschneidet; passt die Reihe nicht,
+     laufen die Ränder weich aus statt mitten im Cover abzubrechen. */
+  padding: 56px 72px var(--plaque-gap);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+@media (max-width: 1100px) {
+  .vitrine {
+    --ledge-h: 214px;
+  }
+  .vitrine .ledge {
+    gap: 24px;
+    padding-left: 44px;
+    padding-right: 44px;
+  }
+}
+.vitrine .ledge-wrap::after {
+  bottom: calc(var(--plaque-gap) - 19px);
+}
+.vitrine .ledge-wrap::before {
+  bottom: calc(var(--plaque-gap) - 43px);
+}
+/* Gleich hoch statt der zufälligen Höhen im Regal, sonst wirkt die Reihe unruhig. */
+.vitrine .book {
+  --hpx: var(--ledge-h);
+}
+.vitrine .book::after {
+  left: 6%;
+  right: 6%;
+  height: 8px;
+  bottom: -3px;
+  background: rgba(0, 0, 0, 0.45);
+  filter: blur(4px);
+}
+/* Farbiger Schein hinter dem Cover. */
+.vitrine-light {
+  position: absolute;
+  inset: 6% -8% 14%;
+  z-index: -1;
+  border-radius: 50%;
+  background: rgb(var(--c, 120, 120, 120));
+  opacity: var(--glow);
+  filter: blur(30px);
+  pointer-events: none;
+}
+.vitrine .book.open:hover .book-3d {
+  transform: translateY(-6px) translateX(calc((var(--cw) - var(--wpx)) / 2)) translateZ(calc((var(--cw) - var(--wpx)) / 2)) rotateY(-90deg);
+}
+.vitrine .book .face.front {
+  box-shadow:
+    inset 4px 0 0 rgba(255, 255, 255, 0.16),
+    inset 8px 0 8px -4px rgba(0, 0, 0, 0.35);
+}
+.vitrine .book.selected .face.front {
+  outline: 3px solid var(--red);
+  outline-offset: 3px;
+}
+/* Schildchen unter dem Brett. */
+.vitrine-plaque {
+  position: absolute;
+  top: calc(100% + 28px);
+  left: 50%;
+  width: calc(100% + 20px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transform: translateX(-50%);
+  color: var(--ink-2);
+  text-align: center;
+  pointer-events: none;
+}
+.vitrine-plaque b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+.vitrine-plaque .tile-stars {
+  justify-content: center;
+}
+.vitrine-plaque .tile-stars svg {
+  width: 10px;
+  height: 10px;
+}
+.vitrine-ctl {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.vitrine-ctl .btn {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  gap: 6px;
+}
+.vitrine-ctl .btn svg {
+  width: 13px;
+  height: 13px;
+  color: var(--red);
+}
+.vitrine-pos {
+  margin-right: 2px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.vitrine-move {
+  font-size: 20px;
+  line-height: 1;
+}
+.vitrine-move:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.vitrine-full {
+  color: var(--dim);
+  font-size: 13px;
+}
+#shelfShowcaseRow {
+  border-bottom: none;
+}
+.vitrine-pick {
+  margin: -2px 0 4px;
+}
+.vitrine-pick .cat-toggle {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ---------- ledge & books ---------- */
 .ledge-wrap {
@@ -2435,6 +2674,10 @@ select:focus {
   margin: 6px 0 0;
   color: var(--dim);
   font-size: 14px;
+}
+.modal-setting {
+  margin-top: 12px;
+  border-top: 1px solid var(--line-soft);
 }
 .modal-title-row {
   display: flex;
@@ -4189,6 +4432,21 @@ body:has(#homeView:not(.hidden)) .site-legal {
     left: -16px;
     right: -16px;
     border-radius: 0;
+  }
+  .vitrine {
+    --ledge-h: 184px;
+    --plaque-gap: 58px;
+    padding-bottom: 26px;
+  }
+  .vitrine-head .series-title {
+    font-size: 22px;
+  }
+  .vitrine .ledge-wrap {
+    width: auto;
+  }
+  .vitrine .ledge {
+    gap: 22px;
+    padding: 30px 16px var(--plaque-gap);
   }
   .tile-grid {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));

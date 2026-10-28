@@ -491,6 +491,18 @@
       <button type="button" class="btn btn-ghost" id="shelfRenameCancelBtn">Abbrechen</button>
       <button type="button" class="btn btn-primary" id="shelfRenameSaveBtn">Speichern</button>
     </div>
+    <div class="setting-row modal-setting">
+      <span><b>Sichtbarkeit</b><small id="shelfPrivacyHint"></small></span>
+      <div class="seg" role="group" aria-label="Sichtbarkeit der Reihe">
+        <button type="button" data-shelf-privacy="public" aria-pressed="false">Öffentlich</button>
+        <button type="button" data-shelf-privacy="private" aria-pressed="false">Privat</button>
+      </div>
+    </div>
+    <div class="setting-row hidden" id="shelfShowcaseRow">
+      <span><b>Vitrine</b><small id="shelfShowcaseHint"></small></span>
+      <button type="button" class="btn btn-secondary" id="shelfShowcaseBtn">In die Vitrine</button>
+    </div>
+    <div class="cat-toggle-list vitrine-pick hidden" id="shelfShowcasePick"></div>
     <div class="field"><span>Kategorien dieser Reihe</span>
       <div class="cat-toggle-list" id="shelfCatToggleList"></div>
     </div>

@@ -13,6 +13,7 @@ let viewedProfile = null;  // profiles-Zeile des Regals, das gerade angezeigt wi
 let books = [];       // Zeilen aus public.books für viewedProfile
 let shelves = [];     // Zeilen aus public.shelves für viewedProfile
 let categories = [];  // Zeilen aus public.categories für viewedProfile: {id, name}
+let showcase = null;  // Vitrine von viewedProfile laut showcases_of(): {shelf_id, book_ids} oder null
 
 let selectedId = null;
 let displayedId = null; // Buch, das in seiner Reihe frontal steht; alle anderen Reihen zeigen ihren ersten Band
@@ -1007,15 +1008,17 @@ function applySandboxToState(){
     categoryIds: sandbox.shelf_categories.filter(sc=>sc.shelf_id === s.id).map(sc=>sc.category_id),
   }));
   books = [...sandbox.books].sort((a, b)=>(a.series_order || 0) - (b.series_order || 0));
+  showcase = sandbox.showcase || null;
 }
 
-function seedSandbox(profileId, cats, shelvesData, booksData){
+function seedSandbox(profileId, cats, shelvesData, booksData, showcaseRow){
   sandbox = {
     profileId,
     categories: cats.map(c=>({ ...c })),
     shelves: shelvesData.map(({ shelf_categories, ...s })=>({ ...s })),
     shelf_categories: shelvesData.flatMap(s=>(s.shelf_categories || []).map(sc=>({ shelf_id: s.id, category_id: sc.category_id }))),
     books: booksData.map(b=>({ ...b })),
+    showcase: showcaseRow,
   };
   saveSandbox();
 }
@@ -1655,13 +1658,17 @@ async function loadDirectory(){
       .not('username', 'is', null).eq('listed', true).eq('is_private', false);
     if(pErr){ directoryLoading = null; return null; }
     const ids = (profiles || []).map(p=>p.id);
-    const [{ data: shelfRows, error: sErr }, { data: bookRows, error: bErr }] = ids.length ? await Promise.all([
-      supabaseClient.from('shelves').select('id, user_id, label').in('user_id', ids),
-      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read').in('user_id', ids).limit(5000),
-    ]) : [{ data: [] }, { data: [] }];
+    const [{ data: shelfRows, error: sErr }, { data: bookRows, error: bErr }, { data: showcaseRows }] = ids.length ? await Promise.all([
+      supabaseClient.from('shelves').select('id, user_id, label').in('user_id', ids).eq('is_private', false),
+      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read').in('user_id', ids).eq('is_private', false).limit(5000),
+      supabaseClient.rpc('showcases_of', { p_users: ids }),
+    ]) : [{ data: [] }, { data: [] }, { data: [] }];
     if(sErr || bErr){ directoryLoading = null; return null; }
+    // Die Datenbank liefert Fremden ohnehin keine privaten Einträge; die Filter oben sorgen dafür,
+    // dass auch der Besitzer sein Regal hier so sieht wie alle anderen.
+    const openShelves = new Set((shelfRows || []).map(s=>s.id));
     directory = (profiles || []).map(profile=>{
-      const own = (bookRows || []).filter(b=>b.user_id === profile.id);
+      const own = (bookRows || []).filter(b=>b.user_id === profile.id && openShelves.has(b.shelf_id));
       const groups = (shelfRows || [])
         .filter(s=>s.user_id === profile.id)
         .map(s=>({
@@ -1672,7 +1679,16 @@ async function loadDirectory(){
         .filter(g=>g.items.length)
         .sort((a, b)=>a.label.localeCompare(b.label, 'de'));
       groups.forEach(g=>g.items.forEach(b=>browseIndex.set(String(b.id), { book: b, group: g })));
-      return { profile, groups, bookCount: own.length };
+      // Vitrine (nur Premium): ihre Bücher stehen auf Startseite und Karten vorne.
+      const sc = (showcaseRows || []).find(r=>r.user_id === profile.id);
+      const scGroup = sc && sc.shelf_id && groups.find(g=>g.key === sc.shelf_id);
+      const showcaseItems = scGroup
+        ? scGroup.items.filter(b=>sc.book_ids.includes(b.id)).map(b=>({ b, g: scGroup }))
+        : ((sc && sc.book_ids) || []).map(id=>{
+            const g = groups.find(x=>x.items.some(b=>b.id === id));
+            return g ? { b: g.items.find(b=>b.id === id), g } : null;
+          }).filter(Boolean);
+      return { profile, groups, bookCount: own.length, showcase: showcaseItems };
     }).sort((a, b)=>
       (b.profile.username === DEFAULT_USERNAME) - (a.profile.username === DEFAULT_USERNAME) ||
       b.bookCount - a.bookCount ||
@@ -1719,11 +1735,23 @@ function thumbHtml(b, group){
   return `<span class="thumb ${v.has ? 'has-cover' : ''} ${v.loading ? 'is-loading' : ''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}"></span>`;
 }
 
-// Für die Cover-Reihe: erst der erste Band jeder Reihe, dann die Folgebände.
+// Für die Cover-Reihe: erst die Vitrine, dann der erste Band jeder Reihe, dann die Folgebände.
 function coverPicks(entry, n){
   const firsts = entry.groups.map(g=>({ b: g.items[0], g }));
   const rest = entry.groups.flatMap(g=>g.items.slice(1).map(b=>({ b, g })));
-  return firsts.concat(rest).slice(0, n);
+  const seen = new Set();
+  return (entry.showcase || []).concat(firsts, rest)
+    .filter(({ b })=>!seen.has(b.id) && seen.add(b.id))
+    .slice(0, n);
+}
+
+// Schaufenster der Startseite: Reihen mit Vitrinen-Büchern zuerst, jeweils mit diesem Buch vorne.
+function heroGroups(entry){
+  const lead = [];
+  (entry.showcase || []).forEach(({ b, g })=>{
+    if(!lead.some(x=>x.key === g.key)) lead.push({ ...g, items: [b, ...g.items.filter(x=>x !== b)] });
+  });
+  return lead.concat(entry.groups.filter(g=>!lead.some(x=>x.key === g.key)));
 }
 
 function readerRowHtml(entry){
@@ -1791,7 +1819,7 @@ function renderHero(entry){
   const caption = document.getElementById('heroCaption');
   if(!entry){ shelf.innerHTML = ''; caption.innerHTML = ''; return; }
   const count = narrowQuery.matches ? 3 : 5;
-  const groups = entry.groups.slice(0, count);
+  const groups = heroGroups(entry).slice(0, count);
   shelf.innerHTML = `<div class="ledge-wrap"><div class="display-row">${displayShelfHtml(groups, count)}</div></div>`;
   const u = entry.profile.username;
   caption.innerHTML = `Aus dem Regal von <a href="?u=${encodeURIComponent(u)}">${escapeHtml(shownName(entry.profile))}</a>`;
@@ -2452,20 +2480,25 @@ async function loadShelfData(profileId){
     applySandboxToState();
     return;
   }
-  const [{data: cats, error: catErr}, {data: shelvesData, error: shelfErr}, {data: booksData, error: bookErr}] = await Promise.all([
+  const [{data: cats, error: catErr}, {data: shelvesData, error: shelfErr}, {data: booksData, error: bookErr}, {data: showcaseRows}] = await Promise.all([
     supabaseClient.from('categories').select('*').eq('user_id', profileId).order('name'),
     supabaseClient.from('shelves').select('*, shelf_categories(category_id)').eq('user_id', profileId),
     supabaseClient.from('books').select('*').eq('user_id', profileId).order('series_order'),
+    // Ohne Premium (oder solange 018_showcase.sql fehlt) kommt nichts zurück: dann eben keine Vitrine.
+    supabaseClient.rpc('showcases_of', { p_users: [profileId] }),
   ]);
   if(catErr || shelfErr || bookErr){
     showToast('Daten konnten nicht geladen werden');
     return;
   }
+  const sc = (showcaseRows || [])[0];
+  const loadedShowcase = sc ? { shelf_id: sc.shelf_id || null, book_ids: sc.book_ids || [] } : null;
   if(useSandbox){
-    seedSandbox(profileId, cats || [], shelvesData || [], booksData || []);
+    seedSandbox(profileId, cats || [], shelvesData || [], booksData || [], loadedShowcase);
     applySandboxToState();
     return;
   }
+  showcase = loadedShowcase;
   categories = cats || [];
   shelves = (shelvesData || []).map(s=>({
     ...s,
@@ -2487,6 +2520,7 @@ function buildGroups(){
       return {
         key: s.id,
         label: s.label,
+        isPrivate: !!s.is_private,
         categoryIds: s.categoryIds,
         categories: cats.length ? cats : [{id:null, name:'Unkategorisiert'}],
         items: books.filter(b=>b.shelf_id===s.id).sort((a,b)=>(a.series_order||0)-(b.series_order||0)),
@@ -2628,7 +2662,8 @@ function seriesHeadHtml(group, owner){
   const edit = owner
     ? `<button type="button" class="icon-btn sm series-edit" data-key="${escapeHtml(group.key)}" data-label="${escapeHtml(group.label)}" aria-label="Reihe „${escapeHtml(group.label)}“ bearbeiten" title="Reihe bearbeiten">${ICON_SLIDERS}</button>`
     : '';
-  return `<header class="series-head"><div class="series-line"><h2 class="series-title">${escapeHtml(group.label)}</h2><span class="series-sub"><span class="series-meta">${meta}</span>${edit}</span></div>${tags ? `<div class="cat-tags">${tags}</div>` : ''}</header>`;
+  const lock = group.isPrivate ? `<span class="private-tag" title="Nur du siehst diese Reihe">${ICON_LOCK}Privat</span>` : '';
+  return `<header class="series-head"><div class="series-line"><h2 class="series-title">${escapeHtml(group.label)}</h2>${lock}<span class="series-sub"><span class="series-meta">${meta}</span>${edit}</span></div>${tags ? `<div class="cat-tags">${tags}</div>` : ''}</header>`;
 }
 
 // Pro Reihe steht genau ein Band frontal: der zuletzt gewählte dieser Reihe, sonst der erste.
@@ -2637,6 +2672,151 @@ function faceOutId(group){
   const lead = getPref(FACE_KEY, 'first') === 'latest' ? group.items[group.items.length - 1] : group.items[0];
   return String(lead.id);
 }
+
+// ---- Vitrine (Premium): erste Reihe im Regal, alle Cover nach vorne ----
+const ICON_SPARK = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>';
+const SHOWCASE_MAX = 3;
+
+function canEditShowcase(){
+  return isOwnerView() && (canUsePremium || devSandboxActive());
+}
+
+// Löst die gespeicherte Vitrine gegen das geladene Regal auf. Zwei Arten: eine Reihe mit bis zu drei
+// gewählten Bänden (shelf_id + book_ids, in Bandfolge) oder bis zu drei einzelne Bücher (nur book_ids,
+// in der gewählten Folge). Private Einträge zeigt sie auch dem Besitzer nicht, damit er sie so sieht
+// wie alle anderen.
+function showcaseEntries(){
+  if(!showcase) return null;
+  const groups = buildGroups();
+  if(showcase.shelf_id){
+    const g = groups.find(x=>x.key === showcase.shelf_id && !x.isPrivate);
+    const ids = new Set((showcase.book_ids || []).map(String));
+    const items = g ? g.items.filter(b=>!b.is_private && ids.has(String(b.id))) : [];
+    return items.length ? { series: g, items: items.map(b=>({ b, g })) } : null;
+  }
+  const items = (showcase.book_ids || []).map(id=>{
+    const g = groups.find(x=>!x.isPrivate && x.items.some(b=>String(b.id) === String(id)));
+    const b = g && g.items.find(x=>String(x.id) === String(id));
+    return b && !b.is_private ? { b, g } : null;
+  }).filter(Boolean).slice(0, SHOWCASE_MAX);
+  return items.length ? { series: null, items } : null;
+}
+
+function vitrineBookHtml(b, group){
+  const v = bookVisual(b, group.label);
+  const isSel = String(b.id) === String(selectedId);
+  const label = group.items.length > 1 ? `${b.title}, Band ${b.series_order}` : b.title;
+  const stars = b.rating > 0 ? `<span class="tile-stars">${[1,2,3,4,5].map(i=>starsSVG(i<=b.rating)).join('')}</span>` : '';
+  return `<button type="button" class="book vitrine-book open ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${isSel?'selected':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-label="${escapeHtml(label)}" aria-pressed="${isSel}">
+    <span class="vitrine-light" aria-hidden="true"></span>
+    <span class="book-3d">
+      <span class="face spine"><span class="spine-title">${escapeHtml(b.title)}</span></span>
+      <span class="face front">${genCoverHtml(b, group)}</span>
+    </span>
+    <span class="vitrine-plaque" aria-hidden="true"><b>${escapeHtml(b.title)}</b>${stars}</span>
+  </button>`;
+}
+
+function vitrineHtml(sc){
+  const n = sc.items.length;
+  const title = sc.series
+    ? sc.series.label
+    : (isOwnerView() ? 'Meine Lieblinge' : `${possessive(shownName(viewedProfile))} Lieblinge`);
+  const total = sc.series ? sc.series.items.filter(b=>!b.is_private).length : 0;
+  const meta = sc.series
+    ? [groupAuthor(sc.series), n === total ? (n === 1 ? '1 Band' : `${n} Bände`) : `${n} von ${total} Bänden`].filter(Boolean).join(' · ')
+    : `${n} ${n === 1 ? 'Buch' : 'Bücher'}`;
+  return `<section class="vitrine" aria-labelledby="vitrineTitle">
+    <header class="vitrine-head">
+      <div>
+        <span class="vitrine-eyebrow">${ICON_SPARK}Vitrine</span>
+        <div class="series-line"><h2 class="series-title" id="vitrineTitle">${escapeHtml(title)}</h2><span class="series-meta">${escapeHtml(meta)}</span></div>
+      </div>
+    </header>
+    <div class="ledge-wrap"><div class="ledge">${sc.items.map(({ b, g })=>vitrineBookHtml(b, g)).join('')}</div></div>
+  </section>`;
+}
+
+async function saveShowcase(next, message){
+  const row = { shelf_id: next.shelf_id || null, book_ids: next.book_ids || [] };
+  const empty = !row.book_ids.length; // eine Reihe ohne gewählte Bände zeigt nichts
+  let error = null;
+  if(devSandboxActive()){
+    sandbox.showcase = empty ? null : row;
+    saveSandbox();
+  } else if(empty){
+    ({ error } = await supabaseClient.from('showcases').delete().eq('user_id', currentUser.id));
+  } else {
+    ({ error } = await supabaseClient.from('showcases').upsert({ user_id: currentUser.id, ...row, updated_at: new Date().toISOString() }));
+  }
+  if(error){ showToast(dbErrorText(error, 'Vitrine konnte nicht gespeichert werden')); return false; }
+  showcase = empty ? null : row;
+  directory = null;
+  render();
+  if(message) showToast(message);
+  return true;
+}
+
+// Die gespeicherte Liste ohne Einträge, die es nicht mehr gibt oder die privat sind.
+function showcaseBookIds(){
+  const sc = showcaseEntries();
+  return sc ? sc.items.map(x=>String(x.b.id)) : [];
+}
+
+function showcaseShelfId(){
+  return showcase && showcase.shelf_id ? showcase.shelf_id : null;
+}
+
+// Ein Band derselben Reihe kommt zu ihr dazu; ein Buch aus einer anderen Reihe stellt die Vitrine auf
+// einzelne Bücher um.
+function addBookToShowcase(book){
+  const shelfId = showcaseShelfId();
+  const sameSeries = shelfId === book.shelf_id;
+  const switching = shelfId && !sameSeries;
+  const ids = switching ? [] : showcaseBookIds();
+  if(ids.length >= SHOWCASE_MAX){ showToast(`In der Vitrine ist Platz für ${SHOWCASE_MAX} Bücher`); return; }
+  saveShowcase({ shelf_id: sameSeries ? shelfId : null, book_ids: [...ids, String(book.id)] },
+    switching ? 'Die Vitrine zeigt jetzt einzelne Bücher' : 'Steht jetzt in der Vitrine');
+}
+
+function moveInShowcase(book, delta){
+  const ids = showcaseBookIds();
+  const i = ids.indexOf(String(book.id));
+  const j = i + delta;
+  if(i < 0 || j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  saveShowcase({ book_ids: ids }, `Jetzt auf Platz ${j + 1}`);
+}
+
+function removeBookFromShowcase(book){
+  saveShowcase({ shelf_id: showcaseShelfId(), book_ids: showcaseBookIds().filter(id=>id !== String(book.id)) }, 'Aus der Vitrine genommen');
+}
+
+function showcaseControlHtml(book, group){
+  if(!canEditShowcase() || book.is_private || group.isPrivate) return '';
+  const shelfId = showcaseShelfId();
+  const ids = showcaseBookIds();
+  const i = ids.indexOf(String(book.id));
+  let body;
+  if(i >= 0 && shelfId){
+    // Bände einer Reihe stehen in Bandfolge; da gibt es nichts zu verschieben.
+    body = `<span class="vitrine-pos">Steht drin</span><button type="button" class="link-btn vitrine-remove">Herausnehmen</button>`;
+  } else if(i >= 0){
+    body = `<span class="vitrine-pos">Platz ${i + 1} von ${ids.length}</span>
+      <button type="button" class="icon-btn sm vitrine-move" data-move="-1" aria-label="Weiter nach vorne" title="Weiter nach vorne" ${i === 0 ? 'disabled' : ''}>‹</button>
+      <button type="button" class="icon-btn sm vitrine-move" data-move="1" aria-label="Weiter nach hinten" title="Weiter nach hinten" ${i === ids.length - 1 ? 'disabled' : ''}>›</button>
+      <button type="button" class="link-btn vitrine-remove">Herausnehmen</button>`;
+  } else {
+    const otherSeries = shelfId && shelfId !== group.key && ids.length;
+    const full = !otherSeries && ids.length >= SHOWCASE_MAX;
+    const otherLabel = otherSeries ? ((shelves.find(s=>s.id === shelfId) || {}).label || '') : '';
+    const note = full ? `Voll (${SHOWCASE_MAX} ${shelfId ? 'Bände' : 'Bücher'})` : otherSeries ? `Ersetzt „${escapeHtml(otherLabel)}“` : '';
+    body = `<button type="button" class="btn btn-secondary vitrine-add" ${full ? 'disabled' : ''}>${ICON_SPARK}In die Vitrine</button>${note ? `<small class="vitrine-full">${note}</small>` : ''}`;
+  }
+  return `<div class="rating-row"><span class="row-label">Vitrine</span><div class="vitrine-ctl">${body}</div></div>`;
+}
+
+const PRIVATE_BADGE = `<span class="private-badge" title="Nur du siehst dieses Buch">${ICON_LOCK}</span>`;
 
 function bookHtml(b, group){
   const v = bookVisual(b, group.label);
@@ -2649,6 +2829,7 @@ function bookHtml(b, group){
       <span class="face spine"><span class="spine-emblem"></span><span class="spine-title">${escapeHtml(b.title)}</span><span class="spine-no">${multi ? b.series_order : ''}</span></span>
       <span class="face front">${genCoverHtml(b, group)}</span>
     </span>
+    ${b.is_private ? PRIVATE_BADGE : ''}
   </button>`;
 }
 
@@ -2658,7 +2839,7 @@ function tileHtml(b, group){
   const multi = group.items.length > 1;
   const stars = b.rating > 0 ? `<span class="tile-stars" aria-label="${b.rating} von 5 Sternen">${[1,2,3,4,5].map(i=>starsSVG(i<=b.rating)).join('')}</span>` : '';
   return `<button type="button" class="tile ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${isSel?'open':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-pressed="${isSel}">
-    <span class="tile-cover">${genCoverHtml(b, group)}</span>
+    <span class="tile-cover">${genCoverHtml(b, group)}${b.is_private ? PRIVATE_BADGE : ''}</span>
     <span class="tile-title">${escapeHtml(b.title)}</span>
     <span class="tile-meta">${multi ? `Band ${b.series_order}` : escapeHtml(b.author || 'Einzelband')}</span>
     ${stars}
@@ -2724,7 +2905,8 @@ function render(){
     return;
   }
 
-  container.innerHTML = groups.map(group=>{
+  const sc = !q && !activeCategory ? showcaseEntries() : null;
+  container.innerHTML = (sc ? vitrineHtml(sc) : '') + groups.map(group=>{
     const body = viewMode === 'grid'
       ? `<div class="tile-grid">${group.items.map(b=>tileHtml(b, group)).join('')}</div>`
       : `<div class="ledge-wrap"><div class="ledge">${group.items.map(b=>bookHtml(b, group)).join('')}</div></div>`;
@@ -2745,7 +2927,7 @@ function render(){
 
   updateToc(groups);
   updateBookDetailPanel();
-  queueCovers(groups.flatMap(g=>g.items));
+  queueCovers((sc ? sc.items.map(x=>x.b) : []).concat(groups.flatMap(g=>g.items)));
   scheduleFit();
 }
 
@@ -2791,6 +2973,10 @@ function syncSelection(revealId){
     el.setAttribute('aria-pressed', isSel);
     if(!el.classList.contains('book')){
       el.classList.toggle('open', isSel);
+      return;
+    }
+    if(el.classList.contains('vitrine-book')){
+      el.classList.toggle('selected', isSel);
       return;
     }
     const meta = bookIndex.get(id);
@@ -2855,6 +3041,14 @@ function buildDetailCard(book, group, owner){
     ? `<label class="detail-row"><span class="row-label">Gelesen am</span><span class="date-field ${book.date_read ? '' : 'is-empty'}"><input type="date" class="f-date" value="${escapeHtml(book.date_read||'')}"><span class="date-placeholder" aria-hidden="true">Datum wählen</span></span></label>`
     : (book.date_read ? `<p class="detail-row"><span class="row-label">Gelesen am</span><span class="row-value">${escapeHtml(formatDate(book.date_read))}</span></p>` : '');
 
+  // Ist die ganze Reihe privat, gibt es pro Buch nichts zu schalten; umgestellt wird dann an der Reihe.
+  const privacyBlockHtml = !owner ? '' : group.isPrivate
+    ? `<p class="detail-row"><span class="row-label">Sichtbarkeit</span><span class="row-value">Privat, wie die ganze Reihe</span></p>`
+    : `<div class="rating-row"><span class="row-label">Sichtbarkeit</span><div class="seg" role="group" aria-label="Sichtbarkeit des Buchs">
+         <button type="button" data-book-privacy="public" aria-pressed="${!book.is_private}">Öffentlich</button>
+         <button type="button" data-book-privacy="private" aria-pressed="${!!book.is_private}">Privat</button>
+       </div></div>`;
+
   // Seitenzahl und Klappentext ändert der Besitzer nur im Bearbeitungsmodus (Stift), dort stehen sie bei Titel und Autor.
   const pagesBlockHtml = !isEditing && pagesText
     ? `<p class="detail-row"><span class="row-label">Umfang</span><span class="row-value">${escapeHtml(pagesText)}</span></p>`
@@ -2900,6 +3094,8 @@ function buildDetailCard(book, group, owner){
       <div class="detail-rows">
         <div class="rating-row"><span class="row-label">Bewertung</span><div class="stars">${starsHtml}</div></div>
         ${dateBlockHtml}
+        ${privacyBlockHtml}
+        ${showcaseControlHtml(book, group)}
         ${pagesBlockHtml}
         ${categoryBlockHtml}
         ${summaryBlockHtml}
@@ -2991,6 +3187,23 @@ function buildDetailCard(book, group, owner){
       const { error } = await db('books').update({date_read: e.target.value || null}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
+    });
+    const addBtn = wrap.querySelector('.vitrine-add');
+    if(addBtn) addBtn.addEventListener('click', ()=>addBookToShowcase(book));
+    wrap.querySelectorAll('.vitrine-move').forEach(btn=>{
+      btn.addEventListener('click', ()=>moveInShowcase(book, parseInt(btn.getAttribute('data-move'), 10)));
+    });
+    const outBtn = wrap.querySelector('.vitrine-remove');
+    if(outBtn) outBtn.addEventListener('click', ()=>removeBookFromShowcase(book));
+    wrap.querySelectorAll('[data-book-privacy]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const priv = btn.getAttribute('data-book-privacy') === 'private';
+        if(priv === !!book.is_private) return;
+        const { error } = await db('books').update({ is_private: priv }).eq('id', book.id);
+        if(error){ showToast('Fehler beim Speichern'); return; }
+        await refreshAndRender();
+        showToast(priv ? 'Nur du siehst dieses Buch' : 'Buch ist wieder öffentlich');
+      });
     });
     wrap.querySelector('.f-notes').addEventListener('change', async (e)=>{
       const { error } = await db('books').update({notes: e.target.value}).eq('id', book.id);
@@ -3794,10 +4007,89 @@ function setShelfCatTitle(label){
   shelfCatTitleEl.textContent = label;
 }
 
+// Bände der Reihe, die in die Vitrine dürfen (nicht privat), in Bandfolge.
+function showcaseVolumes(){
+  const g = buildGroups().find(x=>x.key === currentShelfKey);
+  return g && !g.isPrivate ? g.items.filter(b=>!b.is_private) : [];
+}
+
+// Eine Reihe mit nur einem Buch kommt über die Buch-Details in die Vitrine, nicht hier.
+function syncShelfShowcase(){
+  const row = document.getElementById('shelfShowcaseRow');
+  const pick = document.getElementById('shelfShowcasePick');
+  const shelf = shelves.find(s=>s.id===currentShelfKey);
+  const priv = !!(shelf && shelf.is_private);
+  const volumes = showcaseVolumes();
+  const multi = (books.filter(b=>b.shelf_id === currentShelfKey).length) > 1;
+  const show = canEditShowcase() && multi;
+  row.classList.toggle('hidden', !show);
+  const inside = show && showcaseShelfId() === currentShelfKey && showcaseBookIds().length > 0;
+  pick.classList.toggle('hidden', !inside);
+  if(!show) return;
+  const btn = document.getElementById('shelfShowcaseBtn');
+  btn.textContent = inside ? 'Herausnehmen' : 'In die Vitrine';
+  btn.disabled = !inside && (priv || !volumes.length);
+  document.getElementById('shelfShowcaseHint').textContent = inside
+    ? `Wähle bis zu ${SHOWCASE_MAX} Bände, die ganz oben in deinem Regal stehen.`
+    : priv ? 'Private Reihen können nicht in die Vitrine.'
+    : `Bis zu ${SHOWCASE_MAX} Bände dieser Reihe ganz oben in deinem Regal. Ersetzt, was gerade in der Vitrine steht.`;
+  if(!inside){ pick.innerHTML = ''; return; }
+  const chosen = new Set(showcaseBookIds());
+  pick.innerHTML = volumes.map(b=>{
+    const on = chosen.has(String(b.id));
+    return `<button type="button" class="cat-toggle ${on ? 'active' : ''}" data-id="${escapeHtml(b.id)}" aria-pressed="${on}">${volumes.length > 1 ? `${escapeHtml(String(b.series_order))} · ` : ''}${escapeHtml(b.title)}</button>`;
+  }).join('');
+  pick.querySelectorAll('.cat-toggle').forEach(chip=>{
+    chip.addEventListener('click', async ()=>{
+      const id = chip.getAttribute('data-id');
+      const ids = showcaseBookIds();
+      const on = ids.includes(id);
+      if(on && ids.length === 1){ showToast('Ein Band bleibt drin. Ganz raus geht mit „Herausnehmen“.'); return; }
+      if(!on && ids.length >= SHOWCASE_MAX){ showToast(`Höchstens ${SHOWCASE_MAX} Bände. Nimm erst einen heraus.`); return; }
+      await saveShowcase({ shelf_id: currentShelfKey, book_ids: on ? ids.filter(x=>x !== id) : [...ids, id] });
+      syncShelfShowcase();
+    });
+  });
+}
+
+document.getElementById('shelfShowcaseBtn').addEventListener('click', async ()=>{
+  const inside = showcaseShelfId() === currentShelfKey && showcaseBookIds().length > 0;
+  await saveShowcase(inside ? {} : { shelf_id: currentShelfKey, book_ids: showcaseVolumes().slice(0, SHOWCASE_MAX).map(b=>String(b.id)) },
+    inside ? 'Reihe aus der Vitrine genommen' : 'Die Reihe steht jetzt in der Vitrine');
+  syncShelfShowcase();
+});
+
+function syncShelfPrivacy(){
+  const shelf = shelves.find(s=>s.id===currentShelfKey);
+  const priv = !!(shelf && shelf.is_private);
+  document.querySelectorAll('[data-shelf-privacy]').forEach(b=>{
+    b.setAttribute('aria-pressed', b.getAttribute('data-shelf-privacy') === (priv ? 'private' : 'public'));
+  });
+  document.getElementById('shelfPrivacyHint').textContent = priv
+    ? 'Nur du siehst diese Reihe, auch wenn dein Regal öffentlich ist.'
+    : 'Alle, die dein Regal sehen, sehen auch diese Reihe.';
+}
+
+document.querySelectorAll('[data-shelf-privacy]').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    const shelf = shelves.find(s=>s.id===currentShelfKey);
+    const priv = btn.getAttribute('data-shelf-privacy') === 'private';
+    if(!shelf || priv === !!shelf.is_private) return;
+    const { error } = await db('shelves').update({ is_private: priv }).eq('id', currentShelfKey);
+    if(error){ showToast('Fehler beim Speichern'); return; }
+    await refreshAndRender();
+    syncShelfPrivacy();
+    syncShelfShowcase();
+    showToast(priv ? 'Nur du siehst diese Reihe' : 'Reihe ist wieder öffentlich');
+  });
+});
+
 function openShelfCatModal(key, label){
   currentShelfKey = key;
   setShelfCatTitle(label);
   closeShelfRenameMode();
+  syncShelfPrivacy();
+  syncShelfShowcase();
   refreshShelfCatToggleList();
   renderCatChips('shelfCatChipList', refreshShelfCatToggleList);
   document.getElementById('shelfNewCatInput').value = '';
