@@ -4115,14 +4115,53 @@ function openShelfCatModal(key, label){
   syncShelfPrivacy();
   syncShelfShowcase();
   refreshShelfCatToggleList();
-  renderCatChips('shelfCatChipList', refreshShelfCatToggleList);
-  document.getElementById('shelfNewCatInput').value = '';
   shelfCatOverlay.classList.remove('hidden');
 }
 
+// Eine Liste: antippen ordnet zu, „+ Neue Kategorie“ legt direkt eine an und ordnet sie gleich zu.
+// Löschen geht im Kategorien-Fenster der Werkzeugleiste.
 function refreshShelfCatToggleList(){
   const shelf = shelves.find(s=>s.id===currentShelfKey);
   renderCategoryToggleList(shelfCatToggleList, currentShelfKey, shelf ? shelf.categoryIds : []);
+  const empty = shelfCatToggleList.querySelector('.cat-toggle-empty');
+  if(empty) empty.remove();
+  shelfCatToggleList.insertAdjacentHTML('beforeend', '<button type="button" class="cat-toggle cat-new">+ Neue Kategorie</button>');
+  shelfCatToggleList.querySelector('.cat-new').addEventListener('click', openShelfNewCat);
+}
+
+function openShelfNewCat(){
+  const chip = shelfCatToggleList.querySelector('.cat-new');
+  const form = document.createElement('form');
+  form.className = 'cat-new-form';
+  form.innerHTML = `<input type="text" maxlength="30" placeholder="Name" aria-label="Neue Kategorie" enterkeyhint="done"><button type="submit" aria-label="Anlegen">${ICON_CHECK}</button>`;
+  chip.replaceWith(form);
+  const input = form.querySelector('input');
+  input.focus();
+  input.addEventListener('keydown', e=>{
+    if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); refreshShelfCatToggleList(); }
+  });
+  // Leer verlassen: wieder der Chip. Ein Tipp auf den Haken zählt nicht als Verlassen.
+  input.addEventListener('blur', ()=>setTimeout(()=>{
+    if(form.isConnected && !input.value.trim() && !form.contains(document.activeElement)) refreshShelfCatToggleList();
+  }, 150));
+  form.addEventListener('submit', async e=>{
+    e.preventDefault();
+    const name = input.value.trim();
+    if(!name){ input.focus(); return; }
+    const shelf = shelves.find(s=>s.id===currentShelfKey);
+    let cat = categories.find(c=>c.name.toLowerCase() === name.toLowerCase());
+    if(!cat){
+      const { data, error } = await db('categories').insert({ name }).select().single();
+      if(error){ showToast('Fehler beim Anlegen'); return; }
+      cat = data;
+    }
+    if(!(shelf && shelf.categoryIds.includes(cat.id))){
+      if(!await toggleShelfCategory(currentShelfKey, cat.id, true)) return;
+    }
+    await refreshAndRender();
+    refreshShelfCatToggleList();
+    showToast(`„${cat.name}“ zugeordnet`);
+  });
 }
 
 function openShelfRenameMode(){
@@ -4160,25 +4199,6 @@ shelfRenameInput.addEventListener('keydown', (e)=>{
 
 document.getElementById('closeShelfCatBtn').addEventListener('click', ()=>shelfCatOverlay.classList.add('hidden'));
 shelfCatOverlay.addEventListener('click', (e)=>{ if(e.target===shelfCatOverlay) shelfCatOverlay.classList.add('hidden'); });
-
-document.getElementById('shelfAddCatBtn').addEventListener('click', async ()=>{
-  const input = document.getElementById('shelfNewCatInput');
-  const val = input.value.trim();
-  if(!val) return;
-  if(categories.some(c=>c.name.toLowerCase()===val.toLowerCase())){
-    showToast('Kategorie existiert bereits');
-    return;
-  }
-  const { error } = await db('categories').insert({ name: val });
-  if(error){ showToast('Fehler beim Anlegen'); return; }
-  input.value='';
-  await loadShelfData(viewedProfile.id);
-  renderCatChips('shelfCatChipList', refreshShelfCatToggleList);
-  refreshShelfCatToggleList();
-});
-document.getElementById('shelfNewCatInput').addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('shelfAddCatBtn').click(); }
-});
 
 // ---- Buch-Suche (innerhalb des angezeigten Regals) ----
 const searchInput = document.getElementById('searchInput');

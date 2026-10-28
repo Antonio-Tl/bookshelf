@@ -1174,16 +1174,81 @@ h1 {
     border-color 0.15s ease,
     color 0.15s ease;
 }
-.filter-pill:hover,
-.cat-toggle:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  color: var(--ink);
+/* Nur mit echter Maus: auf dem iPhone bleibt :hover nach dem Antippen hängen und färbte die Schrift
+   eines gerade gewählten Chips dunkel auf dunklem Grund. */
+@media (hover: hover) {
+  .filter-pill:not(.active):hover,
+  .cat-toggle:not(.active):not(:disabled):hover {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
 }
-.filter-pill.active,
-.cat-toggle.active {
+.filter-pill.active {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--on-ink);
+}
+/* Zugeordnete Kategorie: in der Akzentfarbe getönt und mit Haken, statt schwarz wie die Filter. */
+.cat-toggle.active {
+  background: color-mix(in srgb, var(--red) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--red) 55%, transparent);
+  color: var(--ink);
+}
+.cat-toggle.active::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 8px;
+  margin: 0 8px 3px 1px;
+  border: solid var(--red);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  vertical-align: middle;
+}
+/* „+ Neue Kategorie“ wird zum Eingabefeld in Chipform. */
+.cat-new-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 3px 0 13px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--red);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--red-soft);
+}
+.cat-new-form input[type="text"] {
+  width: 140px;
+  min-height: 0;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 16px; /* darunter zoomt iOS beim Tippen ins Feld */
+  font-weight: 600;
+}
+.cat-new-form input[type="text"]:focus {
+  outline: none;
+  box-shadow: none;
+}
+.cat-new-form button {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  cursor: pointer;
+}
+.cat-new-form button svg {
+  width: 13px;
+  height: 13px;
 }
 .cat-toggle:disabled {
   opacity: 0.55;
