@@ -53,9 +53,10 @@ async function searchBooks(request, env, ctx){
 }
 
 // POST /api/scan { image: <JPEG als Base64> } liest die Buchrücken auf einem Regalfoto mit Gemini.
-// Der Key liegt als Secret GEMINI_API_KEY am Worker. Nur für Premium-Konten und Admins: der Worker
-// fragt dafür can_use_premium() in Supabase mit dem Login des Nutzers ab. Auf localhost
-// (wrangler dev, lokaler Testmodus ohne Login) ohne Prüfung.
+// Der Key liegt als Secret GEMINI_API_KEY am Worker. Nur für Premium-Konten und Admins und nur
+// innerhalb des Tageslimits: der Worker ruft dafür claim_scan() in Supabase mit dem Login des
+// Nutzers auf (supabase/014_scan_limit.sql). Auf localhost (wrangler dev, lokaler Testmodus ohne
+// Login) ohne Prüfung.
 const SCAN_MODEL = 'gemini-flash-lite-latest';
 const SCAN_MAX_BASE64 = 6 * 1024 * 1024;
 const SCAN_PROMPT = `Das Foto zeigt ein Bücherregal. Liste jedes Buch auf, dessen Rücken oder Cover zu sehen ist:
@@ -67,19 +68,22 @@ Erfinde keine Bücher, die nicht zu sehen sind.
 Antworte ausschließlich mit JSON in dieser Form:
 {"buecher": [{"titel": "...", "autor": "...", "reihe": "", "unsicher": false}]}`;
 
-// 200 = darf scannen, 401 = nicht (gültig) angemeldet, 403 = angemeldet, aber kein Premium.
-// Die Entscheidung trifft die Datenbank anhand des Logins; der Browser kann sie nicht fälschen.
-async function premiumStatus(request, env){
+// Fragt claim_scan() mit dem Login des Nutzers: 'ok' zählt den Scan schon mit. Sonst 'unauthorized',
+// 'premium_required', 'busy', 'daily_limit' oder 'user_limit'. Die Entscheidung trifft die Datenbank;
+// der Browser kann sie nicht fälschen.
+async function claimScan(request, env){
   const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-  if(!token || !env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return 401;
-  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/can_use_premium`, {
+  if(!token || !env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return 'unauthorized';
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/claim_scan`, {
     method: 'POST',
     headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: '{}',
   });
-  if(r.status === 401) return 401;
-  return r.ok && (await r.json()) === true ? 200 : 403;
+  if(r.status === 401) return 'unauthorized';
+  if(!r.ok) return 'premium_required';
+  return String(await r.json());
 }
+const CLAIM_STATUS = { unauthorized: 401, premium_required: 403, busy: 429, daily_limit: 429, user_limit: 429 };
 
 function cleanScan(text){
   const start = text.indexOf('{');
@@ -101,15 +105,16 @@ async function scanShelf(request, env){
   if(!env.GEMINI_API_KEY) return json({ error: 'not configured' }, 503);
   const { hostname } = new URL(request.url);
   const local = ['localhost', '127.0.0.1'].includes(hostname);
-  if(!local){
-    const status = await premiumStatus(request, env);
-    if(status !== 200) return json({ error: status === 401 ? 'unauthorized' : 'premium required' }, status);
-  }
-
+  // Erst das Foto prüfen, dann zählen: ein kaputter Upload soll kein Kontingent kosten.
   let image;
   try { ({ image } = await request.json()); } catch(e){ return json({ error: 'bad request' }, 400); }
   if(typeof image !== 'string' || !image) return json({ error: 'bad request' }, 400);
   if(image.length > SCAN_MAX_BASE64) return json({ error: 'too large' }, 413);
+
+  if(!local){
+    const claim = await claimScan(request, env);
+    if(claim !== 'ok') return json({ error: claim }, CLAIM_STATUS[claim] || 403);
+  }
 
   let r;
   try {

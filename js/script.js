@@ -3284,8 +3284,11 @@ async function photoToJpegBase64(file){
   return btoa(bin);
 }
 
-function scanErrorText(res){
+// code: das "error"-Feld aus der Antwort des Workers, z. B. die Tageslimits aus claim_scan().
+function scanErrorText(res, code){
   if(!res) return 'Das Foto konnte nicht gelesen werden. Prüf deine Verbindung und versuch es nochmal.';
+  if(code === 'user_limit') return 'Du hast heute schon 20 Fotos gescannt. Ab morgen 9 Uhr geht es weiter.';
+  if(code === 'daily_limit') return 'Für heute sind alle Scans aufgebraucht. Ab morgen 9 Uhr geht es weiter.';
   if(res.status === 429 || res.status === 503) return 'Die Erkennung ist gerade ausgelastet. Versuch es in einer Minute nochmal.';
   if(res.status === 401) return 'Zum Scannen musst du angemeldet sein.';
   if(res.status === 403) return 'Regal scannen ist eine Premium-Funktion.';
@@ -3321,8 +3324,10 @@ async function runScan(file){
   } catch(e){ res = null; }
   if(seq !== scanSeq) return;
   if(!res || !res.ok || !(res.headers.get('content-type') || '').includes('json')){
+    const code = res && !res.ok ? ((await res.json().catch(()=>null)) || {}).error : null;
+    if(seq !== scanSeq) return;
     scanBody.innerHTML = '';
-    scanLede.textContent = scanErrorText(res && res.ok ? { status: 404 } : res);
+    scanLede.textContent = scanErrorText(res && res.ok ? { status: 404 } : res, code);
     return;
   }
 
