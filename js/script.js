@@ -3420,7 +3420,6 @@ async function runScan(file){
   scanLede.textContent = 'Das Foto wird gelesen. Das dauert meist nur ein paar Sekunden.';
   scanBody.innerHTML = '<div class="scan-loading" aria-hidden="true"></div>';
   updateScanSave();
-  document.getElementById('series-list').innerHTML = shelves.filter(s=>s.is_series).map(s=>`<option value="${escapeHtml(s.label)}">`).join('');
   scanOverlay.classList.remove('hidden');
 
   let image;
