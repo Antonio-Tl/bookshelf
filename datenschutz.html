@@ -6,9 +6,7 @@
 <title>Datenschutz · Bücherregal</title>
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/svg+xml" href="img/favicon.svg?v=4">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 <script>
   // Gleiches Design wie in der App, ohne Aufflackern.
@@ -61,8 +59,9 @@
   <p>Wenn du ein Buch suchst oder die App ein Cover findet, fragt sie zwei Quellen:</p>
   <ul>
     <li><strong>Google Books</strong> (Google): Die Suchanfrage geht über unseren Server an Google. Google erfährt dabei nur den Suchbegriff, nicht deine IP-Adresse.</li>
-    <li><strong>Open Library</strong> (Internet Archive, USA): Dein Browser lädt Suchergebnisse und Coverbilder direkt von dort. Das Internet Archive erfährt dabei deine IP-Adresse und den Suchbegriff.</li>
+    <li><strong>Open Library</strong> (Internet Archive, USA): Dein Browser lädt Suchergebnisse direkt von dort. Das Internet Archive erfährt dabei deine IP-Adresse und den Suchbegriff.</li>
   </ul>
+  <p>Coverbilder lädt dein Browser direkt von dem Server, auf dem sie liegen: meist Open Library oder Google Books, bei einem selbst eingetragenen Cover von der angegebenen Adresse. Dieser Server erfährt dabei deine IP-Adresse.</p>
   <p>Rechtsgrundlage ist unser berechtigtes Interesse, Buchdaten und Cover anzuzeigen (Art. 6 Abs. 1 lit. f DSGVO).</p>
 
   <h2 id="scan">6. Regal scannen (Premium)</h2>
@@ -72,7 +71,7 @@
   <p>Rechtsgrundlage ist die Funktion, die du selbst auslöst (Art. 6 Abs. 1 lit. b DSGVO).</p>
 
   <h2>7. Schrift und Programmbibliotheken</h2>
-  <p>Die Schrift „Geist“ wird von Google Fonts (Google) geladen, die Datenbank-Bibliothek von Supabase vom Dienst jsDelivr. Dabei erfahren Google bzw. jsDelivr deine IP-Adresse. Rechtsgrundlage ist unser berechtigtes Interesse an einer einheitlichen, schnell ladenden Darstellung (Art. 6 Abs. 1 lit. f DSGVO).</p>
+  <p>Die Schrift „Geist“ liefern wir von unserem eigenen Server aus; dabei werden keine Daten an Dritte übertragen. Die Datenbank-Bibliothek von Supabase lädt dein Browser vom Dienst jsDelivr. Dabei erfährt jsDelivr deine IP-Adresse. Rechtsgrundlage ist unser berechtigtes Interesse an einer zuverlässig und schnell ladenden App (Art. 6 Abs. 1 lit. f DSGVO).</p>
 
   <h2>8. Speicher im Browser</h2>
   <p>Wir setzen keine Tracking-Cookies. Die App speichert im lokalen Speicher deines Browsers nur, was sie zum Funktionieren braucht: deine Anmeldung, Design und Ansicht, deine Einstellungen und zwischengespeicherte Cover, damit Regale schneller laden. Das ist nach § 25 Abs. 2 Nr. 2 TDDDG ohne Einwilligung erlaubt. Du kannst diese Daten jederzeit über deinen Browser löschen.</p>

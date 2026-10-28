@@ -1,7 +1,7 @@
 // Service Worker: macht die Seite installierbar und offline grundsätzlich lesbar.
 // Immer zuerst das Netz fragen, damit nach einem Deploy sofort die neue Version kommt;
 // der Cache ist nur der Rückfall ohne Verbindung.
-const CACHE = 'bookshelf-v2';
+const CACHE = 'bookshelf-v3';
 const SHELL = [
   './',
   'index.html',
@@ -14,6 +14,8 @@ const SHELL = [
   'img/logo-mark-negativ.svg',
   'img/favicon-192.png',
   'img/favicon-512.png',
+  'fonts/geist-latin-wght-normal.woff2',
+  'fonts/geist-latin-ext-wght-normal.woff2',
 ];
 
 self.addEventListener('install', event=>{
