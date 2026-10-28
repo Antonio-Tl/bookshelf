@@ -180,6 +180,7 @@
   <footer class="home-foot">
     <span>Bücherregal</span>
     <span>Buchdaten und Cover von Open Library und Google Books</span>
+    <nav class="legal-links" aria-label="Rechtliches"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></nav>
   </footer>
 </main>
 
@@ -296,6 +297,11 @@
   </div>
 </main>
 
+<!-- Impressum und Datenschutz unter jeder Ansicht; die Startseite hat sie in ihrem eigenen Fuß. -->
+<footer class="site-legal">
+  <nav class="legal-links" aria-label="Rechtliches"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></nav>
+</footer>
+
 <div class="modal-overlay hidden" id="modalOverlay">
   <div class="modal modal-add" role="dialog" aria-modal="true" aria-labelledby="addBookTitle">
     <form id="bookForm" autocomplete="off">
@@ -371,6 +377,7 @@
       <p class="modal-lede" id="scanLede" aria-live="polite"></p>
     </div>
     <div class="modal-add-body" id="scanBody"></div>
+    <p class="scan-privacy">Das Foto geht zur Erkennung an Google und wird von uns nicht gespeichert. <a href="datenschutz.html#scan" target="_blank" rel="noopener">Mehr dazu</a></p>
     <div class="modal-actions modal-add-foot">
       <button type="button" class="btn btn-ghost scan-again" id="scanAgainBtn">Anderes Foto</button>
       <button type="button" class="btn btn-ghost" id="cancelScanBtn">Abbrechen</button>

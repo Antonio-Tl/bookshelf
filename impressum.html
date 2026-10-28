@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Impressum · Bücherregal</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="img/favicon.svg?v=4">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  // Gleiches Design wie in der App, ohne Aufflackern.
+  (function(){
+    var t = 'oak';
+    try { t = localStorage.getItem('bookshelf-theme') || 'oak'; } catch(e){}
+    if(t === 'auto') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="./" aria-label="Bücherregal Startseite">
+    <img class="brand-mark" src="img/logo-mark.svg" alt="" width="28" height="24">
+    <img class="brand-mark brand-mark-negativ" src="img/logo-mark-negativ.svg" alt="" width="28" height="24">
+    <span class="brand-name">Bücherregal</span>
+  </a>
+</header>
+
+<main class="page legal">
+  <h1>Impressum</h1>
+
+  <h2>Angaben gemäß § 5 DDG</h2>
+  <p>
+    <span class="todo">[Vorname Nachname]</span><br>
+    <span class="todo">[Straße Hausnummer]</span><br>
+    <span class="todo">[PLZ Ort]</span><br>
+    Deutschland
+  </p>
+
+  <h2>Kontakt</h2>
+  <p>E-Mail: <span class="todo">[E-Mail-Adresse]</span></p>
+
+  <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
+  <p><span class="todo">[Vorname Nachname]</span>, Anschrift wie oben</p>
+
+  <h2>Inhalte der Nutzer</h2>
+  <p>Bücherregal ist eine Plattform, auf der angemeldete Nutzer eigene Regale anlegen und teilen. Für die Inhalte der Regale, etwa Notizen, Klappentexte und Bewertungen, sind die jeweiligen Nutzer verantwortlich. Wenn dir ein Inhalt auffällt, der gegen Rechte Dritter oder geltendes Recht verstößt, schreib bitte an die oben genannte E-Mail-Adresse. Rechtswidrige Inhalte entfernen wir, sobald wir davon erfahren.</p>
+
+  <h2>Links und Buchdaten</h2>
+  <p>Buchdaten und Cover stammen von <a href="https://openlibrary.org" rel="noopener">Open Library</a> und <a href="https://books.google.com" rel="noopener">Google Books</a>. Für die Inhalte verlinkter Seiten sind deren Betreiber verantwortlich.</p>
+
+  <h2>Verbraucherstreitbeilegung</h2>
+  <p>Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
+
+  <p class="legal-foot"><a href="datenschutz.html">Datenschutzerklärung</a> · <a href="./">Zur Startseite</a></p>
+</main>
+
+</body>
+</html>
