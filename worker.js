@@ -66,7 +66,9 @@ async function searchBooks(request, env, ctx){
 // Nutzers auf (supabase/014_scan_limit.sql). Ohne Prüfung nur unter `wrangler dev` mit SCAN_SKIP_AUTH=1
 // in .dev.vars (lokaler Testmodus ohne Login): die Datei wird nie hochgeladen, und der Hostname muss
 // zusätzlich localhost sein.
-const SCAN_MODEL = 'gemini-flash-lite-latest';
+// Fest statt "gemini-flash-lite-latest": der Alias wechselt ohne Ankündigung das Modell (und damit die
+// Geschwindigkeit). Minimales Nachdenken war im Test spürbar schneller und erkannte genauso viel.
+const SCAN_MODEL = 'gemini-3.5-flash-lite';
 const SCAN_MAX_BASE64 = 6 * 1024 * 1024;
 const SCAN_PROMPT = `Das Foto zeigt ein Bücherregal. Liste jedes Buch auf, dessen Rücken oder Cover zu sehen ist:
 von links nach rechts, oberstes Regalbrett zuerst. Gib Titel und Autor so an, wie sie gedruckt sind
@@ -127,18 +129,24 @@ async function scanShelf(request, env){
     if(claim !== 'ok') return json({ error: claim }, CLAIM_STATUS[claim] || 403);
   }
 
+  // Die Gratis-Stufe meldet oft kurz "überlastet" (503/429); einmal nach einer Pause neu versuchen,
+  // statt dem Nutzer gleich einen Fehler zu zeigen. Gezählt wurde der Scan oben nur einmal.
   let r;
-  try {
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${SCAN_MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        contents: [{ parts: [{ inline_data: { mime_type: 'image/jpeg', data: image } }, { text: SCAN_PROMPT }] }],
-        generationConfig: { responseMimeType: 'application/json' },
-      }),
-    });
-  } catch(e){
-    return json({ error: 'upstream unreachable' }, 502);
+  for(const wait of [0, 1500]){
+    if(wait) await new Promise(res=>setTimeout(res, wait));
+    try {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${SCAN_MODEL}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          contents: [{ parts: [{ inline_data: { mime_type: 'image/jpeg', data: image } }, { text: SCAN_PROMPT }] }],
+          generationConfig: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'minimal' } },
+        }),
+      });
+    } catch(e){
+      return json({ error: 'upstream unreachable' }, 502);
+    }
+    if(r.status !== 503 && r.status !== 429) break;
   }
   // Überlastung (429/503) unverändert weitergeben, damit die App "später nochmal" sagen kann.
   if(!r.ok) return json({ error: 'upstream', status: r.status }, r.status === 429 || r.status === 503 ? r.status : 502);

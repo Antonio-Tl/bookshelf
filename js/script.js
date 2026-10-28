@@ -3630,8 +3630,14 @@ function scanErrorText(res, code){
 async function runScan(file){
   const seq = ++scanSeq;
   scanItems = [];
-  scanLede.textContent = 'Das Foto wird gelesen. Das dauert meist nur ein paar Sekunden.';
+  scanLede.textContent = 'Das Foto wird gelesen. Meist dauert das ein paar Sekunden, bei viel Andrang auch mal bis zu einer Minute.';
   scanBody.innerHTML = '<div class="scan-loading" aria-hidden="true"></div>';
+  // Dauert es länger, kurz Bescheid geben, damit niemand denkt, es hängt.
+  setTimeout(()=>{
+    if(seq === scanSeq && !scanItems.length && scanBody.querySelector('.scan-loading')){
+      scanLede.textContent = 'Gerade ist bei der Erkennung viel los. Noch einen Moment …';
+    }
+  }, 12000);
   updateScanSave();
   scanOverlay.classList.remove('hidden');
 
@@ -3712,7 +3718,7 @@ function renderScanList(){
     updateScanSave();
     return;
   }
-  scanLede.textContent = `${scanItems.length} ${scanItems.length === 1 ? 'Buch' : 'Bücher'} auf dem Foto erkannt. Hak an, was ins Regal soll.`;
+  scanLede.textContent = `${scanItems.length} ${scanItems.length === 1 ? 'Buch' : 'Bücher'} auf dem Foto erkannt. Die Erkennung kann sich irren, schau also kurz über die Liste und hak an, was ins Regal soll.`;
   const idx = pick=>scanItems.map((b, i)=>i).filter(i=>pick(scanItems[i]));
   const fresh = idx(b=>!b.owned && !b.unsicher);
   const unsure = idx(b=>!b.owned && b.unsicher);
