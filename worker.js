@@ -53,8 +53,9 @@ async function searchBooks(request, env, ctx){
 }
 
 // POST /api/scan { image: <JPEG als Base64> } liest die Buchrücken auf einem Regalfoto mit Gemini.
-// Der Key liegt als Secret GEMINI_API_KEY am Worker. Nur für angemeldete Nutzer; auf localhost
-// (wrangler dev, lokaler Testmodus ohne Login) ohne Anmeldung.
+// Der Key liegt als Secret GEMINI_API_KEY am Worker. Nur für Premium-Konten und Admins: der Worker
+// fragt dafür can_use_premium() in Supabase mit dem Login des Nutzers ab. Auf localhost
+// (wrangler dev, lokaler Testmodus ohne Login) ohne Prüfung.
 const SCAN_MODEL = 'gemini-flash-lite-latest';
 const SCAN_MAX_BASE64 = 6 * 1024 * 1024;
 const SCAN_PROMPT = `Das Foto zeigt ein Bücherregal. Liste jedes Buch auf, dessen Rücken oder Cover zu sehen ist:
@@ -66,13 +67,18 @@ Erfinde keine Bücher, die nicht zu sehen sind.
 Antworte ausschließlich mit JSON in dieser Form:
 {"buecher": [{"titel": "...", "autor": "...", "reihe": "", "unsicher": false}]}`;
 
-async function signedInUser(request, env){
+// 200 = darf scannen, 401 = nicht (gültig) angemeldet, 403 = angemeldet, aber kein Premium.
+// Die Entscheidung trifft die Datenbank anhand des Logins; der Browser kann sie nicht fälschen.
+async function premiumStatus(request, env){
   const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-  if(!token || !env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
-  const r = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
-    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+  if(!token || !env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return 401;
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/can_use_premium`, {
+    method: 'POST',
+    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: '{}',
   });
-  return r.ok ? r.json() : null;
+  if(r.status === 401) return 401;
+  return r.ok && (await r.json()) === true ? 200 : 403;
 }
 
 function cleanScan(text){
@@ -95,7 +101,10 @@ async function scanShelf(request, env){
   if(!env.GEMINI_API_KEY) return json({ error: 'not configured' }, 503);
   const { hostname } = new URL(request.url);
   const local = ['localhost', '127.0.0.1'].includes(hostname);
-  if(!local && !(await signedInUser(request, env))) return json({ error: 'unauthorized' }, 401);
+  if(!local){
+    const status = await premiumStatus(request, env);
+    if(status !== 200) return json({ error: status === 401 ? 'unauthorized' : 'premium required' }, status);
+  }
 
   let image;
   try { ({ image } = await request.json()); } catch(e){ return json({ error: 'bad request' }, 400); }

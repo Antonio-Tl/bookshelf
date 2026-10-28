@@ -6,6 +6,7 @@ let currentUser = null;    // eingeloggter Auth-User (oder null)
 let currentProfile = null; // profiles-Zeile des eingeloggten Users
 let isAdminMember = false; // in der Tabelle admins eingetragen (Admin-Aktionen brauchen zusätzlich Zwei-Faktor)
 let ownBan = null;         // eigene Sperre {reason, banned_at} oder null
+let canUsePremium = false; // Premium oder Admin laut can_use_premium(); blendet nur Knöpfe ein, der Worker prüft selbst
 
 let viewedProfile = null;  // profiles-Zeile des Regals, das gerade angezeigt wird
 
@@ -1030,6 +1031,7 @@ async function handleSession(session){
     currentProfile = null;
     isAdminMember = false;
     ownBan = null;
+    canUsePremium = false;
     resetSocial();
   }
   // Login/Logout auf localhost wechselt zwischen Testkopie und echten Daten.
@@ -1044,12 +1046,14 @@ async function loadProfile(){
   if(error){ showToast('Profil konnte nicht geladen werden'); return; }
   currentProfile = data;
   // Beide Tabellen zeigen nur die eigene Zeile. Fehlen sie noch (SQL 008 nicht ausgeführt), gilt: kein Admin, keine Sperre.
-  const [{ data: adminRow }, { data: banRow }] = await Promise.all([
+  const [{ data: adminRow }, { data: banRow }, { data: premium }] = await Promise.all([
     supabaseClient.from('admins').select('user_id').eq('user_id', currentUser.id).maybeSingle(),
     supabaseClient.from('bans').select('reason, banned_at').eq('user_id', currentUser.id).maybeSingle(),
+    supabaseClient.rpc('can_use_premium'),
   ]);
   isAdminMember = !!adminRow;
   ownBan = banRow || null;
+  canUsePremium = premium === true;
 }
 
 const LOGIN_HINT_DISMISSED_KEY = 'bookshelf-login-hint-dismissed';
@@ -2245,16 +2249,20 @@ async function loadAdminData(){
 function renderAdminStats(){
   const books = adminUsers.reduce((s, u)=>s + Number(u.book_count || 0), 0);
   const banned = adminUsers.filter(u=>u.banned_at).length;
+  const premium = adminUsers.filter(u=>u.is_premium).length;
   document.getElementById('adminStats').innerHTML = `
     <div><dt>Konten</dt><dd>${adminUsers.length}</dd></div>
     <div><dt>Bücher</dt><dd>${books}</dd></div>
+    <div><dt>Premium</dt><dd>${premium}</dd></div>
     <div><dt>Gesperrt</dt><dd>${banned}</dd></div>`;
 }
 
 function adminUserHtml(u){
   const open = u.id === adminOpenId;
   const name = u.username ? shownName(u) : 'Ohne Nutzernamen';
-  const badges = (u.is_admin ? '<span class="badge">Admin</span>' : '') + (u.banned_at ? '<span class="badge badge-danger">Gesperrt</span>' : '');
+  const badges = (u.is_admin ? '<span class="badge">Admin</span>' : '')
+    + (u.is_premium ? '<span class="badge badge-premium">Premium</span>' : '')
+    + (u.banned_at ? '<span class="badge badge-danger">Gesperrt</span>' : '');
   const avatar = u.avatar_url
     ? `<img class="reader-avatar" src="${escapeHtml(u.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
     : `<span class="reader-avatar reader-avatar-fallback" aria-hidden="true">${escapeHtml((u.username || '?').charAt(0).toUpperCase())}</span>`;
@@ -2264,6 +2272,7 @@ function adminUserHtml(u){
       <div class="admin-actions">
         ${u.username ? `<a class="btn btn-secondary" href="?u=${encodeURIComponent(u.username)}" data-act="open">Regal öffnen</a>` : ''}
         <button type="button" class="btn btn-secondary" data-act="rename">Umbenennen</button>
+        <button type="button" class="btn btn-secondary" data-act="premium">${u.is_premium ? 'Premium entziehen' : 'Premium geben'}</button>
         ${u.is_admin ? '' : `<button type="button" class="btn btn-secondary" data-act="ban">${u.banned_at ? 'Sperre aufheben' : 'Sperren'}</button>`}
         <button type="button" class="btn btn-danger-outline" data-act="clear" ${Number(u.book_count) ? '' : 'disabled'}>Regal leeren</button>
         ${u.is_admin ? '' : '<button type="button" class="btn btn-danger-outline" data-act="delete">Konto löschen</button>'}
@@ -2349,6 +2358,12 @@ async function adminAction(act, u){
       match: u.username || 'löschen', confirmLabel: 'Konto löschen', danger: true })){
       if(await runAdmin('admin_delete_user', { target: u.id }, 'Konto gelöscht')) adminOpenId = null;
     }
+  } else if(act === 'premium'){
+    if(!u.is_premium){
+      await runAdmin('admin_set_premium', { target: u.id, premium: true }, `${label} hat jetzt Premium`);
+    } else if(await ask({ title: `Premium von ${label} entziehen?`, text: 'Premium-Funktionen wie „Regal scannen“ sind danach nicht mehr verfügbar. Das Regal bleibt, wie es ist.', confirmLabel: 'Premium entziehen' })){
+      await runAdmin('admin_set_premium', { target: u.id, premium: false }, `Premium von ${label} entzogen`);
+    }
   }
 }
 
@@ -2389,6 +2404,8 @@ const LOG_LABELS = {
   delete_book: 'hat ein Buch gelöscht bei',
   clear_shelf: 'hat das Regal geleert von',
   delete_user: 'hat das Konto gelöscht:',
+  premium_on: 'hat Premium vergeben an',
+  premium_off: 'hat Premium entzogen:',
 };
 function renderAdminLog(entries){
   const box = document.getElementById('adminLog');
@@ -2632,6 +2649,8 @@ function render(){
   renderFollowButtons();
   syncViewButtons();
   document.getElementById('headerActions').classList.toggle('hidden', !owner);
+  // Regal scannen ist Premium; im lokalen Testmodus immer da, damit es sich ohne Login ausprobieren lässt.
+  document.getElementById('openScanBtn').classList.toggle('hidden', !(canUsePremium || devSandboxActive()));
 
   const container = document.getElementById('shelves');
   container.classList.toggle('grid-mode', viewMode === 'grid');
@@ -3269,6 +3288,7 @@ function scanErrorText(res){
   if(!res) return 'Das Foto konnte nicht gelesen werden. Prüf deine Verbindung und versuch es nochmal.';
   if(res.status === 429 || res.status === 503) return 'Die Erkennung ist gerade ausgelastet. Versuch es in einer Minute nochmal.';
   if(res.status === 401) return 'Zum Scannen musst du angemeldet sein.';
+  if(res.status === 403) return 'Regal scannen ist eine Premium-Funktion.';
   if(res.status === 413) return 'Das Foto ist zu groß.';
   if(res.status === 404 || res.status === 405) return 'Scannen geht nur über den Worker: online oder lokal mit „wrangler dev“.';
   return 'Das hat nicht geklappt. Versuch es nochmal oder mit einem anderen Foto.';
@@ -3313,10 +3333,39 @@ async function runScan(file){
     // Eine schon vorhandene Reihe mit gleichem Namen übernehmen, damit die Bücher dort einsortiert werden.
     const known = b.reihe ? shelves.find(s=>s.is_series && normTitle(s.label) === normTitle(b.reihe)) : null;
     const isOwned = owned.has(normTitle(b.titel));
-    // Unsicher gelesene Titel sind oft falsch; die muss man bewusst anhaken.
-    return { titel: b.titel, autor: b.autor, reihe: known ? known.label : b.reihe, unsicher: b.unsicher, owned: isOwned, checked: !isOwned && !b.unsicher };
+    // Unsicher gelesene Titel sind oft falsch: abgewählt und gleich zum Bearbeiten offen.
+    const unsure = b.unsicher && !isOwned;
+    return { titel: b.titel, autor: b.autor, reihe: known ? known.label : b.reihe, unsicher: b.unsicher, owned: isOwned,
+      checked: !isOwned && !b.unsicher, editing: unsure, cover: null };
   });
+  scanOwnedOpen = false;
   renderScanList();
+  loadScanCovers(seq);
+}
+
+let scanOwnedOpen = false;
+const ICON_SCAN_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>';
+
+function scanRowHtml(b, i){
+  const series = b.reihe && normTitle(b.reihe) !== normTitle(b.titel) ? b.reihe : '';
+  const meta = [b.autor, series].filter(Boolean).join(' · ');
+  const editor = b.editing ? `
+    <div class="scan-editor">
+      <label class="field"><span>Titel</span><input type="text" data-i="${i}" data-k="titel" value="${escapeHtml(b.titel)}"></label>
+      <div class="field-row">
+        <label class="field"><span>Autor</span><input type="text" data-i="${i}" data-k="autor" value="${escapeHtml(b.autor)}"></label>
+        <label class="field"><span>Reihe</span><input type="text" data-i="${i}" data-k="reihe" value="${escapeHtml(b.reihe)}" placeholder="leer: Einzelband" list="series-list"></label>
+      </div>
+    </div>` : '';
+  return `<li class="scan-row${b.checked ? ' is-on' : ''}" data-i="${i}">
+    <label class="scan-pick">
+      <input type="checkbox" class="scan-check" data-i="${i}" ${b.checked ? 'checked' : ''}>
+      <span class="scan-cover" aria-hidden="true">${b.cover ? `<img src="${escapeHtml(b.cover)}" alt="">` : `<span>${escapeHtml(b.titel.charAt(0).toUpperCase())}</span>`}</span>
+      <span class="scan-text"><b>${escapeHtml(b.titel)}</b>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}</span>
+    </label>
+    <button type="button" class="icon-btn sm scan-edit" data-edit="${i}" aria-expanded="${b.editing}" aria-label="„${escapeHtml(b.titel)}“ bearbeiten">${ICON_SCAN_EDIT}</button>
+    ${editor}
+  </li>`;
 }
 
 function renderScanList(){
@@ -3326,33 +3375,89 @@ function renderScanList(){
     updateScanSave();
     return;
   }
-  const unsure = scanItems.filter(b=>b.unsicher).length;
-  scanLede.textContent = `${scanItems.length} Bücher erkannt${unsure ? `, ${unsure} davon unsicher` : ''}. Korrigier, was nicht stimmt, und wähl aus, was ins Regal soll.`;
-  scanBody.innerHTML = `<ul class="scan-list">${scanItems.map((b, i)=>`
-    <li class="scan-item${b.unsicher ? ' is-unsure' : ''}${b.owned ? ' is-owned' : ''}">
-      <input type="checkbox" class="scan-check" data-i="${i}" ${b.checked ? 'checked' : ''} aria-label="„${escapeHtml(b.titel)}“ übernehmen">
-      <div class="scan-fields">
-        <input type="text" class="scan-title" data-i="${i}" data-k="titel" value="${escapeHtml(b.titel)}" aria-label="Titel">
-        <div class="scan-sub">
-          <input type="text" data-i="${i}" data-k="autor" value="${escapeHtml(b.autor)}" placeholder="Autor" aria-label="Autor">
-          <input type="text" data-i="${i}" data-k="reihe" value="${escapeHtml(b.reihe)}" placeholder="Reihe (leer: Einzelband)" list="series-list" aria-label="Reihe">
-        </div>
-        ${b.owned ? '<small class="scan-note">Steht schon in deinem Regal</small>' : b.unsicher ? '<small class="scan-note">Unsicher gelesen: Titel prüfen und dann anhaken</small>' : ''}
-      </div>
-    </li>`).join('')}</ul>`;
+  scanLede.textContent = `${scanItems.length} ${scanItems.length === 1 ? 'Buch' : 'Bücher'} auf dem Foto erkannt. Hak an, was ins Regal soll.`;
+  const idx = pick=>scanItems.map((b, i)=>i).filter(i=>pick(scanItems[i]));
+  const fresh = idx(b=>!b.owned && !b.unsicher);
+  const unsure = idx(b=>!b.owned && b.unsicher);
+  const owned = idx(b=>b.owned);
+  const rows = list=>`<ul class="scan-rows">${list.map(i=>scanRowHtml(scanItems[i], i)).join('')}</ul>`;
+  const allOn = fresh.length && fresh.every(i=>scanItems[i].checked);
+  scanBody.innerHTML = `
+    ${fresh.length ? `<section class="scan-section">
+      <div class="scan-section-head"><h3>Neu <span>${fresh.length}</span></h3>
+        <button type="button" class="link-btn" data-all="${allOn ? 'off' : 'on'}">${allOn ? 'Alle abwählen' : 'Alle auswählen'}</button></div>
+      ${rows(fresh)}</section>` : ''}
+    ${unsure.length ? `<section class="scan-section">
+      <div class="scan-section-head"><h3>Bitte prüfen <span>${unsure.length}</span></h3></div>
+      <p class="scan-section-hint">Diese Titel waren schwer zu lesen. Stimmt einer, hak ihn an; sonst korrigier ihn vorher.</p>
+      ${rows(unsure)}</section>` : ''}
+    ${owned.length ? `<details class="scan-section scan-owned"${scanOwnedOpen ? ' open' : ''}>
+      <summary class="scan-section-head"><h3>Schon in deinem Regal <span>${owned.length}</span></h3></summary>
+      ${rows(owned)}</details>` : ''}`;
   updateScanSave();
+}
+
+// Cover von Open Library nachladen: macht die Liste lebendig und zeigt nebenbei, ob ein Titel gefunden wurde.
+async function scanCoverFor(title, author){
+  try {
+    const q = new URLSearchParams({ title, limit: '1', fields: 'cover_i' });
+    if(author) q.set('author', author);
+    const r = await fetch(`https://openlibrary.org/search.json?${q}`);
+    const id = r.ok ? (await r.json()).docs?.[0]?.cover_i : null;
+    return id ? coverUrl(id, 'M') : null;
+  } catch(e){ return null; }
+}
+async function loadScanCovers(seq){
+  const queue = scanItems.map((b, i)=>i).sort((a, b)=>scanItems[a].owned - scanItems[b].owned);
+  const next = async ()=>{
+    while(queue.length){
+      const i = queue.shift();
+      const b = scanItems[i];
+      const url = await scanCoverFor(b.titel, b.autor);
+      if(seq !== scanSeq) return;
+      if(!url) continue;
+      b.cover = url;
+      const slot = scanBody.querySelector(`.scan-row[data-i="${i}"] .scan-cover`);
+      if(slot) slot.innerHTML = `<img src="${escapeHtml(url)}" alt="">`;
+    }
+  };
+  await Promise.all([next(), next(), next()]);
 }
 
 scanBody.addEventListener('input', e=>{
   const i = e.target.getAttribute('data-i');
   const k = e.target.getAttribute('data-k');
-  if(i !== null && k) scanItems[i][k] = e.target.value;
+  if(i === null || !k) return;
+  scanItems[i][k] = e.target.value;
+  // Titelzeile live mitschreiben, ohne die Liste neu zu bauen (sonst springt der Cursor raus).
+  const row = scanBody.querySelector(`.scan-row[data-i="${i}"]`);
+  if(row && k === 'titel') row.querySelector('.scan-text b').textContent = e.target.value;
+  updateScanSave();
 });
 scanBody.addEventListener('change', e=>{
   if(!e.target.classList.contains('scan-check')) return;
-  scanItems[e.target.getAttribute('data-i')].checked = e.target.checked;
+  const i = e.target.getAttribute('data-i');
+  scanItems[i].checked = e.target.checked;
+  e.target.closest('.scan-row').classList.toggle('is-on', e.target.checked);
   updateScanSave();
 });
+scanBody.addEventListener('click', e=>{
+  const edit = e.target.closest('[data-edit]');
+  const all = e.target.closest('[data-all]');
+  if(edit){
+    const b = scanItems[edit.getAttribute('data-edit')];
+    b.editing = !b.editing;
+    renderScanList();
+    if(b.editing) scanBody.querySelector(`.scan-row[data-i="${edit.getAttribute('data-edit')}"] .scan-editor input`).focus();
+  } else if(all){
+    const on = all.getAttribute('data-all') === 'on';
+    scanItems.forEach(b=>{ if(!b.owned && !b.unsicher) b.checked = on; });
+    renderScanList();
+  }
+});
+scanBody.addEventListener('toggle', e=>{
+  if(e.target.classList && e.target.classList.contains('scan-owned')) scanOwnedOpen = e.target.open;
+}, true);
 
 function updateScanSave(){
   const n = scanItems.filter(b=>b.checked && b.titel.trim()).length;
