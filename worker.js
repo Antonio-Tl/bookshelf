@@ -208,6 +208,9 @@ async function startCheckout(request, env){
 
   const params = {
     mode: 'payment',
+    // Stripe schaltet bei neuen Konten "Managed Payments" ein (Stripe als Händler); wir verkaufen selbst
+    // (Kleinunternehmer, eigene AGB), und eigene Texte auf der Bezahlseite gehen nur ohne.
+    'managed_payments[enabled]': 'false',
     locale: 'de',
     submit_type: 'pay',
     'line_items[0][quantity]': '1',
