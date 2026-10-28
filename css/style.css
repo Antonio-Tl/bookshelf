@@ -2053,8 +2053,35 @@ input[type="date"] {
   text-align: left;
 }
 input[type="date"]::-webkit-date-and-time-value {
+  min-height: 1.5em; /* leeres Feld fällt in iOS sonst auf eine andere Höhe */
   text-align: left;
   margin: 0;
+}
+/* Zeilen mit Eingabefeld mittig ausrichten: ein leeres Datumsfeld hat keine Grundlinie,
+   das Label rutschte sonst an die Unterkante. */
+.detail-row:has(input) {
+  align-items: center;
+}
+.date-field {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.date-placeholder {
+  display: none;
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--dim);
+  font-size: 15px;
+  pointer-events: none;
+}
+/* Nur iOS zeigt ein leeres Datumsfeld ganz leer; Desktop-Browser haben ihren eigenen Platzhalter. */
+@supports (-webkit-touch-callout: none) {
+  .date-field.is-empty .date-placeholder {
+    display: block;
+  }
 }
 .detail-block {
   padding: 16px 0;

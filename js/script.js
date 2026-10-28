@@ -470,8 +470,31 @@ function bookVisual(b, seriesLabel){
     pages,
     pagesEstimated: !b.page_count && !!pages,
     url: has ? entry.src : null,
-    urlLarge: has ? (entry.srcLarge || entry.src) : null,
+    urlLarge: has ? (entry.largeOk ? entry.srcLarge : entry.src) : null,
   };
+}
+
+// Google liefert für manche Bände statt einer großen Fassung sein „image not available“-Bild, mit
+// anderem Seitenverhältnis. Die große Fassung gilt darum erst, wenn sie zum kleinen Bild passt.
+const largeCoverChecks = new Set();
+function verifyLargeCover(b){
+  const entry = coverCache[coverKey(b)];
+  if(!entry || !entry.src || !entry.srcLarge || entry.largeOk !== undefined || largeCoverChecks.has(coverKey(b))) return;
+  if(entry.srcLarge === entry.src){ entry.largeOk = true; return; }
+  largeCoverChecks.add(coverKey(b));
+  const ratioOf = url=>new Promise(resolve=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0);
+    img.onerror = ()=>resolve(0);
+    img.src = url;
+  });
+  Promise.all([ratioOf(entry.src), ratioOf(entry.srcLarge)]).then(([small, large])=>{
+    // Kein Netz: nichts merken, beim nächsten Öffnen erneut prüfen.
+    if(!small){ largeCoverChecks.delete(coverKey(b)); return; }
+    entry.largeOk = large > 0 && Math.abs(small - large) < 0.04;
+    saveCoverCache();
+    refreshBookVisual(b);
+  });
 }
 
 function visualStyle(v, large){
@@ -2829,7 +2852,7 @@ function buildDetailCard(book, group, owner){
     : `<p class="detail-row"><span class="row-label">Kategorien</span><span class="row-value">${escapeHtml(group.categories.map(c=>c.name).join(', '))}</span></p>`;
 
   const dateBlockHtml = owner
-    ? `<label class="detail-row"><span class="row-label">Gelesen am</span><input type="date" class="f-date" value="${escapeHtml(book.date_read||'')}"></label>`
+    ? `<label class="detail-row"><span class="row-label">Gelesen am</span><span class="date-field ${book.date_read ? '' : 'is-empty'}"><input type="date" class="f-date" value="${escapeHtml(book.date_read||'')}"><span class="date-placeholder" aria-hidden="true">Datum wählen</span></span></label>`
     : (book.date_read ? `<p class="detail-row"><span class="row-label">Gelesen am</span><span class="row-value">${escapeHtml(formatDate(book.date_read))}</span></p>` : '');
 
   // Seitenzahl und Klappentext ändert der Besitzer nur im Bearbeitungsmodus (Stift), dort stehen sie bei Titel und Autor.
@@ -2889,6 +2912,7 @@ function buildDetailCard(book, group, owner){
   wrap.querySelector('.close-x').addEventListener('click', closeDetail);
 
   const coverEl = wrap.querySelector('.detail-cover');
+  verifyLargeCover(book);
   coverEl.addEventListener('click', ()=>openCoverZoom(book, group));
   coverEl.addEventListener('keydown', e=>{
     if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openCoverZoom(book, group); }
@@ -2959,6 +2983,9 @@ function buildDetailCard(book, group, owner){
         if(error){ showToast('Fehler beim Speichern'); return; }
         await refreshAndRender();
       });
+    });
+    wrap.querySelector('.f-date').addEventListener('input', e=>{
+      e.target.parentElement.classList.toggle('is-empty', !e.target.value);
     });
     wrap.querySelector('.f-date').addEventListener('change', async (e)=>{
       const { error } = await db('books').update({date_read: e.target.value || null}).eq('id', book.id);
