@@ -3463,6 +3463,21 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
 .modal-scan .scan-again {
   margin-right: auto;
 }
+.modal-scan .modal-lede:empty {
+  display: none;
+}
+/* Kein Buch erkannt: groß und mittig zwischen Kopf und Fuß des Fensters */
+.scan-empty {
+  margin: 0;
+  padding: 26px 8px 4px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  text-align: center;
+  text-wrap: balance;
+}
 /* Während das Foto gelesen wird, geht das Fenster nur über „Abbrechen“ zu */
 .is-busy #closeScanBtn {
   visibility: hidden;

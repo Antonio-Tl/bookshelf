@@ -3903,8 +3903,9 @@ function scanRowHtml(b, i){
 
 function renderScanList(){
   if(!scanItems.length){
-    scanBody.innerHTML = '';
-    scanLede.textContent = 'Auf dem Foto wurde kein Buch erkannt!';
+    // Groß in der Mitte statt klein im Kopf; role="status" sagt es auch Screenreadern an.
+    scanLede.textContent = '';
+    scanBody.innerHTML = '<p class="scan-empty" role="status">Auf dem Foto wurde kein Buch erkannt!</p>';
     updateScanSave();
     return;
   }
