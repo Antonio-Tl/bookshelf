@@ -1365,6 +1365,8 @@ h1 {
   grid-column: 1 / -1;
   min-width: 0;
   padding-bottom: 34px;
+  /* Der Schein darf über die Reihe hinaus leuchten, aber die Seite nie seitlich verbreitern. */
+  overflow-x: clip;
   border-bottom: 1px solid var(--line-soft);
   /* Galerielicht auf der Wand hinter der Reihe. */
   background: radial-gradient(ellipse 46% 58% at 50% 48%, var(--spot), transparent 72%);
@@ -1411,11 +1413,10 @@ html[data-theme="midnight"] .vitrine {
 }
 .vitrine .ledge {
   gap: 30px;
-  /* Viel Rand, weil die Ledge scrollt und den Schein sonst hart abschneidet; passt die Reihe nicht,
-     laufen die Ränder weich aus statt mitten im Cover abzubrechen. */
   padding: 56px 72px var(--plaque-gap);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  /* Höchstens drei Bücher, die Größe ist so gewählt, dass sie immer passen: kein Scrollen, also
+     auch kein Verschieben mit dem Finger und kein abgeschnittener Schein. */
+  overflow: visible;
 }
 @media (max-width: 1100px) {
   .vitrine {
@@ -1471,9 +1472,9 @@ html[data-theme="midnight"] .vitrine {
 /* Schildchen unter dem Brett. */
 .vitrine-plaque {
   position: absolute;
-  top: calc(100% + 28px);
+  top: calc(100% + 24px);
   left: 50%;
-  width: calc(100% + 20px);
+  width: calc(100% + 12px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1536,13 +1537,61 @@ html[data-theme="midnight"] .vitrine {
 #shelfShowcaseRow {
   border-bottom: none;
 }
+/* Bände einer Reihe für die Vitrine wählen: kleine Cover, gewählte mit Haken und Rahmen. */
 .vitrine-pick {
-  margin: -2px 0 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 14px 12px;
+  margin: 2px 0 8px;
 }
-.vitrine-pick .cat-toggle {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.vitrine-pick-item {
+  gap: 2px;
+  align-items: center;
+  text-align: center;
+}
+.vitrine-pick-item .tile-cover {
+  width: 100%;
+  margin-bottom: 4px;
+  transition:
+    transform 0.35s var(--ease-out),
+    opacity 0.2s ease,
+    box-shadow 0.35s var(--ease-out);
+}
+.vitrine-pick-item .gen-cover b {
+  font-size: 10px;
+}
+.vitrine-pick-item .gen-cover small {
+  display: none;
+}
+.vitrine-pick-item:not(.open) .tile-cover {
+  opacity: 0.55;
+}
+.vitrine-pick-item.is-muted .tile-cover {
+  opacity: 0.3;
+}
+.vitrine-pick-item:not(.open):hover .tile-cover {
+  opacity: 0.85;
+}
+.vitrine-pick-item.open .tile-meta {
+  color: var(--ink);
+  font-weight: 600;
+}
+.vitrine-check {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.vitrine-check svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* ---------- ledge & books ---------- */
@@ -4434,19 +4483,26 @@ body:has(#homeView:not(.hidden)) .site-legal {
     border-radius: 0;
   }
   .vitrine {
-    --ledge-h: 184px;
-    --plaque-gap: 58px;
+    /* Drei Cover (Seitenverhältnis bis 0,7) plus Abstände passen in die Bildschirmbreite. */
+    --ledge-h: min(184px, calc((100vw - 76px) / 2.1));
+    --plaque-gap: 56px;
     padding-bottom: 26px;
+  }
+  .vitrine-plaque b {
+    font-size: 12px;
   }
   .vitrine-head .series-title {
     font-size: 22px;
   }
-  .vitrine .ledge-wrap {
-    width: auto;
-  }
   .vitrine .ledge {
-    gap: 22px;
-    padding: 30px 16px var(--plaque-gap);
+    gap: 14px;
+    margin: 0;
+    padding: 30px 8px var(--plaque-gap);
+  }
+  .vitrine .ledge-wrap::after {
+    left: -6px;
+    right: -6px;
+    border-radius: 3px;
   }
   .tile-grid {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));

@@ -2676,6 +2676,7 @@ function faceOutId(group){
 // ---- Vitrine (Premium): erste Reihe im Regal, alle Cover nach vorne ----
 const ICON_SPARK = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>';
 const SHOWCASE_MAX = 3;
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"/></svg>';
 
 function canEditShowcase(){
   return isOwnerView() && (canUsePremium || devSandboxActive());
@@ -4035,17 +4036,24 @@ function syncShelfShowcase(){
   const btn = document.getElementById('shelfShowcaseBtn');
   btn.textContent = inside ? 'Herausnehmen' : 'In die Vitrine';
   btn.disabled = !inside && (priv || !volumes.length);
+  const picked = inside ? showcaseBookIds().length : 0;
   document.getElementById('shelfShowcaseHint').textContent = inside
-    ? `Wähle bis zu ${SHOWCASE_MAX} Bände, die ganz oben in deinem Regal stehen.`
+    ? `${picked} von ${SHOWCASE_MAX} gewählt · Tippe auf ein Cover.`
     : priv ? 'Private Reihen können nicht in die Vitrine.'
     : `Bis zu ${SHOWCASE_MAX} Bände dieser Reihe ganz oben in deinem Regal. Ersetzt, was gerade in der Vitrine steht.`;
   if(!inside){ pick.innerHTML = ''; return; }
   const chosen = new Set(showcaseBookIds());
+  const group = buildGroups().find(x=>x.key === currentShelfKey);
+  const full = chosen.size >= SHOWCASE_MAX;
   pick.innerHTML = volumes.map(b=>{
     const on = chosen.has(String(b.id));
-    return `<button type="button" class="cat-toggle ${on ? 'active' : ''}" data-id="${escapeHtml(b.id)}" aria-pressed="${on}">${volumes.length > 1 ? `${escapeHtml(String(b.series_order))} · ` : ''}${escapeHtml(b.title)}</button>`;
+    const v = bookVisual(b, group.label);
+    return `<button type="button" class="tile vitrine-pick-item ${v.ink} ${v.has ? 'has-cover' : ''} ${on ? 'open' : ''} ${!on && full ? 'is-muted' : ''}" data-book="${escapeHtml(b.id)}" data-id="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-pressed="${on}" aria-label="${escapeHtml(`Band ${b.series_order}: ${b.title}`)}">
+      <span class="tile-cover">${genCoverHtml(b, group)}${on ? `<span class="vitrine-check" aria-hidden="true">${ICON_CHECK}</span>` : ''}</span>
+      <span class="tile-meta">Band ${escapeHtml(String(b.series_order))}</span>
+    </button>`;
   }).join('');
-  pick.querySelectorAll('.cat-toggle').forEach(chip=>{
+  pick.querySelectorAll('.vitrine-pick-item').forEach(chip=>{
     chip.addEventListener('click', async ()=>{
       const id = chip.getAttribute('data-id');
       const ids = showcaseBookIds();
