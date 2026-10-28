@@ -11,3 +11,4 @@ wrangler.jsonc
 .DS_Store
 supabase
 node_modules
+scan-lab
