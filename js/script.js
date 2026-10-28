@@ -7,6 +7,8 @@ let currentProfile = null; // profiles-Zeile des eingeloggten Users
 let isAdminMember = false; // in der Tabelle admins eingetragen (Admin-Aktionen brauchen zusätzlich Zwei-Faktor)
 let ownBan = null;         // eigene Sperre {reason, banned_at} oder null
 let canUsePremium = false; // Premium oder Admin laut can_use_premium(); blendet nur Knöpfe ein, der Worker prüft selbst
+let ownPremium = false;    // eigene Zeile in premium_members (gekauft oder geschenkt); Admins ohne Zeile dürfen kaufen
+let ownPurchase = null;    // letzter eigener bezahlter Kauf {created_at} oder null (für den Widerruf)
 
 let viewedProfile = null;  // profiles-Zeile des Regals, das gerade angezeigt wird
 
@@ -1072,6 +1074,7 @@ async function handleSession(session){
       const target = getPref(AFTER_LOGIN_KEY, '');
       setPref(AFTER_LOGIN_KEY, '');
       if(target === 'admin') navigate('?view=admin');
+      else if(target === 'buy') openBuy();
       else goToUser(currentProfile.username);
     }
     loadSocial();
@@ -1080,6 +1083,8 @@ async function handleSession(session){
     isAdminMember = false;
     ownBan = null;
     canUsePremium = false;
+    ownPremium = false;
+    ownPurchase = null;
     resetSocial();
   }
   // Login/Logout auf localhost wechselt zwischen Testkopie und echten Daten.
@@ -1094,14 +1099,27 @@ async function loadProfile(){
   if(error){ showToast('Profil konnte nicht geladen werden'); return; }
   currentProfile = data;
   // Beide Tabellen zeigen nur die eigene Zeile. Fehlen sie noch (SQL 008 nicht ausgeführt), gilt: kein Admin, keine Sperre.
-  const [{ data: adminRow }, { data: banRow }, { data: premium }] = await Promise.all([
+  const [{ data: adminRow }, { data: banRow }] = await Promise.all([
     supabaseClient.from('admins').select('user_id').eq('user_id', currentUser.id).maybeSingle(),
     supabaseClient.from('bans').select('reason, banned_at').eq('user_id', currentUser.id).maybeSingle(),
-    supabaseClient.rpc('can_use_premium'),
+    loadPremium(),
   ]);
   isAdminMember = !!adminRow;
   ownBan = banRow || null;
+}
+
+// Premium-Stand des eigenen Kontos; nach einem Kauf oder Widerruf wird nur das neu geladen.
+// Fehlt purchases noch (SQL 020 nicht ausgeführt), gibt es eben keinen Kauf.
+async function loadPremium(){
+  const [{ data: premium }, { data: member }, { data: purchase }] = await Promise.all([
+    supabaseClient.rpc('can_use_premium'),
+    supabaseClient.from('premium_members').select('source').eq('user_id', currentUser.id).maybeSingle(),
+    supabaseClient.from('purchases').select('created_at').eq('user_id', currentUser.id).eq('status', 'paid')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+  ]);
   canUsePremium = premium === true;
+  ownPremium = !!member;
+  ownPurchase = purchase || null;
 }
 
 const LOGIN_HINT_DISMISSED_KEY = 'bookshelf-login-hint-dismissed';
@@ -2129,6 +2147,7 @@ async function openAccount(){
   syncDisplayRow();
   syncRenameRow();
   syncPrivacyRows();
+  syncSupporterRow();
   closeAccountForms();
   accountOverlay.classList.remove('hidden');
 
@@ -2139,6 +2158,61 @@ async function openAccount(){
   if(books.count != null) document.getElementById('accBooks').textContent = books.count;
   if(series.count != null) document.getElementById('accSeries').textContent = series.count;
 }
+
+// Supporter im Konto-Fenster: seit wann, und 14 Tage lang der Widerruf (Pflicht-Knopf für Online-Verträge).
+const WITHDRAW_DAYS = 14; // wie im Worker
+function withdrawUntil(){
+  if(!ownPurchase) return null;
+  const until = new Date(ownPurchase.created_at);
+  until.setDate(until.getDate() + WITHDRAW_DAYS);
+  return until > new Date() ? until : null;
+}
+function syncSupporterRow(){
+  const until = withdrawUntil();
+  document.getElementById('accSupporter').classList.toggle('hidden', !ownPremium);
+  if(!ownPremium) return;
+  document.getElementById('accSupporterTitle').textContent = ownPurchase
+    ? `Supporter seit ${fmtDate(ownPurchase.created_at)}` : 'Supporter, geschenkt';
+  document.getElementById('accSupporterNote').textContent = until
+    ? `Regal scannen und Vitrine sind freigeschaltet. Widerrufen kannst du bis ${fmtDate(until)} und bekommst dann alles zurück.`
+    : 'Regal scannen und Vitrine sind freigeschaltet. Danke für deine Unterstützung!';
+  document.getElementById('accWithdrawBtn').classList.toggle('hidden', !until);
+}
+document.getElementById('accWithdrawBtn').addEventListener('click', async ()=>{
+  const ok = await ask({
+    title: 'Vertrag widerrufen?',
+    text: `Du bekommst die vollen ${document.getElementById('buyPrice').textContent} über deine Zahlungsart zurück. Regal scannen und die Vitrine sind danach nicht mehr verfügbar; dein Regal bleibt, wie es ist. Die Bestätigung kommt per E-Mail.`,
+    confirmLabel: 'Widerruf bestätigen',
+    danger: true,
+  });
+  if(!ok) return;
+  const btn = document.getElementById('accWithdrawBtn');
+  btn.disabled = true;
+  try {
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    const res = await fetch('/api/withdraw', {
+      method: 'POST',
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+    });
+    if(!res.ok){
+      showToast(res.status === 410 ? 'Die 14 Tage für den Widerruf sind vorbei'
+        : 'Widerruf hat nicht geklappt. Versuch es gleich noch einmal oder schreib uns (siehe Impressum).');
+      return;
+    }
+    showToast('Widerruf ist eingegangen. Das Geld kommt in ein paar Tagen zurück.');
+    // Premium nimmt der Worker weg, sobald Stripe die Erstattung meldet.
+    for(let i = 0; i < 10 && ownPremium; i++){
+      await new Promise(r=>setTimeout(r, 2000));
+      await loadPremium();
+    }
+    syncSupporterRow();
+    render();
+  } catch(e){
+    showToast('Keine Verbindung. Versuch es gleich noch einmal.');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById('accountCloseBtn').addEventListener('click', ()=>accountOverlay.classList.add('hidden'));
 accountOverlay.addEventListener('click', e=>{ if(e.target === accountOverlay) accountOverlay.classList.add('hidden'); });
@@ -2372,10 +2446,12 @@ function renderAdminStats(){
   const books = adminUsers.reduce((s, u)=>s + Number(u.book_count || 0), 0);
   const banned = adminUsers.filter(u=>u.banned_at).length;
   const premium = adminUsers.filter(u=>u.is_premium).length;
+  const bought = adminUsers.filter(u=>u.premium_source === 'purchase').length;
   document.getElementById('adminStats').innerHTML = `
     <div><dt>Konten</dt><dd>${adminUsers.length}</dd></div>
     <div><dt>Bücher</dt><dd>${books}</dd></div>
     <div><dt>Premium</dt><dd>${premium}</dd></div>
+    <div><dt>Gekauft</dt><dd>${bought}</dd></div>
     <div><dt>Gesperrt</dt><dd>${banned}</dd></div>`;
 }
 
@@ -2383,7 +2459,7 @@ function adminUserHtml(u){
   const open = u.id === adminOpenId;
   const name = u.username ? shownName(u) : 'Ohne Nutzernamen';
   const badges = (u.is_admin ? '<span class="badge">Admin</span>' : '')
-    + (u.is_premium ? '<span class="badge badge-premium">Premium</span>' : '')
+    + (u.is_premium ? `<span class="badge badge-premium">${u.premium_source === 'purchase' ? 'Gekauft' : 'Premium'}</span>` : '')
     + (u.banned_at ? '<span class="badge badge-danger">Gesperrt</span>' : '');
   const avatar = u.avatar_url
     ? `<img class="reader-avatar" src="${escapeHtml(u.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
@@ -2483,7 +2559,8 @@ async function adminAction(act, u){
   } else if(act === 'premium'){
     if(!u.is_premium){
       await runAdmin('admin_set_premium', { target: u.id, premium: true }, `${label} hat jetzt Premium`);
-    } else if(await ask({ title: `Premium von ${label} entziehen?`, text: 'Premium-Funktionen wie „Regal scannen“ sind danach nicht mehr verfügbar. Das Regal bleibt, wie es ist.', confirmLabel: 'Premium entziehen' })){
+    } else if(await ask({ title: `Premium von ${label} entziehen?`, text: 'Premium-Funktionen wie „Regal scannen“ sind danach nicht mehr verfügbar. Das Regal bleibt, wie es ist.'
+      + (u.premium_source === 'purchase' ? ' Supporter wurde gekauft: Erstatte den Kauf lieber in Stripe, dann wird Premium von selbst entzogen.' : ''), confirmLabel: 'Premium entziehen' })){
       await runAdmin('admin_set_premium', { target: u.id, premium: false }, `Premium von ${label} entzogen`);
     }
   }
@@ -4578,7 +4655,8 @@ document.addEventListener('keydown', (e)=>{
 });
 
 // ---- Supporter: Unterstützen-Fenster und Kauf-Fenster ----
-// Das Kauf-Fenster zeigt schon, was man bekommt; der Kaufen-Knopf bleibt gesperrt, bis der Checkout angebunden ist.
+// Bezahlt wird auf der Bezahlseite von Stripe (POST /api/checkout im Worker). Freigeschaltet wird erst,
+// wenn Stripe dem Worker die Zahlung bestätigt; die App wartet nach der Rückkehr nur darauf.
 const supportOverlay = document.getElementById('supportOverlay');
 const buyOverlay = document.getElementById('buyOverlay');
 const SUPPORT_LEDES = {
@@ -4622,8 +4700,87 @@ function showModalStep(from, to, back){
   to.classList.add(back ? 'is-step-back' : 'is-step');
   to.classList.remove('hidden');
 }
+const buyConfirmBtn = document.getElementById('buyConfirmBtn');
+function renderBuy(){
+  const note = document.getElementById('buyNote');
+  buyConfirmBtn.disabled = false;
+  if(ownPremium){
+    note.textContent = 'Du bist schon Supporter. Danke, dass du das Bücherregal unterstützt!';
+    buyConfirmBtn.textContent = 'Schon freigeschaltet';
+    buyConfirmBtn.disabled = true;
+  } else if(!currentUser){
+    note.textContent = DEV_LOCAL
+      ? 'Im lokalen Testmodus gibt es keinen Kauf. Teste ihn auf der echten Seite mit Stripes Testkarten.'
+      : 'Supporter gilt für dein Konto. Melde dich an, danach geht es direkt weiter zur Zahlung.';
+    buyConfirmBtn.textContent = 'Anmelden und weiter';
+    buyConfirmBtn.disabled = DEV_LOCAL;
+  } else {
+    note.textContent = 'Bezahlt wird sicher über Stripe. Du kannst 14 Tage lang widerrufen und bekommst dann alles zurück.';
+    buyConfirmBtn.textContent = 'Weiter zur Zahlung';
+  }
+}
+const CHECKOUT_ERRORS = {
+  401: 'Bitte melde dich noch einmal an',
+  403: 'Mit einem gesperrten Konto ist kein Kauf möglich',
+  404: 'Der Kauf ist gerade nicht verfügbar',
+  405: 'Der Kauf ist gerade nicht verfügbar',
+  503: 'Der Kauf ist gerade nicht verfügbar',
+};
+async function startCheckout(){
+  if(!currentUser){
+    setPref(AFTER_LOGIN_KEY, 'buy');
+    signInWithGoogle();
+    return;
+  }
+  buyConfirmBtn.disabled = true;
+  buyConfirmBtn.textContent = 'Einen Moment …';
+  try {
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    // Zurück auf dieselbe Ansicht (z. B. das eigene Regal), ohne alte Kauf-Parameter.
+    const from = new URLSearchParams(window.location.search);
+    from.delete('kauf');
+    const res = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ from: from.toString() ? `?${from}` : '' }),
+    });
+    const body = await res.json().catch(()=>({}));
+    if(res.ok && body.url){ window.location.href = body.url; return; }
+    if(res.status === 409){ ownPremium = true; renderBuy(); showToast('Du bist schon Supporter'); return; }
+    showToast(CHECKOUT_ERRORS[res.status] || 'Die Bezahlseite ließ sich nicht öffnen. Versuch es gleich noch einmal.');
+  } catch(e){
+    showToast('Keine Verbindung. Versuch es gleich noch einmal.');
+  }
+  renderBuy();
+}
+buyConfirmBtn.addEventListener('click', startCheckout);
+
+// Rückkehr von Stripe: ?kauf=danke oder ?kauf=abgebrochen. Stripe meldet die Zahlung dem Worker meist
+// innerhalb von Sekunden; so lange fragt die App nach, ob Premium schon da ist.
+async function handlePurchaseReturn(){
+  const params = new URLSearchParams(window.location.search);
+  const kauf = params.get('kauf');
+  if(!kauf) return;
+  params.delete('kauf');
+  history.replaceState({}, '', window.location.pathname + (params.toString() ? `?${params}` : ''));
+  if(kauf === 'abgebrochen'){ showToast('Kauf abgebrochen, es wurde nichts berechnet'); return; }
+  if(kauf !== 'danke' || !currentUser) return;
+  showToast('Danke! Supporter wird freigeschaltet …');
+  for(let i = 0; i < 15 && !ownPremium; i++){
+    await new Promise(r=>setTimeout(r, 2000));
+    await loadPremium();
+  }
+  if(ownPremium){
+    render();
+    showToast('Danke für deine Unterstützung! Regal scannen und die Vitrine sind freigeschaltet.');
+  } else {
+    showToast('Die Freischaltung dauert länger als sonst. Lad die Seite in ein paar Minuten neu.');
+  }
+}
+
 let buyFromSupport = false;
 function openBuy(){
+  renderBuy();
   buyFromSupport = !supportOverlay.classList.contains('hidden');
   document.getElementById('buyBackBtn').classList.toggle('hidden', !buyFromSupport);
   if(buyFromSupport) showModalStep(supportOverlay, buyOverlay, false);
@@ -4949,5 +5106,6 @@ async function boot(){
   syncViewButtons();
   await Promise.all([ initAuth(), applyRoute() ]);
   render();
+  handlePurchaseReturn();
 }
 boot();

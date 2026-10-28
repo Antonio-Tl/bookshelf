@@ -17,7 +17,8 @@
     { "name": "BOOKS_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }
   ],
   // Öffentliche Werte (stehen auch in js/config.js); /api/scan prüft damit das Login.
-  // Geheim und nur per `wrangler secret put` bzw. lokal in .dev.vars: GOOGLE_BOOKS_API_KEY, GEMINI_API_KEY.
+  // Geheim und nur per `wrangler secret put` bzw. lokal in .dev.vars: GOOGLE_BOOKS_API_KEY, GEMINI_API_KEY,
+  // STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PAYMENT_DB_SECRET (Supporter-Kauf, siehe worker.js).
   "vars": {
     "SUPABASE_URL": "https://zlbedwktggcdyfvaerop.supabase.co",
     "SUPABASE_ANON_KEY": "sb_publishable_Xr6uYfqtFsOy8pzgU4Tgvw_qpvol_Aj"

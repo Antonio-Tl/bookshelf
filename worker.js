@@ -1,8 +1,8 @@
 // Cloudflare Worker vor den statischen Dateien. Läuft nur für /api/* (siehe wrangler.jsonc),
 // alles andere liefert Cloudflare direkt aus.
 //
-// GET /api/books?q=… leitet die Buchsuche an Google Books weiter (POST /api/scan siehe unten). Der API-Key liegt als
-// Laufzeit-Secret GOOGLE_BOOKS_API_KEY am Worker und kommt so nie in den Browser.
+// GET /api/books?q=… leitet die Buchsuche an Google Books weiter (POST /api/scan und den Supporter-Kauf siehe unten).
+// Der API-Key liegt als Laufzeit-Secret GOOGLE_BOOKS_API_KEY am Worker und kommt so nie in den Browser.
 const UPSTREAM = 'https://www.googleapis.com/books/v1/volumes';
 const CACHE_SECONDS = 60 * 60 * 24;
 
@@ -159,6 +159,173 @@ async function scanShelf(request, env){
   return json({ buecher: cleanScan(text) }, 200);
 }
 
+// ---- Supporter-Kauf über Stripe ----
+// POST /api/checkout legt für den eingeloggten Nutzer eine Stripe-Bezahlseite an und gibt ihre Adresse zurück.
+// POST /api/withdraw widerruft den Kauf binnen 14 Tagen (Geld zurück).
+// POST /api/stripe-webhook nimmt die Meldungen von Stripe entgegen (bezahlt, erstattet, Rückbuchung) und trägt
+// sie mit record_purchase() ein (supabase/020_purchases.sql). Premium gibt es also erst, wenn Stripe die
+// Zahlung signiert bestätigt; die Rückkehr auf die Seite allein schaltet nichts frei.
+// Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET (whsec_…) und PAYMENT_DB_SECRET (sein Hash steht in
+// payment_secret). Den Preis kennt nur der Server; der Browser schickt keinen mit.
+const SUPPORTER_PRICE_CENTS = 399; // steht auch in index.html (#buyPrice) und agb.html
+const STRIPE_API = 'https://api.stripe.com/v1';
+const enc = new TextEncoder();
+
+async function stripePost(env, path, params, idempotencyKey){
+  const headers = { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' };
+  if(idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  const r = await fetch(`${STRIPE_API}/${path}`, { method: 'POST', headers, body: new URLSearchParams(params) });
+  return { ok: r.ok, status: r.status, body: await r.json().catch(()=>({})) };
+}
+
+// Fragt Supabase mit dem Login des Nutzers. Lesen darf er nur die eigenen Zeilen (RLS).
+async function supabaseGet(env, path, token){
+  const r = await fetch(`${env.SUPABASE_URL}${path}`, { headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } });
+  return r.ok ? r.json() : null;
+}
+
+async function startCheckout(request, env){
+  if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'forbidden' }, 403);
+  if(!env.STRIPE_SECRET_KEY || !env.SUPABASE_URL) return json({ error: 'not configured' }, 503);
+  const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = token && await supabaseGet(env, '/auth/v1/user', token);
+  if(!user || !user.id) return json({ error: 'unauthorized' }, 401);
+  const id = encodeURIComponent(user.id);
+  const [premium, ban] = await Promise.all([
+    supabaseGet(env, `/rest/v1/premium_members?select=user_id&user_id=eq.${id}`, token),
+    supabaseGet(env, `/rest/v1/bans?select=user_id&user_id=eq.${id}`, token),
+  ]);
+  if(!premium || !ban) return json({ error: 'upstream' }, 502);
+  if(ban.length) return json({ error: 'banned' }, 403);
+  if(premium.length) return json({ error: 'already' }, 409);
+
+  // Zurück dorthin, wo der Kauf gestartet wurde. Nur eine Query auf der eigenen Seite, nie eine fremde Adresse.
+  let from = '';
+  try { ({ from = '' } = await request.json()); } catch(e){}
+  if(typeof from !== 'string' || from.length > 200 || !/^\?[\w=&%.~-]*$/.test(from)) from = '';
+  const { origin } = new URL(request.url);
+  const back = (status)=>`${origin}/${from ? `${from}&` : '?'}kauf=${status}`;
+
+  const params = {
+    mode: 'payment',
+    locale: 'de',
+    submit_type: 'pay',
+    'line_items[0][quantity]': '1',
+    'line_items[0][price_data][currency]': 'eur',
+    'line_items[0][price_data][unit_amount]': String(SUPPORTER_PRICE_CENTS),
+    'line_items[0][price_data][product_data][name]': 'Bücherregal Supporter',
+    'line_items[0][price_data][product_data][description]': 'Einmalige Zahlung, kein Abo. Schaltet „Regal scannen“ und die Vitrine für dein Konto frei.',
+    client_reference_id: user.id,
+    'metadata[user_id]': user.id,
+    'payment_intent_data[metadata][user_id]': user.id,
+    success_url: back('danke'),
+    cancel_url: back('abgebrochen'),
+    // Freigeschaltete Funktionen gelten eher als digitale Dienstleistung, nicht als digitaler Inhalt: das
+    // Widerrufsrecht erlischt dann nicht mit dem Beginn. Darum gibt es 14 Tage Widerruf mit vollem Geld
+    // zurück (POST /api/withdraw, Knopf im Konto-Fenster). Das Häkchen über dem Bezahlen-Knopf braucht in
+    // Stripe unter Einstellungen → Öffentliche Details eine AGB-Adresse.
+    'consent_collection[terms_of_service]': 'required',
+    'custom_text[terms_of_service_acceptance][message]': `Ich stimme den [AGB](${origin}/agb.html) zu und habe die [Widerrufsbelehrung](${origin}/agb.html#widerruf) gelesen.`,
+    'custom_text[submit][message]': 'Einmalig, kein Abo. Supporter ist sofort nach der Zahlung in deinem Konto freigeschaltet.',
+    // Rechnung als Beleg per E-Mail, mit dem Hinweis für Kleinunternehmer und der Widerrufsbelehrung in Kurzform
+    // (die Bestätigung muss sie auf einem dauerhaften Datenträger enthalten).
+    'invoice_creation[enabled]': 'true',
+    'invoice_creation[invoice_data][footer]': `Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.\n\nWiderrufsrecht: Du kannst diesen Vertrag binnen 14 Tagen ab dem Kauf ohne Angabe von Gründen widerrufen, am einfachsten im Bücherregal unter Konto → Supporter → „Vertrag widerrufen“ oder über die Kontaktdaten im Impressum (${origin}/impressum.html). Du bekommst den vollen Betrag über deine Zahlungsart zurück. Vollständige Widerrufsbelehrung und AGB: ${origin}/agb.html`,
+  };
+  if(user.email) params.customer_email = user.email;
+  const r = await stripePost(env, 'checkout/sessions', params);
+  if(!r.ok || !r.body.url) return json({ error: 'stripe', status: r.status, message: r.body.error?.message }, 502);
+  return json({ url: r.body.url }, 200);
+}
+
+// Stripe signiert jede Meldung: Header "t=<Zeit>,v1=<HMAC-SHA256 von "t.Body">". Älter als 5 Minuten zählt
+// nicht, damit abgefangene Meldungen nicht später noch einmal eingespielt werden können.
+async function verifyStripeSignature(payload, header, secret){
+  if(!header) return false;
+  const parts = header.split(',').map(p=>p.trim().split('='));
+  const t = (parts.find(([k])=>k === 't') || [])[1];
+  const sigs = parts.filter(([k, v])=>k === 'v1' && /^[0-9a-f]{64}$/.test(v || '')).map(([, v])=>v);
+  if(!t || !sigs.length || Math.abs(Date.now() / 1000 - Number(t)) > 300) return false;
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  for(const sig of sigs){
+    const bytes = new Uint8Array(sig.match(/../g).map(h=>parseInt(h, 16)));
+    if(await crypto.subtle.verify('HMAC', key, bytes, enc.encode(`${t}.${payload}`))) return true;
+  }
+  return false;
+}
+
+// Ohne Login (anon); record_purchase prüft stattdessen das Geheimnis. Gibt 'ok', 'duplicate', 'double',
+// 'no_user' oder 'unknown' zurück, bei einem Fehler null (dann versucht Stripe es später noch einmal).
+async function recordPurchase(env, args){
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/record_purchase`, {
+    method: 'POST',
+    headers: { apikey: env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret: env.PAYMENT_DB_SECRET, ...args }),
+  });
+  return r.ok ? String(await r.json()) : null;
+}
+
+async function stripeWebhook(request, env){
+  if(!env.STRIPE_WEBHOOK_SECRET || !env.PAYMENT_DB_SECRET || !env.STRIPE_SECRET_KEY) return json({ error: 'not configured' }, 503);
+  const raw = await request.text();
+  if(!await verifyStripeSignature(raw, request.headers.get('Stripe-Signature'), env.STRIPE_WEBHOOK_SECRET)){
+    return json({ error: 'bad signature' }, 400);
+  }
+  let event;
+  try { event = JSON.parse(raw); } catch(e){ return json({ error: 'bad request' }, 400); }
+  const o = event.data?.object || {};
+  let result = 'ignored';
+
+  if(event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded'){
+    // Lastschrift & Co. melden "completed" erst unbezahlt; bezahlt kommt dann als async_payment_succeeded.
+    if(o.payment_status !== 'paid') return json({ received: true, result: 'pending' }, 200);
+    result = await recordPurchase(env, {
+      session_id: o.id,
+      intent: o.payment_intent,
+      buyer: o.client_reference_id || o.metadata?.user_id || null,
+      amount: o.amount_total,
+      currency: o.currency,
+      status: 'paid',
+      consent_at: o.consent?.terms_of_service === 'accepted' ? new Date(event.created * 1000).toISOString() : null,
+    });
+    // Zweiter Kauf desselben Kontos oder Konto inzwischen gelöscht: Geld zurück.
+    if(result === 'double' || result === 'no_user'){
+      const reason = result === 'double' ? 'duplicate' : 'requested_by_customer';
+      const r = await stripePost(env, 'refunds', { payment_intent: o.payment_intent, reason }, `refund-${o.payment_intent}`);
+      if(!r.ok) result = null;
+    }
+  } else if(event.type === 'charge.refunded'){
+    // Teilerstattung: Premium bleibt.
+    if(o.refunded) result = await recordPurchase(env, { session_id: '', intent: o.payment_intent, buyer: null, amount: 0, currency: '', status: 'refunded' });
+  } else if(event.type === 'charge.dispute.created'){
+    result = await recordPurchase(env, { session_id: '', intent: o.payment_intent, buyer: null, amount: 0, currency: '', status: 'disputed' });
+  }
+
+  if(result === null) return json({ error: 'not recorded' }, 500);
+  return json({ received: true, result }, 200);
+}
+
+// Widerruf binnen 14 Tagen: erstattet den letzten bezahlten Kauf über Stripe. Premium nimmt danach die
+// Meldung charge.refunded weg (wie bei jeder Erstattung). Die Bestätigung schickt Stripe per E-Mail.
+const WITHDRAW_DAYS = 14;
+async function withdrawPurchase(request, env){
+  if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'forbidden' }, 403);
+  if(!env.STRIPE_SECRET_KEY || !env.SUPABASE_URL) return json({ error: 'not configured' }, 503);
+  const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  const user = token && await supabaseGet(env, '/auth/v1/user', token);
+  if(!user || !user.id) return json({ error: 'unauthorized' }, 401);
+  const rows = await supabaseGet(env,
+    `/rest/v1/purchases?select=payment_intent,created_at&user_id=eq.${encodeURIComponent(user.id)}&status=eq.paid&order=created_at.desc&limit=1`, token);
+  if(!rows) return json({ error: 'upstream' }, 502);
+  if(!rows.length) return json({ error: 'none' }, 404);
+  // Ein Tag Kulanz, damit "bis einschließlich Tag 14" in jeder Zeitzone reicht.
+  if(Date.now() - Date.parse(rows[0].created_at) > (WITHDRAW_DAYS + 1) * 86400e3) return json({ error: 'expired' }, 410);
+  const intent = rows[0].payment_intent;
+  const r = await stripePost(env, 'refunds', { payment_intent: intent, reason: 'requested_by_customer', 'metadata[widerruf]': 'ja' }, `withdraw-${intent}`);
+  if(!r.ok && r.body.error?.code !== 'charge_already_refunded') return json({ error: 'stripe', status: r.status }, 502);
+  return json({ ok: true }, 200);
+}
+
 export default {
   async fetch(request, env, ctx){
     const { pathname } = new URL(request.url);
@@ -169,6 +336,18 @@ export default {
     if(pathname === '/api/scan'){
       if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
       return scanShelf(request, env);
+    }
+    if(pathname === '/api/checkout'){
+      if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
+      return startCheckout(request, env);
+    }
+    if(pathname === '/api/withdraw'){
+      if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
+      return withdrawPurchase(request, env);
+    }
+    if(pathname === '/api/stripe-webhook'){
+      if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
+      return stripeWebhook(request, env);
     }
     if(pathname.startsWith('/api/')) return json({ error: 'not found' }, 404);
     return env.ASSETS.fetch(request);

@@ -3361,11 +3361,21 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
   font-size: 12.5px;
 }
 .buy-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin: 16px 0 0;
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.035em;
   line-height: 1.1;
+}
+.buy-price small {
+  color: var(--p-dim);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 .buy-includes {
   display: flex;
@@ -3393,7 +3403,7 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
-.buy-soon {
+.buy-note {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3405,7 +3415,7 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
   font-size: 13px;
   line-height: 1.4;
 }
-.buy-soon svg {
+.buy-note svg {
   flex: none;
   width: 18px;
   height: 18px;
@@ -3416,6 +3426,7 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
 }
 .buy-legal {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 16px;
   margin: 14px 0 0;
@@ -5016,10 +5027,16 @@ body:has(#homeView:not(.hidden)) .site-legal {
   line-height: 1.05;
 }
 .legal h2 {
+  scroll-margin-top: 80px; /* Sprungmarken (agb.html#widerruf) nicht unter der Kopfleiste */
   margin: 36px 0 8px;
   font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.025em;
+}
+.legal h3 {
+  margin: 22px 0 6px;
+  font-size: 16px;
+  font-weight: 700;
 }
 .legal p,
 .legal li {
@@ -5244,6 +5261,8 @@ body:has(#homeView:not(.hidden)) .site-legal {
   text-align: center;
 }
 .admin-stats {
+  flex-wrap: wrap;
+  row-gap: 14px;
   margin: 22px 0 0;
 }
 .admin-toolbar {

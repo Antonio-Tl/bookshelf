@@ -205,7 +205,7 @@
   <footer class="home-foot">
     <span>Bücherregal</span>
     <span>Buchdaten und Cover von Open Library und Google Books</span>
-    <nav class="legal-links" aria-label="Rechtliches"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></nav>
+    <nav class="legal-links" aria-label="Rechtliches"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a><a href="agb.html">AGB</a></nav>
   </footer>
 </main>
 
@@ -324,7 +324,7 @@
 
 <!-- Impressum und Datenschutz unter jeder Ansicht; die Startseite hat sie in ihrem eigenen Fuß. -->
 <footer class="site-legal">
-  <nav class="legal-links" aria-label="Rechtliches"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></nav>
+  <nav class="legal-links" aria-label="Rechtliches"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a><a href="agb.html">AGB</a></nav>
 </footer>
 
 <div class="modal-overlay hidden" id="modalOverlay">
@@ -460,16 +460,16 @@
           <span class="support-badge"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>Supporter</span>
           <span class="buy-plan-note">Dein Regal bleibt kostenlos</span>
         </div>
-        <p class="buy-price">Preis folgt</p>
+        <p class="buy-price"><span id="buyPrice">3,99 €</span><small>einmalig, kein Abo</small></p>
         <ul class="buy-includes">
           <li>Regal scannen: ein Foto statt zwanzig Titel abtippen</li>
           <li>Vitrine: deine drei Favoriten ganz oben im Regal</li>
           <li>Du hilfst, die Plattform am Leben zu halten</li>
         </ul>
       </div>
-      <p class="buy-soon" role="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg><span>Der Kauf ist noch nicht freigeschaltet. Schau bald wieder vorbei.</span></p>
-      <button type="button" class="btn btn-primary btn-lg btn-support support-cta" id="buyConfirmBtn" disabled>Bald verfügbar</button>
-      <p class="buy-legal"><a href="impressum.html" target="_blank" rel="noopener">Impressum</a><a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a></p>
+      <p class="buy-note" role="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span id="buyNote"></span></p>
+      <button type="button" class="btn btn-primary btn-lg btn-support support-cta" id="buyConfirmBtn">Weiter zur Zahlung</button>
+      <p class="buy-legal"><a href="agb.html" target="_blank" rel="noopener">AGB und Widerruf</a><a href="impressum.html" target="_blank" rel="noopener">Impressum</a><a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a></p>
     </div>
   </div>
 </div>
@@ -701,6 +701,14 @@
           <button type="button" data-listed="true" aria-pressed="false">Ja</button>
           <button type="button" data-listed="false" aria-pressed="false">Nein</button>
         </div>
+      </div>
+    </section>
+
+    <section class="settings-group hidden" id="accSupporter">
+      <h3>Supporter</h3>
+      <div class="setting-row">
+        <span><b id="accSupporterTitle"></b><small id="accSupporterNote"></small></span>
+        <button type="button" class="btn btn-secondary hidden" id="accWithdrawBtn">Vertrag widerrufen</button>
       </div>
     </section>
 
