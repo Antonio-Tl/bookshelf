@@ -184,9 +184,14 @@ async function supabaseGet(env, path, token){
   return r.ok ? r.json() : null;
 }
 
+// Verkauft wird erst mit dem Live-Key. Mit einem Test-Key (Sandbox) bleibt der Kauf zu, denn dort würden
+// Apple Pay und Google Pay mit echten Karten "bezahlen", ohne dass Geld fließt, und Premium freischalten.
+// GET /api/checkout sagt der App, ob der Kauf offen ist.
+const salesLive = (env)=>/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY || '');
+
 async function startCheckout(request, env){
   if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'forbidden' }, 403);
-  if(!env.STRIPE_SECRET_KEY || !env.SUPABASE_URL) return json({ error: 'not configured' }, 503);
+  if(!salesLive(env) || !env.SUPABASE_URL) return json({ error: 'not configured' }, 503);
   const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   const user = token && await supabaseGet(env, '/auth/v1/user', token);
   if(!user || !user.id) return json({ error: 'unauthorized' }, 401);
@@ -341,7 +346,8 @@ export default {
       return scanShelf(request, env);
     }
     if(pathname === '/api/checkout'){
-      if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
+      if(request.method === 'GET') return json({ live: salesLive(env) }, 200);
+      if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'GET, POST' });
       return startCheckout(request, env);
     }
     if(pathname === '/api/withdraw'){

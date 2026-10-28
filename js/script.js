@@ -4701,12 +4701,30 @@ function showModalStep(from, to, back){
   to.classList.remove('hidden');
 }
 const buyConfirmBtn = document.getElementById('buyConfirmBtn');
+// Ob der Kauf offen ist, weiß nur der Worker (erst mit dem Live-Key von Stripe). null = noch nicht gefragt.
+let salesOpen = null;
+async function loadSalesOpen(){
+  if(salesOpen !== null || DEV_LOCAL) return;
+  try {
+    const res = await fetch('/api/checkout', { cache: 'no-store' });
+    salesOpen = res.ok && (await res.json()).live === true;
+  } catch(e){
+    salesOpen = false;
+  }
+  if(!buyOverlay.classList.contains('hidden')) renderBuy();
+}
 function renderBuy(){
   const note = document.getElementById('buyNote');
   buyConfirmBtn.disabled = false;
   if(ownPremium){
     note.textContent = 'Du bist schon Supporter. Danke, dass du das Bücherregal unterstützt!';
     buyConfirmBtn.textContent = 'Schon freigeschaltet';
+    buyConfirmBtn.disabled = true;
+  } else if(!DEV_LOCAL && salesOpen !== true){
+    note.textContent = salesOpen === null
+      ? 'Bezahlt wird sicher über Stripe. Du kannst 14 Tage lang widerrufen und bekommst dann alles zurück.'
+      : 'Der Kauf startet in Kürze. Schau bald wieder vorbei!';
+    buyConfirmBtn.textContent = salesOpen === null ? 'Einen Moment …' : 'Bald verfügbar';
     buyConfirmBtn.disabled = true;
   } else if(!currentUser){
     note.textContent = DEV_LOCAL
@@ -4781,6 +4799,7 @@ async function handlePurchaseReturn(){
 let buyFromSupport = false;
 function openBuy(){
   renderBuy();
+  loadSalesOpen();
   buyFromSupport = !supportOverlay.classList.contains('hidden');
   document.getElementById('buyBackBtn').classList.toggle('hidden', !buyFromSupport);
   if(buyFromSupport) showModalStep(supportOverlay, buyOverlay, false);
