@@ -244,6 +244,32 @@
     </div>
     <div class="admin-users" id="adminUsers"></div>
 
+    <section class="admin-costs" aria-labelledby="adminCostsTitle">
+      <h2 class="section-title admin-log-title" id="adminCostsTitle">Kosten</h2>
+      <p class="admin-muted admin-costs-lede">Was im Monat und im Jahr auf dich zukommt. Gemini und Stripe rechnen mit den echten Scans und Käufen, alles andere kannst du hier anpassen. Deine Änderungen bleiben in diesem Browser.</p>
+      <dl class="stats admin-stats" id="adminCostStats"></dl>
+      <div class="admin-cost-list" id="adminCostList"></div>
+      <div class="admin-cost-foot">
+        <button type="button" class="btn btn-secondary" id="adminCostAdd">Posten hinzufügen</button>
+        <button type="button" class="btn btn-ghost" id="adminCostReset">Auf Standard zurücksetzen</button>
+      </div>
+      <h3 class="admin-sub">Gratis-Grenzen</h3>
+      <p class="admin-muted admin-costs-lede">Wie viel vom Gratis-Plan schon belegt ist. Die Hochrechnung teilt den Verbrauch durch die Zahl der Konten und rechnet mit dem Wachstum der letzten 30 Tage weiter, ist also grob. Darüber kosten Supabase Pro 25 $ und Cloudflare Workers Paid 5 $ im Monat.</p>
+      <div class="limit-meters" id="adminLimitMeters"></div>
+      <figure class="usage-chart">
+        <figcaption><b>Worker-Aufrufe pro Tag</b><small id="adminUsageNote"></small></figcaption>
+        <div class="usage-plot" id="adminUsagePlot"></div>
+        <details class="usage-table">
+          <summary>Als Tabelle</summary>
+          <table id="adminUsageTable"></table>
+        </details>
+      </figure>
+      <details class="admin-cost-assume">
+        <summary>Annahmen für die Rechnung</summary>
+        <div class="admin-cost-fields" id="adminCostAssume"></div>
+      </details>
+    </section>
+
     <h2 class="section-title admin-log-title">Protokoll</h2>
     <ol class="admin-log" id="adminLog"></ol>
   </div>

@@ -334,6 +334,48 @@ async function withdrawPurchase(request, env){
   return json({ ok: true }, 200);
 }
 
+// GET /api/usage: Aufrufe dieses Workers pro Tag der letzten 30 Tage aus Cloudflares GraphQL-Analytics, für
+// die Kostenübersicht in der Verwaltung (Gratis: 100.000 am Tag; Seiten und Bilder zählen nicht, nur /api/*).
+// Nur für Admins mit Zwei-Faktor: geprüft mit admin_cost_stats() und dem Login des Nutzers.
+// Secret CF_API_TOKEN (Berechtigung "Account Analytics: Read"); CF_ACCOUNT_ID steht in wrangler.jsonc.
+const WORKER_NAME = 'bookshelf'; // wie "name" in wrangler.jsonc
+const USAGE_QUERY = `query($account: string!, $script: string!, $since: Date!) {
+  viewer { accounts(filter: { accountTag: $account }) {
+    workersInvocationsAdaptive(limit: 100, filter: { scriptName: $script, date_geq: $since }, orderBy: [date_ASC]) {
+      sum { requests errors }
+      quantiles { cpuTimeP99 }
+      dimensions { date }
+    }
+  } }
+}`;
+
+async function workerUsage(request, env){
+  if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'forbidden' }, 403);
+  if(!env.SUPABASE_URL) return json({ error: 'not configured' }, 503);
+  const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if(!token) return json({ error: 'unauthorized' }, 401);
+  const admin = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/admin_cost_stats`, {
+    method: 'POST',
+    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if(!admin.ok) return json({ error: 'forbidden' }, 403);
+  if(!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID) return json({ error: 'not configured' }, 503);
+
+  const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+  const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: USAGE_QUERY, variables: { account: env.CF_ACCOUNT_ID, script: WORKER_NAME, since } }),
+  }).catch(()=>null);
+  const body = r ? await r.json().catch(()=>({})) : {};
+  const rows = body.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive;
+  if(!r || !r.ok || !rows) return json({ error: 'cloudflare', message: body.errors?.[0]?.message || null }, 502);
+  return json({
+    days: rows.map(x=>({ date: x.dimensions.date, requests: x.sum.requests, errors: x.sum.errors, cpuP99: x.quantiles.cpuTimeP99 })),
+  }, 200, { 'Cache-Control': 'no-store' });
+}
+
 export default {
   async fetch(request, env, ctx){
     const { pathname } = new URL(request.url);
@@ -353,6 +395,10 @@ export default {
     if(pathname === '/api/withdraw'){
       if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
       return withdrawPurchase(request, env);
+    }
+    if(pathname === '/api/usage'){
+      if(request.method !== 'GET') return json({ error: 'method not allowed' }, 405, { Allow: 'GET' });
+      return workerUsage(request, env);
     }
     if(pathname === '/api/stripe-webhook'){
       if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });

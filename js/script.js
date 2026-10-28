@@ -2440,6 +2440,7 @@ async function loadAdminData(){
   renderAdminStats();
   renderAdminUsers();
   renderAdminLog(log.data || []);
+  loadAdminCosts(seq);
 }
 
 function renderAdminStats(){
@@ -2619,6 +2620,342 @@ function renderAdminLog(entries){
     return `<li><time>${when}</time><span><b>@${escapeHtml(l.admin_name || '?')}</b> ${LOG_LABELS[l.action] || escapeHtml(l.action)} <b>${l.target_name ? '@' + escapeHtml(l.target_name) : 'gelöschtes Konto'}</b>${escapeHtml(extra)}</span></li>`;
   }).join('');
 }
+
+// ---- Verwaltung: Kosten ----
+// Gemini und Stripe rechnet die App aus den echten Zahlen (admin_cost_stats, supabase/021_admin_costs.sql).
+// Die übrigen Posten und die Annahmen trägt der Admin selbst ein; sie bleiben in diesem Browser.
+// Preise Stand Oktober 2026: Gemini 3.5 Flash-Lite bezahlt 0,30 $ / 2,50 $ pro 1 Mio. Tokens (rein/raus),
+// .app bei Cloudflare 14,20 $ im Jahr, Google Play einmalig 25 $, Stripe 1,5 % + 0,25 € (EWR-Karte)
+// plus 0,4 % für die Rechnung nach dem Checkout.
+const COST_KEY = 'bookshelf-admin-costs';
+const SCAN_DAILY_LIMIT = 200; // wie claim_scan() in supabase/014_scan_limit.sql
+const COST_DEFAULTS = {
+  items: [
+    { name: 'Supabase (Free)', amount: 0, cur: 'EUR', every: 'month' },
+    { name: 'Cloudflare Workers (Free)', amount: 0, cur: 'EUR', every: 'month' },
+    { name: 'Domain buecherregal.app (Cloudflare)', amount: 14.2, cur: 'USD', every: 'year' },
+    { name: 'Google Play Entwicklerkonto', amount: 25, cur: 'USD', every: 'once' },
+  ],
+  usdEur: 0.86,
+  inPrice: 0.3,
+  outPrice: 2.5,
+  // Ein auf 2000 px verkleinertes Foto zählt bei Gemini 3 rund 1.100 Tokens, dazu der Prompt. Raus geht
+  // die Bücherliste als JSON, bei einem vollen Regalbrett um die 1.000 Tokens.
+  inTokens: 1400,
+  outTokens: 1000,
+  scansPerDay: '', // leer: Schnitt der letzten 7 Tage
+  stripePct: 1.9,
+  stripeFix: 0.25,
+};
+const COST_ASSUME_FIELDS = [
+  ['usdEur', 'Kurs (€ pro $)', '0.01'],
+  ['inPrice', 'Gemini Eingabe ($ pro 1 Mio. Tokens)', '0.01'],
+  ['outPrice', 'Gemini Ausgabe ($ pro 1 Mio. Tokens)', '0.01'],
+  ['inTokens', 'Tokens pro Scan rein', '50'],
+  ['outTokens', 'Tokens pro Scan raus', '50'],
+  ['scansPerDay', 'Scans pro Tag (leer = Schnitt der letzten 7 Tage)', '1'],
+  ['stripePct', 'Stripe-Gebühr in %', '0.1'],
+  ['stripeFix', 'Stripe-Gebühr fest (€ pro Kauf)', '0.01'],
+];
+const COST_EVERY = { month: 'pro Monat', year: 'pro Jahr', once: 'einmalig' };
+let costCfg = loadCostCfg();
+let costStats = null; // null = lädt noch, { error } = fehlt (021 noch nicht ausgeführt)
+
+function loadCostCfg(){
+  try {
+    const saved = JSON.parse(getPref(COST_KEY, 'null'));
+    if(saved && Array.isArray(saved.items)) return { ...COST_DEFAULTS, ...saved };
+  } catch(e){}
+  return structuredClone(COST_DEFAULTS);
+}
+function saveCostCfg(){ setPref(COST_KEY, JSON.stringify(costCfg)); }
+
+const fmtEur = v=>v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+const toEur = (amount, cur)=>(Number(amount) || 0) * (cur === 'USD' ? Number(costCfg.usdEur) || 0 : 1);
+const perMonth = item=>item.every === 'month' ? toEur(item.amount, item.cur) : item.every === 'year' ? toEur(item.amount, item.cur) / 12 : 0;
+
+// Rechnet alles aus, was die Kacheln und die beiden automatischen Zeilen zeigen.
+function costNumbers(){
+  const s = costStats && !costStats.error ? costStats : null;
+  const perScan = (costCfg.inTokens * costCfg.inPrice + costCfg.outTokens * costCfg.outPrice) / 1e6 * toEur(1, 'USD');
+  // scan_log hält 7 Tage. Läuft das Zählen noch nicht so lange, durch die tatsächlichen Tage teilen.
+  const days = s && s.first_scan ? Math.min(7, Math.max(1, (Date.now() - new Date(s.first_scan)) / 86400000)) : 7;
+  const avgPerDay = s ? s.scans_7d / days : 0;
+  const perDay = costCfg.scansPerDay === '' ? avgPerDay : Number(costCfg.scansPerDay) || 0;
+  const gemini = perDay * 30 * perScan;
+  const stripe = s ? s.sales_30d * costCfg.stripeFix + s.paid_cents_30d / 100 * costCfg.stripePct / 100 : 0;
+  const items = costCfg.items.reduce((sum, it)=>sum + perMonth(it), 0);
+  const once = costCfg.items.filter(it=>it.every === 'once').reduce((sum, it)=>sum + toEur(it.amount, it.cur), 0);
+  const month = gemini + stripe + items;
+  return { s, perScan, avgPerDay, perDay, gemini, stripe, month, once, revenue: s ? s.paid_cents_30d / 100 - stripe : 0 };
+}
+
+async function loadAdminCosts(seq){
+  const [{ data, error }, usage] = await Promise.all([supabaseClient.rpc('admin_cost_stats'), loadWorkerUsage()]);
+  if(seq !== adminLoadSeq || currentRoute !== 'admin') return;
+  costStats = error ? { error } : data;
+  workerUsage = usage;
+  renderCostList();
+  renderLimits();
+}
+
+// ---- Verwaltung: Gratis-Grenzen ----
+// Supabase-Zahlen kommen mit admin_cost_stats, die Worker-Aufrufe pro Tag mit GET /api/usage (worker.js).
+// Grenzen der Gratis-Pläne, Stand Oktober 2026. Egress (5 GB) lässt sich per SQL nicht messen.
+const FREE_LIMITS = { workerPerDay: 100000, workerCpuMs: 10, dbBytes: 500e6, storageBytes: 1e9, mau: 50000 };
+let workerUsage = null; // { days: [{ date, requests, errors, cpuP99 }] } oder { error: <Text> }
+let usageActive = -1; // Tag, den Tooltip und Tastatur gerade zeigen
+
+async function loadWorkerUsage(){
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const res = await fetch('/api/usage', { headers: session ? { Authorization: `Bearer ${session.access_token}` } : {} });
+    const body = await res.json().catch(()=>({}));
+    if(res.ok && Array.isArray(body.days)) return { days: fillUsageDays(body.days) };
+    return { error: res.status === 503 ? 'Cloudflare ist noch nicht verbunden: lege am Worker das Secret CF_API_TOKEN an.'
+      : res.status === 502 ? `Cloudflare hat keine Zahlen geliefert${body.message ? ` (${body.message})` : ''}.`
+      : res.status === 404 || !res.headers.get('Content-Type')?.includes('json') ? 'Die Worker-Zahlen gibt es nur auf der echten Seite.'
+      : 'Die Worker-Zahlen ließen sich nicht laden.' };
+  } catch(e){
+    return { error: 'Keine Verbindung zu Cloudflare.' };
+  }
+}
+// Tage ohne Aufrufe fehlen in der Antwort; für das Diagramm alle 30 Tage (UTC, wie Cloudflares Tageszähler).
+function fillUsageDays(rows){
+  const byDate = new Map(rows.map(r=>[r.date, r]));
+  return Array.from({ length: 30 }, (_, i)=>{
+    const date = new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10);
+    return byDate.get(date) || { date, requests: 0, errors: 0, cpuP99: 0 };
+  });
+}
+
+const fmtNum = (v, digits = 0)=>v.toLocaleString('de-DE', { maximumFractionDigits: digits });
+const fmtBytes = b=>b >= 1e9 ? `${fmtNum(b / 1e9, 2)} GB` : `${fmtNum(b / 1e6, 1)} MB`;
+const fmtDay = d=>new Date(`${d}T00:00:00Z`).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+// Ab wie vielen Konten die Grenze erreicht ist und wann, wenn es so weiterwächst wie in den letzten 30 Tagen.
+function limitForecast(used, limit, s){
+  if(!s || !s.accounts || !used) return 'Noch zu wenig Daten für eine Hochrechnung';
+  const atAccounts = limit / (used / s.accounts);
+  const head = `Gratis bis ca. ${fmtNum(Math.round(atAccounts))} Konten`;
+  if(atAccounts <= s.accounts) return `${head}: Grenze erreicht`;
+  const months = (atAccounts - s.accounts) / s.accounts_30d * 30 / 30.44; // ohne neue Konten: Infinity
+  if(!isFinite(months) || months > 120) return `${head}, bei ${s.accounts_30d} neuen Konten im Monat nicht absehbar`;
+  const when = new Date();
+  when.setMonth(when.getMonth() + Math.ceil(months));
+  return `${head}, voraussichtlich ab ${when.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}`;
+}
+
+function meterHtml({ name, host, used, limit, value, of, note }){
+  const pct = limit ? used / limit * 100 : 0;
+  const state = pct >= 100 ? ['is-over', 'Über der Grenze'] : pct >= 80 ? ['is-near', 'Fast voll'] : ['', ''];
+  const shown = pct > 0 && pct < 0.1 ? '< 0,1' : fmtNum(pct, 1);
+  return `<div class="limit-meter ${state[0]}">
+    <div class="limit-head"><b>${name}</b><span>${host}</span></div>
+    <p class="limit-value"><strong>${value}</strong> von ${of}${state[1] ? ` <span class="badge badge-danger">${state[1]}</span>` : ''}</p>
+    <div class="limit-track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, pct).toFixed(1)}" aria-label="${name}: ${shown} % der Gratis-Grenze"><span style="width:${Math.min(100, Math.max(pct, pct > 0 ? 1 : 0))}%"></span></div>
+    <small>${shown} % belegt · ${escapeHtml(note)}</small>
+  </div>`;
+}
+
+function renderLimits(){
+  const s = costStats && !costStats.error ? costStats : null;
+  const days = workerUsage && workerUsage.days;
+  const meters = [];
+  if(days){
+    const peak = days.reduce((a, b)=>b.requests > a.requests ? b : a);
+    const today = days[days.length - 1];
+    const cpu = Math.max(...days.map(d=>d.cpuP99 || 0)) / 1000; // Cloudflare liefert Mikrosekunden
+    meters.push(meterHtml({ name: 'Worker-Aufrufe am Tag', host: 'Cloudflare', used: peak.requests, limit: FREE_LIMITS.workerPerDay,
+      value: fmtNum(peak.requests), of: `${fmtNum(FREE_LIMITS.workerPerDay)} (Spitze ${fmtDay(peak.date)}, heute ${fmtNum(today.requests)})`,
+      note: limitForecast(peak.requests, FREE_LIMITS.workerPerDay, s) }));
+    meters.push(meterHtml({ name: 'Rechenzeit pro Aufruf', host: 'Cloudflare', used: cpu, limit: FREE_LIMITS.workerCpuMs,
+      value: `${fmtNum(cpu, 1)} ms`, of: `${FREE_LIMITS.workerCpuMs} ms (P99, 30 Tage)`,
+      note: 'Darüber bricht der Aufruf ab, der Bezahlplan erlaubt mehr' }));
+  }
+  if(s){
+    meters.push(meterHtml({ name: 'Datenbank', host: 'Supabase', used: s.db_bytes, limit: FREE_LIMITS.dbBytes,
+      value: fmtBytes(s.db_bytes), of: '500 MB', note: limitForecast(s.db_bytes, FREE_LIMITS.dbBytes, s) }));
+    meters.push(meterHtml({ name: 'Aktive Nutzer im Monat', host: 'Supabase', used: s.active_30d, limit: FREE_LIMITS.mau,
+      value: fmtNum(s.active_30d), of: fmtNum(FREE_LIMITS.mau), note: limitForecast(s.active_30d, FREE_LIMITS.mau, s) }));
+    meters.push(meterHtml({ name: 'Dateispeicher', host: 'Supabase', used: s.storage_bytes, limit: FREE_LIMITS.storageBytes,
+      value: fmtBytes(s.storage_bytes), of: '1 GB', note: limitForecast(s.storage_bytes, FREE_LIMITS.storageBytes, s) }));
+  }
+  const hints = [!s && costStats && 'Supabase-Zahlen fehlen: supabase/021_admin_costs.sql im SQL Editor ausführen.',
+    workerUsage && workerUsage.error].filter(Boolean);
+  document.getElementById('adminLimitMeters').innerHTML = meters.join('')
+    + hints.map(h=>`<p class="admin-muted limit-hint">${escapeHtml(h)}</p>`).join('')
+    + '<p class="admin-muted limit-hint">Egress (5 GB im Monat) zeigt nur Supabase selbst: Dashboard → Usage.</p>';
+  renderUsageChart();
+}
+
+// Säulen pro Tag; heute in der Akzentfarbe. Hover oder Pfeiltasten zeigen den Wert eines Tages.
+function renderUsageChart(){
+  const plot = document.getElementById('adminUsagePlot');
+  const table = document.getElementById('adminUsageTable');
+  const note = document.getElementById('adminUsageNote');
+  const days = workerUsage && workerUsage.days;
+  if(!days){
+    plot.innerHTML = `<p class="admin-muted">${workerUsage ? escapeHtml(workerUsage.error) : 'Wird geladen …'}</p>`;
+    table.innerHTML = '';
+    note.textContent = '';
+    return;
+  }
+  const total = days.reduce((sum, d)=>sum + d.requests, 0);
+  note.textContent = `Letzte 30 Tage: ${fmtNum(total)} Aufrufe, Gratis-Grenze ${fmtNum(FREE_LIMITS.workerPerDay)} am Tag`;
+  const W = Math.max(280, plot.clientWidth), H = 200, padL = 44, padR = 8, padT = 22, padB = 26;
+  const max = Math.max(...days.map(d=>d.requests), 1);
+  const mag = 10 ** Math.floor(Math.log10(max));
+  const top = [1, 2, 5, 10].map(m=>m * mag).find(v=>v >= max); // runde Obergrenze für die Achse
+  const y = v=>padT + (1 - v / top) * (H - padT - padB);
+  const slot = (W - padL - padR) / days.length;
+  const bw = Math.min(24, slot - 2);
+  const peakIdx = days.reduce((best, d, i)=>d.requests > days[best].requests ? i : best, 0);
+  const ticks = [0, top / 2, top];
+  const bars = days.map((d, i)=>{
+    const x = padL + i * slot + (slot - bw) / 2, yt = y(d.requests), h = H - padB - yt, r = Math.min(4, h, bw / 2);
+    const path = h > 0 ? `M${x},${H - padB}V${yt + r}Q${x},${yt} ${x + r},${yt}H${x + bw - r}Q${x + bw},${yt} ${x + bw},${yt + r}V${H - padB}Z` : '';
+    return `<path class="usage-bar ${i === days.length - 1 ? 'is-today' : ''}" data-i="${i}" d="${path}"/>`;
+  }).join('');
+  const peak = days[peakIdx];
+  const peakX = padL + peakIdx * slot + slot / 2;
+  plot.innerHTML = `<svg class="usage-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" tabindex="0" role="img" aria-label="Worker-Aufrufe pro Tag, letzte 30 Tage. Pfeiltasten zeigen einzelne Tage.">
+    ${ticks.map(t=>`<line class="usage-grid" x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}"/><text class="usage-tick" x="${padL - 8}" y="${y(t) + 4}" text-anchor="end">${fmtNum(t, 1)}</text>`).join('')}
+    <line class="usage-cross" id="adminUsageCross" y1="${padT}" y2="${H - padB}" visibility="hidden"/>
+    ${bars}
+    ${peak.requests ? `<text class="usage-label" x="${Math.min(Math.max(peakX, padL + 20), W - padR - 20)}" y="${y(peak.requests) - 6}" text-anchor="middle">${fmtNum(peak.requests)}</text>` : ''}
+    <text class="usage-tick" x="${padL}" y="${H - 6}">${fmtDay(days[0].date)}</text>
+    <text class="usage-tick" x="${W - padR}" y="${H - 6}" text-anchor="end">heute</text>
+  </svg><div class="usage-tip hidden" id="adminUsageTip" role="status"></div>`;
+  table.innerHTML = '<thead><tr><th>Tag (UTC)</th><th>Aufrufe</th><th>Fehler</th></tr></thead><tbody>'
+    + days.slice().reverse().map(d=>`<tr><td>${fmtDay(d.date)}</td><td>${fmtNum(d.requests)}</td><td>${fmtNum(d.errors)}</td></tr>`).join('') + '</tbody>';
+
+  const svg = plot.querySelector('svg');
+  const show = i=>{
+    usageActive = i;
+    const tip = document.getElementById('adminUsageTip');
+    const cross = document.getElementById('adminUsageCross');
+    plot.querySelectorAll('.usage-bar').forEach(b=>b.classList.toggle('is-active', Number(b.getAttribute('data-i')) === i));
+    if(i < 0){ tip.classList.add('hidden'); cross.setAttribute('visibility', 'hidden'); return; }
+    const d = days[i], cx = padL + i * slot + slot / 2;
+    cross.setAttribute('x1', cx);
+    cross.setAttribute('x2', cx);
+    cross.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<strong>${fmtNum(d.requests)}</strong> Aufrufe<span>${fmtDay(d.date)}${d.errors ? ` · ${fmtNum(d.errors)} Fehler` : ''}</span>`;
+    tip.classList.remove('hidden');
+    const left = cx / W * svg.clientWidth;
+    tip.style.left = `${Math.min(Math.max(left, tip.offsetWidth / 2), svg.clientWidth - tip.offsetWidth / 2)}px`;
+  };
+  svg.addEventListener('pointermove', e=>{
+    const x = (e.clientX - svg.getBoundingClientRect().left) / svg.clientWidth * W;
+    show(Math.min(days.length - 1, Math.max(0, Math.floor((x - padL) / slot))));
+  });
+  svg.addEventListener('pointerleave', ()=>show(-1));
+  svg.addEventListener('blur', ()=>show(-1));
+  svg.addEventListener('focus', ()=>show(usageActive >= 0 ? usageActive : days.length - 1));
+  svg.addEventListener('keydown', e=>{
+    if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    show(Math.min(days.length - 1, Math.max(0, usageActive + (e.key === 'ArrowLeft' ? -1 : 1))));
+  });
+}
+// Die Säulenbreite hängt von der Breite ab: bei Größenänderung neu zeichnen.
+new ResizeObserver(()=>{ if(currentRoute === 'admin' && workerUsage && workerUsage.days) renderUsageChart(); })
+  .observe(document.getElementById('adminUsagePlot'));
+
+function costItemHtml(it, i){
+  const opt = (map, cur)=>Object.entries(map).map(([v, label])=>`<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`).join('');
+  return `<div class="admin-cost-row" data-i="${i}">
+    <input type="text" data-k="name" value="${escapeHtml(it.name)}" aria-label="Posten" maxlength="80">
+    <span class="admin-cost-amount">
+      <input type="number" data-k="amount" value="${Number(it.amount) || 0}" min="0" step="0.01" inputmode="decimal" aria-label="Betrag">
+      <select data-k="cur" aria-label="Währung">${opt({ EUR: '€', USD: '$' }, it.cur)}</select>
+    </span>
+    <select data-k="every" aria-label="Wie oft">${opt(COST_EVERY, it.every)}</select>
+    <output class="admin-cost-month"></output>
+    <button type="button" class="icon-btn sm" data-act="remove" aria-label="Posten entfernen">${ICON_TRASH}</button>
+  </div>`;
+}
+
+function renderCostList(){
+  document.getElementById('adminCostList').innerHTML = `
+    <div class="admin-cost-row is-auto" id="adminCostGemini"><span class="admin-cost-main"><b>Gemini 3.5 Flash-Lite (Regal scannen)</b><small></small></span><output class="admin-cost-month"></output></div>
+    <div class="admin-cost-row is-auto" id="adminCostStripe"><span class="admin-cost-main"><b>Stripe-Gebühren (Supporter-Käufe)</b><small></small></span><output class="admin-cost-month"></output></div>
+    ${costCfg.items.map(costItemHtml).join('')}`;
+  document.getElementById('adminCostAssume').innerHTML = COST_ASSUME_FIELDS.map(([k, label, step])=>`
+    <label class="field"><span>${label}</span><input type="number" data-k="${k}" value="${escapeHtml(String(costCfg[k]))}" min="0" step="${step}" inputmode="decimal"></label>`).join('');
+  renderCostTotals();
+}
+
+// Nur Zahlen und Texte neu schreiben, damit das Eingabefeld beim Tippen den Fokus behält.
+function renderCostTotals(){
+  const n = costNumbers();
+  const fmtCt = v=>`${(v * 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} ct`;
+  const missing = costStats === null ? 'Zahlen werden geladen …'
+    : costStats.error ? 'Keine echten Zahlen: supabase/021_admin_costs.sql im Supabase SQL Editor ausführen.' : '';
+  document.getElementById('adminCostStats').innerHTML = `
+    <div><dt>Pro Monat</dt><dd>${fmtEur(n.month)}</dd></div>
+    <div><dt>Pro Jahr</dt><dd>${fmtEur(n.month * 12)}</dd></div>
+    <div><dt>Einmalig</dt><dd>${fmtEur(n.once)}</dd></div>
+    <div><dt>Supporter netto, 30 Tage</dt><dd>${fmtEur(n.revenue)}</dd></div>`;
+  const gemini = document.getElementById('adminCostGemini');
+  gemini.querySelector('small').textContent = [
+    missing || `${n.s.scans_7d} Scans in 7 Tagen, heute ${n.s.scans_today}`,
+    `${costCfg.scansPerDay === '' ? 'Ø' : 'angenommen'} ${n.perDay.toLocaleString('de-DE', { maximumFractionDigits: 1 })} am Tag`,
+    `${fmtCt(n.perScan)} pro Scan`,
+    `höchstens ${fmtEur(SCAN_DAILY_LIMIT * 30 * n.perScan)} im Monat (Tageslimit ${SCAN_DAILY_LIMIT})`,
+  ].join(' · ');
+  gemini.querySelector('output').textContent = `${fmtEur(n.gemini)}/Monat`;
+  const stripe = document.getElementById('adminCostStripe');
+  stripe.querySelector('small').textContent = missing || [
+    `${n.s.sales_30d} ${n.s.sales_30d === 1 ? 'Kauf' : 'Käufe'} in 30 Tagen`,
+    `${costCfg.stripePct.toLocaleString('de-DE')} % + ${fmtEur(Number(costCfg.stripeFix))} pro Kauf`,
+    `insgesamt ${n.s.sales}, davon ${n.s.refunds} erstattet`,
+  ].join(' · ');
+  stripe.querySelector('output').textContent = `${fmtEur(n.stripe)}/Monat`;
+  document.querySelectorAll('#adminCostList .admin-cost-row[data-i]').forEach(row=>{
+    const it = costCfg.items[row.getAttribute('data-i')];
+    row.querySelector('output').textContent = it.every === 'once' ? 'einmalig' : `${fmtEur(perMonth(it))}/Monat`;
+  });
+}
+
+document.getElementById('adminCostList').addEventListener('input', e=>{
+  const row = e.target.closest('[data-i]');
+  const k = e.target.getAttribute('data-k');
+  if(!row || !k) return;
+  const it = costCfg.items[row.getAttribute('data-i')];
+  it[k] = k === 'amount' ? Math.max(0, Number(e.target.value) || 0) : e.target.value;
+  saveCostCfg();
+  renderCostTotals();
+});
+document.getElementById('adminCostList').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-act="remove"]');
+  if(!btn) return;
+  costCfg.items.splice(Number(btn.closest('[data-i]').getAttribute('data-i')), 1);
+  saveCostCfg();
+  renderCostList();
+});
+document.getElementById('adminCostAssume').addEventListener('input', e=>{
+  const k = e.target.getAttribute('data-k');
+  if(!k) return;
+  costCfg[k] = k === 'scansPerDay' && e.target.value === '' ? '' : Math.max(0, Number(e.target.value) || 0);
+  saveCostCfg();
+  renderCostTotals();
+});
+document.getElementById('adminCostAdd').addEventListener('click', ()=>{
+  costCfg.items.push({ name: 'Neues Abo', amount: 0, cur: 'EUR', every: 'month' });
+  saveCostCfg();
+  renderCostList();
+  const input = document.querySelector('#adminCostList .admin-cost-row:last-child input');
+  input.focus();
+  input.select();
+});
+document.getElementById('adminCostReset').addEventListener('click', async ()=>{
+  if(!await ask({ title: 'Kosten zurücksetzen?', text: 'Deine eigenen Posten und Annahmen werden durch die Standardwerte ersetzt.', confirmLabel: 'Zurücksetzen', danger: true })) return;
+  costCfg = structuredClone(COST_DEFAULTS);
+  saveCostCfg();
+  renderCostList();
+});
 
 // ---- Daten laden ----
 async function loadShelfData(profileId){
