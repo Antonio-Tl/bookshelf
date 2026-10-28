@@ -2207,7 +2207,8 @@ async function mfaQrSrc(totp){
     uri.pathname = '/' + encodeURIComponent('Bücherregal') + ':Admin';
     uri.searchParams.set('issuer', 'Bücherregal');
     uri.searchParams.set('image', new URL('img/favicon-512.png', location.href).href);
-    const { default: QRCode } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm');
+    // Selbst ausgeliefert: der TOTP-Schlüssel soll durch keinen fremden Code laufen.
+    const { default: QRCode } = await import('./js/vendor/qrcode-1.5.4.mjs');
     const svg = await QRCode.toString(uri.href, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' });
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   } catch(e){

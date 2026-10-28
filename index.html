@@ -29,15 +29,7 @@
 <link rel="preconnect" href="https://covers.openlibrary.org">
 <link rel="preload" href="fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
-<script>
-  // Design vor dem ersten Zeichnen setzen, damit nichts aufflackert.
-  (function(){
-    var t = 'oak';
-    try { t = localStorage.getItem('bookshelf-theme') || 'oak'; } catch(e){}
-    if(t === 'auto') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', t);
-  })();
-</script>
+<script src="js/theme.js"></script>
 </head>
 <body>
 
@@ -662,7 +654,9 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Supabase selbst ausgeliefert und auf eine Version festgelegt: ein fremdes Release kann so nichts einschleusen.
+     Aktualisieren: dist/umd/supabase.js der gewünschten Version nach js/vendor/ legen und hier den Namen ändern. -->
+<script src="js/vendor/supabase-2.117.3.js"></script>
 <script src="js/config.js"></script>
 <script src="js/script.js"></script>
 </body>

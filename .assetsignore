@@ -12,3 +12,9 @@ wrangler.jsonc
 supabase
 node_modules
 scan-lab
+# Projektnotizen, Vorlagen und der alte Prototyp gehören nicht auf die Website
+.gitignore
+DESIGN.md
+PRODUCT.md
+js/config.example.js
+buecherregal.html

@@ -1,0 +1,11 @@
+# Sicherheits-Header für alle statischen Dateien (Cloudflare liest diese Datei beim Deploy, ausgeliefert wird sie nicht).
+# Skripte nur vom eigenen Server; Bilder von überall per https, weil Cover beliebige Adressen haben dürfen.
+# Neue externe Datenquelle in script.js? Dann ihren Host bei connect-src ergänzen, sonst blockt der Browser die Anfrage.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self' https://zlbedwktggcdyfvaerop.supabase.co wss://zlbedwktggcdyfvaerop.supabase.co https://openlibrary.org https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin-allow-popups

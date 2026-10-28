@@ -28,6 +28,14 @@ async function searchBooks(request, env, ctx){
   const hit = await cache.match(cacheKey);
   if(hit) return hit;
 
+  // Den Sec-Fetch-Site-Check oben umgeht jedes Skript. Deshalb zusätzlich pro IP begrenzen (BOOKS_LIMITER in
+  // wrangler.jsonc), erst nach dem Cache: nur echte Anfragen an Google zählen. 429 versteht die App schon.
+  if(env.BOOKS_LIMITER){
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const { success } = await env.BOOKS_LIMITER.limit({ key: ip });
+    if(!success) return json({ error: 'rate limited' }, 429, { 'Retry-After': '60' });
+  }
+
   const upstream = new URL(UPSTREAM);
   upstream.searchParams.set('q', q);
   upstream.searchParams.set('maxResults', '10');
@@ -55,8 +63,9 @@ async function searchBooks(request, env, ctx){
 // POST /api/scan { image: <JPEG als Base64> } liest die Buchrücken auf einem Regalfoto mit Gemini.
 // Der Key liegt als Secret GEMINI_API_KEY am Worker. Nur für Premium-Konten und Admins und nur
 // innerhalb des Tageslimits: der Worker ruft dafür claim_scan() in Supabase mit dem Login des
-// Nutzers auf (supabase/014_scan_limit.sql). Auf localhost (wrangler dev, lokaler Testmodus ohne
-// Login) ohne Prüfung.
+// Nutzers auf (supabase/014_scan_limit.sql). Ohne Prüfung nur unter `wrangler dev` mit SCAN_SKIP_AUTH=1
+// in .dev.vars (lokaler Testmodus ohne Login): die Datei wird nie hochgeladen, und der Hostname muss
+// zusätzlich localhost sein.
 const SCAN_MODEL = 'gemini-flash-lite-latest';
 const SCAN_MAX_BASE64 = 6 * 1024 * 1024;
 const SCAN_PROMPT = `Das Foto zeigt ein Bücherregal. Liste jedes Buch auf, dessen Rücken oder Cover zu sehen ist:
@@ -104,8 +113,10 @@ async function scanShelf(request, env){
   if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'forbidden' }, 403);
   if(!env.GEMINI_API_KEY) return json({ error: 'not configured' }, 503);
   const { hostname } = new URL(request.url);
-  const local = ['localhost', '127.0.0.1'].includes(hostname);
+  const local = env.SCAN_SKIP_AUTH === '1' && ['localhost', '127.0.0.1'].includes(hostname);
   // Erst das Foto prüfen, dann zählen: ein kaputter Upload soll kein Kontingent kosten.
+  // Zu große Anfragen gar nicht erst einlesen.
+  if(Number(request.headers.get('Content-Length') || 0) > SCAN_MAX_BASE64 + 1024) return json({ error: 'too large' }, 413);
   let image;
   try { ({ image } = await request.json()); } catch(e){ return json({ error: 'bad request' }, 400); }
   if(typeof image !== 'string' || !image) return json({ error: 'bad request' }, 400);
