@@ -2833,7 +2833,11 @@ function removeBookFromShowcase(book){
 }
 
 function showcaseControlHtml(book, group){
-  if(!canEditShowcase() || book.is_private || group.isPrivate) return '';
+  if(!isOwnerView() || book.is_private || group.isPrivate) return '';
+  // Ohne Premium zeigt die Zeile, dass es die Vitrine gibt, und führt zum Unterstützen-Fenster.
+  if(!canEditShowcase()){
+    return `<div class="rating-row"><span class="row-label">Vitrine</span><div class="vitrine-ctl"><button type="button" class="btn btn-secondary vitrine-locked">${ICON_SPARK}In die Vitrine</button><small class="vitrine-full">Für Supporter</small></div></div>`;
+  }
   const shelfId = showcaseShelfId();
   const ids = showcaseBookIds();
   const i = ids.indexOf(String(book.id));
@@ -3231,6 +3235,8 @@ function buildDetailCard(book, group, owner){
     });
     const addBtn = wrap.querySelector('.vitrine-add');
     if(addBtn) addBtn.addEventListener('click', ()=>addBookToShowcase(book));
+    const lockedBtn = wrap.querySelector('.vitrine-locked');
+    if(lockedBtn) lockedBtn.addEventListener('click', ()=>openSupport('vitrine'));
     wrap.querySelectorAll('.vitrine-move').forEach(btn=>{
       btn.addEventListener('click', ()=>moveInShowcase(book, parseInt(btn.getAttribute('data-move'), 10)));
     });
@@ -4085,14 +4091,22 @@ function syncShelfShowcase(){
   const priv = !!(shelf && shelf.is_private);
   const volumes = showcaseVolumes();
   const multi = (books.filter(b=>b.shelf_id === currentShelfKey).length) > 1;
-  const show = canEditShowcase() && multi;
+  const locked = isOwnerView() && !canEditShowcase();
+  const show = (canEditShowcase() || locked) && multi;
   row.classList.toggle('hidden', !show);
+  row.classList.toggle('is-locked', locked);
   const inside = show && showcaseShelfId() === currentShelfKey && showcaseBookIds().length > 0;
   pick.classList.toggle('hidden', !inside);
   if(!show) return;
   const btn = document.getElementById('shelfShowcaseBtn');
   btn.textContent = inside ? 'Herausnehmen' : 'In die Vitrine';
   btn.disabled = !inside && (priv || !volumes.length);
+  if(locked){
+    document.getElementById('shelfShowcaseHint').textContent = priv
+      ? 'Private Reihen können nicht in die Vitrine.'
+      : `Für Supporter: bis zu ${SHOWCASE_MAX} Bände dieser Reihe ganz oben in deinem Regal.`;
+    return;
+  }
   const picked = inside ? showcaseBookIds().length : 0;
   document.getElementById('shelfShowcaseHint').textContent = inside
     ? `${picked} von ${SHOWCASE_MAX} gewählt · Tippe auf ein Cover.`
@@ -4124,6 +4138,11 @@ function syncShelfShowcase(){
 }
 
 document.getElementById('shelfShowcaseBtn').addEventListener('click', async ()=>{
+  if(!canEditShowcase()){
+    shelfCatOverlay.classList.add('hidden');
+    openSupport('vitrine');
+    return;
+  }
   const inside = showcaseShelfId() === currentShelfKey && showcaseBookIds().length > 0;
   await saveShowcase(inside ? {} : { shelf_id: currentShelfKey, book_ids: showcaseVolumes().slice(0, SHOWCASE_MAX).map(b=>String(b.id)) },
     inside ? 'Reihe aus der Vitrine genommen' : 'Die Reihe steht jetzt in der Vitrine');
@@ -4377,10 +4396,20 @@ const supportOverlay = document.getElementById('supportOverlay');
 const buyOverlay = document.getElementById('buyOverlay');
 const SUPPORT_LEDES = {
   scan: 'Regal scannen ist für Supporter. Unterstütz das Bücherregal und schalte es frei, zusammen mit der Vitrine.',
+  vitrine: 'Die Vitrine ist für Supporter. Unterstütz das Bücherregal und schalte sie frei, zusammen mit Regal scannen.',
   default: 'Unterstütz das Bücherregal und schalte zwei Extras frei.',
 };
+// Wer die Fenster geöffnet hat, bekommt den Fokus zurück, wenn sie wieder zugehen.
+let supportOpener = null;
+function closeSupportFlow(){
+  supportOverlay.classList.add('hidden');
+  buyOverlay.classList.add('hidden');
+  if(supportOpener && document.contains(supportOpener)) supportOpener.focus();
+  supportOpener = null;
+}
 
 function openSupport(reason){
+  supportOpener = document.activeElement;
   document.getElementById('supportLede').textContent = SUPPORT_LEDES[reason] || SUPPORT_LEDES.default;
   // Die Vorschauen zeigen das eigene Regal: ein Buch, das erkannt und hinzugefügt wird, und die drei
   // Lieblinge in der Vitrine. Ohne Bücher stehen neutrale Platzhalter da.
@@ -4394,27 +4423,41 @@ function openSupport(reason){
     ? favs.map(({ book, group })=>thumbHtml(book, group)).join('')
     : '<span class="thumb"></span>'.repeat(3);
   supportOverlay.querySelectorAll('[data-feature]').forEach(li=>li.classList.toggle('is-focus', li.getAttribute('data-feature') === reason));
+  supportOverlay.classList.remove('is-step', 'is-step-back');
   supportOverlay.classList.remove('hidden');
-  document.getElementById('supportBuyBtn').focus();
+  supportOverlay.querySelector('.modal').focus();
+}
+// Zwischen den beiden Fenstern gleitet nur der Inhalt seitlich weiter; der Hintergrund bleibt stehen.
+function showModalStep(from, to, back){
+  from.classList.add('hidden');
+  to.classList.remove('is-step', 'is-step-back');
+  void to.offsetWidth; // Animation neu starten
+  to.classList.add(back ? 'is-step-back' : 'is-step');
+  to.classList.remove('hidden');
 }
 let buyFromSupport = false;
 function openBuy(){
   buyFromSupport = !supportOverlay.classList.contains('hidden');
-  supportOverlay.classList.add('hidden');
-  buyOverlay.classList.remove('hidden');
-  document.getElementById('buyCloseBtn').focus();
+  document.getElementById('buyBackBtn').classList.toggle('hidden', !buyFromSupport);
+  if(buyFromSupport) showModalStep(supportOverlay, buyOverlay, false);
+  else {
+    supportOpener = document.activeElement;
+    buyOverlay.classList.remove('is-step', 'is-step-back');
+    buyOverlay.classList.remove('hidden');
+  }
+  buyOverlay.querySelector('.modal').focus();
 }
-document.getElementById('supportCloseBtn').addEventListener('click', ()=>supportOverlay.classList.add('hidden'));
-document.getElementById('supportLaterBtn').addEventListener('click', ()=>supportOverlay.classList.add('hidden'));
+document.getElementById('supportCloseBtn').addEventListener('click', closeSupportFlow);
+document.getElementById('supportLaterBtn').addEventListener('click', closeSupportFlow);
 document.getElementById('supportBuyBtn').addEventListener('click', openBuy);
-supportOverlay.addEventListener('click', e=>{ if(e.target === supportOverlay) supportOverlay.classList.add('hidden'); });
-document.getElementById('buyCloseBtn').addEventListener('click', ()=>buyOverlay.classList.add('hidden'));
-// „Zurück“ führt ins Unterstützen-Fenster, wenn man von dort kam, sonst schließt es einfach.
+supportOverlay.addEventListener('click', e=>{ if(e.target === supportOverlay) closeSupportFlow(); });
+document.getElementById('buyCloseBtn').addEventListener('click', closeSupportFlow);
+// Der Pfeil zurück erscheint nur, wenn man aus dem Unterstützen-Fenster kam.
 document.getElementById('buyBackBtn').addEventListener('click', ()=>{
-  buyOverlay.classList.add('hidden');
-  if(buyFromSupport) supportOverlay.classList.remove('hidden');
+  showModalStep(buyOverlay, supportOverlay, true);
+  supportOverlay.querySelector('.modal').focus();
 });
-buyOverlay.addEventListener('click', e=>{ if(e.target === buyOverlay) buyOverlay.classList.add('hidden'); });
+buyOverlay.addEventListener('click', e=>{ if(e.target === buyOverlay) closeSupportFlow(); });
 document.getElementById('perksBuyBtn').addEventListener('click', openBuy);
 
 // ---- Einstellungen ----

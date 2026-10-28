@@ -2893,8 +2893,7 @@ select:focus {
   line-height: 1;
   box-shadow: 0 0 0 2px var(--wall);
 }
-.support-badge,
-.buy-plan-name {
+.support-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2902,15 +2901,12 @@ select:focus {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-.support-badge {
   padding: 5px 11px;
   border-radius: var(--r-pill);
   background: var(--p-badge-bg);
   color: var(--p-badge-fg);
 }
-.support-badge svg,
-.buy-plan-name svg {
+.support-badge svg {
   width: 13px;
   height: 13px;
 }
@@ -3328,62 +3324,132 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
   font-size: 12.5px;
   text-align: center;
 }
-.buy-plan {
-  margin-top: 20px;
-  padding: 18px 20px;
-  border: 1.5px solid var(--red);
-  border-radius: 16px;
-  background: linear-gradient(160deg, var(--red-soft), transparent 60%), var(--surface);
+.modal.support-modal:focus {
+  outline: none;
 }
-.buy-plan-head {
+/* Kauf-Fenster: schlanker Kopf mit Zurück-Pfeil, darunter die Plan-Karte im Supporter-Look */
+.buy-head {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  padding: 12px 12px 0;
+}
+.buy-head h2 {
+  grid-column: 2;
+  font-size: 18px;
+  text-align: center;
+}
+.buy-head #buyCloseBtn {
+  grid-column: 3;
+}
+.buy-plan {
+  padding: 20px 20px 18px;
+  border-radius: 18px;
+}
+.buy-plan-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
-.buy-plan-name {
-  color: var(--red);
+.buy-plan-note {
+  color: var(--p-dim);
+  font-size: 12.5px;
 }
 .buy-price {
-  color: var(--dim);
-  font-size: 14px;
-  font-weight: 600;
+  margin: 16px 0 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
 }
 .buy-includes {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding: 0;
+  gap: 9px;
+  margin: 16px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--p-fg) 14%, transparent);
   list-style: none;
-  font-size: 14.5px;
+  font-size: 14px;
+  line-height: 1.4;
 }
 .buy-includes li {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
 }
 .buy-includes li::before {
   content: "";
   flex: none;
-  width: 6px;
-  height: 11px;
-  margin: 0 4px 3px 5px;
-  border: solid var(--red);
+  width: 5px;
+  height: 10px;
+  margin: 2px 5px 0 4px;
+  border: solid var(--p-badge-bg);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
 .buy-soon {
-  margin: 16px 0 0;
-  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 16px;
+  padding: 11px 14px;
   border-radius: 12px;
   background: var(--tint);
   color: var(--ink-2);
-  font-size: 13.5px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.buy-soon svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--dim);
 }
 #buyConfirmBtn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+  opacity: 0.6;
+}
+.buy-legal {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 14px 0 0;
+  font-size: 12.5px;
+}
+.buy-legal a {
+  color: var(--dim);
+  text-underline-offset: 3px;
+}
+/* Vitrine ohne Premium: der Knopf führt zum Unterstützen-Fenster */
+.vitrine-locked svg {
+  width: 14px;
+  height: 14px;
+  color: var(--red);
+}
+
+/* Wechsel zwischen Unterstützen- und Kauf-Fenster: Hintergrund bleibt, der Inhalt gleitet seitlich. */
+.modal-overlay.is-step,
+.modal-overlay.is-step-back {
+  animation: none;
+}
+.is-step .modal {
+  animation: step-in 0.34s var(--ease-out);
+}
+.is-step-back .modal {
+  animation: step-back 0.34s var(--ease-out);
+}
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+@keyframes step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
 }
 
 /* Regal scannen: Prüfliste der erkannten Bücher */

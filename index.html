@@ -413,7 +413,7 @@
 </div>
 
 <div class="modal-overlay hidden" id="supportOverlay">
-  <div class="modal support-modal" role="dialog" aria-modal="true" aria-labelledby="supportTitle">
+  <div class="modal support-modal" role="dialog" aria-modal="true" aria-labelledby="supportTitle" tabindex="-1">
     <div class="support-hero supporter-panel">
       <button type="button" class="icon-btn support-close" id="supportCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
       <span class="support-badge"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>Supporter</span>
@@ -450,27 +450,28 @@
 </div>
 
 <div class="modal-overlay hidden" id="buyOverlay">
-  <div class="modal buy-modal" role="dialog" aria-modal="true" aria-labelledby="buyTitle">
-    <div class="modal-title-row">
+  <div class="modal support-modal buy-modal" role="dialog" aria-modal="true" aria-labelledby="buyTitle" tabindex="-1">
+    <div class="buy-head">
+      <button type="button" class="icon-btn hidden" id="buyBackBtn" aria-label="Zurück"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 5 8 12 15 19"/></svg></button>
       <h2 id="buyTitle">Supporter werden</h2>
       <button type="button" class="icon-btn" id="buyCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
     </div>
-    <p class="modal-lede">Danke, dass du das Bücherregal unterstützen möchtest.</p>
-    <div class="buy-plan">
-      <div class="buy-plan-head">
-        <span class="buy-plan-name"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>Supporter</span>
-        <span class="buy-price">Preis folgt</span>
+    <div class="support-body">
+      <div class="buy-plan supporter-panel">
+        <div class="buy-plan-top">
+          <span class="support-badge"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 6.1 6.6.6-5 4.4 1.5 6.5L12 16.7 6.3 20.1l1.5-6.5-5-4.4 6.6-.6z"/></svg>Supporter</span>
+          <span class="buy-plan-note">Dein Regal bleibt kostenlos</span>
+        </div>
+        <p class="buy-price">Preis folgt</p>
+        <ul class="buy-includes">
+          <li>Regal scannen: ein Foto statt zwanzig Titel abtippen</li>
+          <li>Vitrine: deine drei Favoriten ganz oben im Regal</li>
+          <li>Du hältst das Bücherregal am Laufen</li>
+        </ul>
       </div>
-      <ul class="buy-includes">
-        <li>Regal scannen</li>
-        <li>Vitrine für deine Favoriten</li>
-        <li>Du hältst das Bücherregal am Laufen</li>
-      </ul>
-    </div>
-    <p class="buy-soon" role="note">Der Kauf ist noch nicht freigeschaltet. Schau bald wieder vorbei.</p>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" id="buyBackBtn">Zurück</button>
-      <button type="button" class="btn btn-primary" id="buyConfirmBtn" disabled>Bald verfügbar</button>
+      <p class="buy-soon" role="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg><span>Der Kauf ist noch nicht freigeschaltet. Schau bald wieder vorbei.</span></p>
+      <button type="button" class="btn btn-primary btn-lg btn-support support-cta" id="buyConfirmBtn" disabled>Bald verfügbar</button>
+      <p class="buy-legal"><a href="impressum.html" target="_blank" rel="noopener">Impressum</a><a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a></p>
     </div>
   </div>
 </div>
