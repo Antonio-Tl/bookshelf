@@ -3625,7 +3625,7 @@ a.reader-row:hover .reader-go {
   .header-actions {
     order: 1;
   }
-  .seg {
+  .toolbar .seg {
     order: 2;
   }
   .filter-bar {
@@ -3695,7 +3695,7 @@ a.reader-row:hover .reader-go {
   #openAddBtn {
     grid-area: add;
   }
-  .seg {
+  .toolbar .seg {
     grid-area: view;
   }
   .filter-bar {
@@ -3711,7 +3711,7 @@ a.reader-row:hover .reader-go {
   }
   #openCatBtn span,
   #openAddBtn span,
-  .seg span {
+  .toolbar .seg span {
     display: none;
   }
   #openCatBtn svg {
@@ -3723,7 +3723,7 @@ a.reader-row:hover .reader-go {
     width: 18px;
     height: 18px;
   }
-  .seg button {
+  .toolbar .seg button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3732,7 +3732,7 @@ a.reader-row:hover .reader-go {
     padding: 0;
     border-radius: 8px;
   }
-  .seg svg {
+  .toolbar .seg svg {
     display: block;
     width: 17px;
     height: 17px;
@@ -3982,11 +3982,59 @@ a.reader-row:hover .reader-go {
     grid-template-columns: 1fr;
     gap: 0;
   }
+  /* Knöpfe und Schalter bleiben rechts neben dem Text, nur Auswahllisten bekommen eine eigene Zeile. */
   .setting-row {
     flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .setting-row > span {
+    flex: 1 1 0;
   }
   .setting-row select {
     width: 100%;
+  }
+  .setting-row > .btn,
+  .setting-row > .seg {
+    flex: none;
+  }
+  /* Kopfzeile mit dem Schließen-Knopf bleibt beim Scrollen langer Fenster stehen. */
+  .settings-modal .modal-title-row,
+  .account-modal .modal-title-row {
+    position: sticky;
+    top: -24px;
+    z-index: 2;
+    margin: -24px -20px 0;
+    padding: 18px 20px 10px;
+    background: var(--surface);
+    box-shadow: 0 1px 0 var(--line-soft);
+  }
+  .setting-actions {
+    display: grid;
+    gap: 0;
+    padding: 4px 0 0;
+  }
+  .setting-actions .btn {
+    justify-content: space-between;
+    width: 100%;
+    height: 48px;
+    padding: 0;
+    border: none;
+    border-bottom: 1px solid var(--line-soft);
+    border-radius: 0;
+    background: transparent;
+    font-size: 15px;
+  }
+  .settings-group:last-child > :last-child {
+    border-bottom: none;
+  }
+  .setting-actions .btn::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-top: 2px solid var(--dim);
+    border-right: 2px solid var(--dim);
+    transform: rotate(45deg);
   }
   .modal {
     max-height: calc(100vh - 20px);
