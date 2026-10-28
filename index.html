@@ -319,10 +319,9 @@
               <input type="text" id="f-author">
             </label>
             <div class="field-row">
-              <label class="field"><span>Reihe <abbr class="req" title="Pflichtfeld">*</abbr></span>
-                <input type="text" id="f-series" list="series-list" required aria-required="true" placeholder="z. B. Red Rising">
-                <datalist id="series-list"></datalist>
-              </label>
+              <div class="field"><label for="f-series">Reihe <abbr class="req" title="Pflichtfeld">*</abbr></label>
+                <input type="text" id="f-series" required aria-required="true" placeholder="z. B. Dune">
+              </div>
               <label class="field"><span>Seiten</span>
                 <input type="number" id="f-pages" min="1" placeholder="auto">
               </label>

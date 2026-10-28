@@ -1414,29 +1414,43 @@ h1 {
   -webkit-backface-visibility: hidden;
   overflow: hidden;
 }
+/* Gebundener Rücken: gewölbt (Licht von links, Schatten in beiden Falzen) und mit je einer
+   Zierlinie in der Schriftfarbe oben und unten, wie bei einem Hardcover. */
 .face.spine {
+  --rule: rgba(var(--l, 250, 250, 250), 0.42);
   left: 0;
   width: var(--wpx);
   border-radius: 2px 2px 1px 1px;
-  background: rgb(var(--g, 70, 70, 70));
+  background:
+    linear-gradient(180deg,
+      transparent 7px, var(--rule) 7px, var(--rule) 8px, transparent 8px,
+      transparent calc(100% - 9px), var(--rule) calc(100% - 9px), var(--rule) calc(100% - 8px), transparent calc(100% - 8px)),
+    linear-gradient(90deg,
+      rgba(0, 0, 0, 0.32) 0,
+      rgba(0, 0, 0, 0.06) 9%,
+      rgba(255, 255, 255, 0.14) 27%,
+      rgba(255, 255, 255, 0.03) 50%,
+      rgba(0, 0, 0, 0.06) 78%,
+      rgba(0, 0, 0, 0.36) 100%),
+    rgb(var(--g, 70, 70, 70));
   color: rgb(var(--l, 250, 250, 250));
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 5px 0 9px;
+  padding: 15px 0 17px;
   box-shadow:
-    inset -1px 0 0 rgba(0, 0, 0, 0.3),
-    inset 1px 0 0 rgba(255, 255, 255, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
 }
 .spine-emblem {
   display: none;
   flex: none;
-  width: calc(var(--wpx) - 8px);
+  width: calc(var(--wpx) - 10px);
   aspect-ratio: 1;
-  border-radius: 1px;
+  border-radius: 1.5px;
   background: var(--emblem, none) var(--ex, 50%) var(--ey, 36%) / var(--es, 300%) auto;
+  box-shadow: 0 0 0 1px var(--rule);
 }
 .book.has-emblem .spine-emblem {
   display: block;
@@ -1444,20 +1458,30 @@ h1 {
 .spine-title {
   flex: 1;
   min-height: 0;
-  max-width: calc(100% - 4px);
+  max-width: calc(100% - 8px);
   writing-mode: vertical-rl;
   text-align: center;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: 0.005em;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: 0.03em;
   overflow: hidden;
+}
+.ink-light .spine-title {
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
 .spine-no {
   flex: none;
-  font-size: 11px;
+  align-self: stretch;
+  margin: 0 6px;
+  font-size: 10.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.spine-no:not(:empty) {
+  padding-top: 6px;
+  border-top: 1px solid var(--rule);
 }
 
 .face.front {
@@ -2181,6 +2205,53 @@ input[type="date"]::-webkit-date-and-time-value {
   font-size: 13px;
 }
 
+/* Reihen-Auswahl: Freitextfeld mit Pfeil, darunter die vorhandenen Reihen */
+.combo {
+  position: relative;
+}
+.combo input[type="text"] {
+  padding-right: 38px;
+}
+.combo-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+}
+.combo-toggle:hover {
+  color: var(--ink);
+}
+.combo-toggle svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s var(--ease-out);
+}
+.combo:has([aria-expanded="true"]) .combo-toggle svg {
+  transform: rotate(180deg);
+}
+.combo-list {
+  max-height: 264px;
+}
+.combo-item {
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+}
+.combo-item .suggest-title,
+.combo-item .suggest-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* Cover-Auswahl */
 .cp-strip {
   display: flex;
@@ -2688,6 +2759,10 @@ select:focus {
 .add-book-fields .field-row {
   grid-template-columns: minmax(0, 1fr) 96px;
   gap: 12px;
+}
+/* Die Reihenliste läuft unter dem Seitenfeld weiter, damit lange Namen Platz haben. */
+.add-book-fields .combo-list {
+  right: -108px;
 }
 .field-hint {
   display: block;
@@ -4386,6 +4461,9 @@ body:has(#homeView:not(.hidden)) .site-legal {
   .add-book-fields .field-row {
     grid-template-columns: minmax(0, 1fr) 78px;
     gap: 10px;
+  }
+  .add-book-fields .combo-list {
+    right: -88px;
   }
   .toast {
     bottom: calc(16px + env(safe-area-inset-bottom));

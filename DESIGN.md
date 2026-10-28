@@ -55,10 +55,10 @@ typography:
     fontWeight: 600
   spine:
     fontFamily: "Geist, system-ui, -apple-system, Segoe UI, sans-serif"
-    fontSize: "13px"
-    fontWeight: 700
-    lineHeight: 1.08
-    letterSpacing: "0.005em"
+    fontSize: "12.5px"
+    fontWeight: 650
+    lineHeight: 1.1
+    letterSpacing: "0.03em"
 rounded:
   control: "12px"
   card: "18px"
@@ -220,7 +220,7 @@ These are computed per book in the browser and must never be authored as fixed v
 - **Body** (400, 15px, 1.45): running text; blurbs at 1.55 line-height capped at 62ch.
 - **Control** (600, 14px, -0.005em): buttons, search, menu items.
 - **Label** (600, 13px): row labels, field labels, filter pills, segmented options; 12px for stat labels and category tags.
-- **Spine** (700, 13px, 1.08, vertical writing): spine titles, shrunk in 0.5px steps down to 9px until they fit the spine; volume numbers at 11px tabular.
+- **Spine** (650, 12.5px, 1.1, +0.03em, vertical writing): spine titles, shrunk in 0.5px steps down to 9px until they fit the spine; volume numbers at 10.5px tabular, set under a hairline rule.
 
 ### Named Rules
 **The Tight Display Rule.** The larger the type, the heavier and tighter it sets: display at -0.04em, headlines at -0.035em, titles at -0.025em; body text is never negatively tracked.
@@ -289,7 +289,7 @@ White cards, max 480px, 28px padding, 22px radius, card shadow, over a 36% ink s
 Sticky translucent wall top bar with a hairline: menu icon (opens a 290px left table-of-contents panel of series with counts and scroll-spy), brand, people search, share, and the account pill or Google sign-in. Popovers drop from the top right with a short pop-in.
 
 ### Book (signature component)
-A button containing a 3D book: a spine face and a front face at 90°. Spine shows the optional emblem at the top, the vertical title, and the volume number at the foot (series only). Exactly one volume per series stands face-out: the series' first volume by default, or the last selected volume of that series. Selecting a book turns it: the slot widens to cover width (0.6s) while the book rotates -90° about its spine (0.7s), both on the shared ease-out curve; resting spines lift 6px on hover. Coverless books get a generated typographic cover (800-weight title, author and volume) on their derived colour.
+A button containing a 3D book: a spine face and a front face at 90°. Spine is shaded as a rounded hardcover back (light from the left, darker hinges) with one hairline rule near head and foot in the lettering colour; it shows the optional emblem at the top (framed by the same hairline), the vertical title, and the volume number at the foot (series only). Exactly one volume per series stands face-out: the series' first volume by default, or the last selected volume of that series. Selecting a book turns it: the slot widens to cover width (0.6s) while the book rotates -90° about its spine (0.7s), both on the shared ease-out curve; resting spines lift 6px on hover. Coverless books get a generated typographic cover (800-weight title, author and volume) on their derived colour.
 
 ### Cover Tile
 In Cover view: 2:3 cover with hinge shading and a drop shadow, then title (14px/600), volume or author (13px dim) and 11px red stars. Hover lifts 4px; the selected tile carries a 3px signal-red outline offset 3px.

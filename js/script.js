@@ -2987,9 +2987,101 @@ function buildDetailCard(book, group, owner){
   return wrap;
 }
 
+// ---- Reihen-Auswahl: Freitext plus aufklappbare Liste der vorhandenen Reihen ----
+// Ersetzt <datalist>, das Safari und Handys kaum sichtbar anzeigen.
+const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+let seriesComboSeq = 0;
+
+function mountSeriesCombo(input){
+  if(input.closest('.combo')) return;
+  const id = 'series-combo-' + (++seriesComboSeq);
+  const wrap = document.createElement('div');
+  wrap.className = 'combo';
+  input.replaceWith(wrap);
+  wrap.append(input);
+  wrap.insertAdjacentHTML('beforeend', `<button type="button" class="combo-toggle" tabindex="-1" aria-label="Vorhandene Reihen anzeigen">${ICON_CHEVRON}</button>
+    <div class="suggest-list combo-list hidden" id="${id}" role="listbox" aria-label="Vorhandene Reihen"></div>`);
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-expanded', 'false');
+  input.setAttribute('aria-controls', id);
+  const list = wrap.querySelector('.combo-list');
+  const toggle = wrap.querySelector('.combo-toggle');
+  let items = [], active = -1;
+
+  const isOpen = ()=>!list.classList.contains('hidden');
+  const close = ()=>{
+    list.classList.add('hidden');
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    active = -1;
+  };
+  const render = ()=>{
+    const typed = input.value.trim();
+    const exact = items.some(g=>g.label.toLowerCase() === typed.toLowerCase());
+    list.innerHTML = items.map((g, i)=>{
+      const meta = [g.items[0].author, g.items.length > 1 ? `${g.items.length} Bände` : 'Einzelband'].filter(Boolean).join(' · ');
+      return `<button type="button" role="option" id="${id}-${i}" class="suggest-item combo-item ${i === active ? 'is-active' : ''}" data-i="${i}" aria-selected="${i === active}">
+        ${thumbHtml(g.items[0], g)}
+        <span class="suggest-text"><span class="suggest-title">${escapeHtml(g.label)}</span><span class="suggest-meta">${escapeHtml(meta)}</span></span>
+      </button>`;
+    }).join('') + (typed && !exact ? `<p class="suggest-empty">„${escapeHtml(typed)}“ wird als neue Reihe angelegt.</p>` : '');
+    list.querySelectorAll('.combo-item').forEach(btn=>{
+      btn.addEventListener('mousedown', e=>e.preventDefault()); // Fokus bleibt im Feld
+      btn.addEventListener('click', ()=>pick(items[+btn.getAttribute('data-i')]));
+    });
+    if(active >= 0){
+      input.setAttribute('aria-activedescendant', `${id}-${active}`);
+      list.querySelector('.is-active').scrollIntoView({ block: 'nearest' });
+    } else input.removeAttribute('aria-activedescendant');
+    list.classList.remove('hidden');
+    input.setAttribute('aria-expanded', 'true');
+  };
+  // Beim Tippen wird gefiltert; über den Pfeil oder bei einer schon gewählten Reihe stehen alle zur Auswahl.
+  const open = (filter)=>{
+    const q = filter ? input.value.trim().toLowerCase() : '';
+    const series = new Set(shelves.filter(s=>s.is_series).map(s=>s.id));
+    items = buildGroups()
+      .filter(g=>series.has(g.key) && g.label.toLowerCase().includes(q))
+      .sort((a, b)=>(b.label.toLowerCase().startsWith(q) - a.label.toLowerCase().startsWith(q)) || a.label.localeCompare(b.label, 'de'));
+    active = -1;
+    if(items.length) render(); else close();
+  };
+  const pick = (g)=>{
+    input.value = g.label;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    close();
+  };
+  const openAll = ()=>{
+    const v = input.value.trim().toLowerCase();
+    open(!!v && !shelves.some(s=>s.is_series && s.label.toLowerCase() === v));
+  };
+
+  input.addEventListener('input', ()=>open(true));
+  input.addEventListener('click', ()=>{ if(!isOpen()) openAll(); });
+  input.addEventListener('blur', ()=>setTimeout(close, 150));
+  input.addEventListener('keydown', e=>{
+    if(!isOpen()){
+      if(e.key === 'ArrowDown'){ e.preventDefault(); openAll(); }
+      return;
+    }
+    if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(); }
+    else if(e.key === 'ArrowDown'){ e.preventDefault(); active = (active + 1) % items.length; render(); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); active = (active - 1 + items.length) % items.length; render(); }
+    else if(e.key === 'Enter' && active >= 0){ e.preventDefault(); pick(items[active]); }
+  });
+  toggle.addEventListener('mousedown', e=>e.preventDefault());
+  toggle.addEventListener('click', ()=>{
+    if(isOpen()){ close(); return; }
+    input.focus();
+    open(false);
+  });
+}
+
 // ---- Add-book modal ----
 const overlay = document.getElementById('modalOverlay');
 const seriesInput = document.getElementById('f-series');
+mountSeriesCombo(seriesInput);
 const categoryListEl = document.getElementById('f-category-list');
 const categoryHint = document.getElementById('f-category-hint');
 const authorInput = document.getElementById('f-author');
@@ -3176,9 +3268,6 @@ document.getElementById('openAddBtn').addEventListener('click', ()=>{
   moreGenresEl.open = false;
   addPicker.set('', []);
   closeSuggest();
-  const dl = document.getElementById('series-list');
-  const uniqueSeries = shelves.filter(s=>s.is_series).map(s=>s.label);
-  dl.innerHTML = uniqueSeries.map(s=>`<option value="${escapeHtml(s)}">`).join('');
   updateCategoryFieldForSeries();
   overlay.classList.remove('hidden');
   document.getElementById('f-title').focus();
@@ -3362,7 +3451,7 @@ function scanRowHtml(b, i){
       <label class="field"><span>Titel</span><input type="text" data-i="${i}" data-k="titel" value="${escapeHtml(b.titel)}"></label>
       <div class="field-row">
         <label class="field"><span>Autor</span><input type="text" data-i="${i}" data-k="autor" value="${escapeHtml(b.autor)}"></label>
-        <label class="field"><span>Reihe</span><input type="text" data-i="${i}" data-k="reihe" value="${escapeHtml(b.reihe)}" placeholder="leer: Einzelband" list="series-list"></label>
+        <div class="field"><label for="scan-reihe-${i}">Reihe</label><input type="text" id="scan-reihe-${i}" class="series-input" data-i="${i}" data-k="reihe" value="${escapeHtml(b.reihe)}" placeholder="leer: Einzelband"></div>
       </div>
       <div class="field"><span>Cover</span><div class="cover-picker scan-cover-picker"></div></div>
     </div>` : '';
@@ -3404,6 +3493,7 @@ function renderScanList(){
       <summary class="scan-section-head"><h3>Schon in deinem Regal <span>${owned.length}</span></h3></summary>
       ${rows(owned)}</details>` : ''}`;
   mountScanPickers();
+  scanBody.querySelectorAll('.series-input').forEach(mountSeriesCombo);
   updateScanSave();
 }
 
