@@ -79,3 +79,23 @@ test('Worker: Cover-Proxy nur für erlaubte Hosts, Fehlerberichte werden angenom
   const log = await request.post('/api/log', { data: { message: 'Smoke-Test', page: '/' } });
   expect(log.status()).toBe(204);
 });
+
+test('Anmeldedialog: Anbieter nach Supabase-Einstellung, Registrieren und Passwort vergessen', async ({ page })=>{
+  // Supabase-Antworten im Browser abfangen: es geht nichts an den echten Server.
+  await page.route('**/auth/v1/settings', r=>r.fulfill({ json: { external: { google: true, apple: true, email: true } } }));
+  await page.route('**/auth/v1/recover**', r=>r.fulfill({ json: {} }));
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#homeCreateNote')).toContainText('Apple', { timeout: 10_000 });
+  await page.locator('#googleLoginBtn').click();
+  await expect(page.locator('#loginAppleBtn')).toBeVisible();
+  await page.locator('[data-login-mode="signup"]').click();
+  await expect(page.locator('#loginTitle')).toHaveText('Konto erstellen');
+  await page.locator('#loginEmail').fill('test@example.test');
+  await page.locator('#loginPassword').fill('kurz');
+  await page.locator('#loginSubmitBtn').click();
+  await expect(page.locator('#loginError')).toContainText('mindestens 8 Zeichen');
+  await page.locator('[data-login-mode="signin"]').click();
+  await page.locator('#loginForgotBtn').click();
+  await page.locator('#loginSubmitBtn').click();
+  await expect(page.locator('#loginSentText')).toContainText('Link zum Zurücksetzen');
+});
