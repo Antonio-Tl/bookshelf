@@ -27,7 +27,7 @@
 -->
 <main class="page legal">
   <h1>Datenschutzerklärung</h1>
-  <p class="legal-lede">Bücherregal ist ein privates Projekt. Es gibt keine Werbung, kein Tracking und keine Analyse-Tools. Hier steht, welche Daten trotzdem anfallen, wofür und bei wem.</p>
+  <p class="legal-lede">Bücherregal ist ein privates Projekt. Es gibt keine Werbung, keine Cookies zum Nachverfolgen und kein seitenübergreifendes Tracking. Hier steht, welche Daten trotzdem anfallen, wofür und bei wem.</p>
 
   <h2>1. Verantwortlich</h2>
   <!-- Anschrift fehlt noch: § 5 DDG verlangt eine ladungsfähige Anschrift (kein Postfach). -->
@@ -38,13 +38,23 @@
 
   <h2>2. Aufruf der Seite (Hosting bei Cloudflare)</h2>
   <p>Die Seite und ihr Server laufen bei Cloudflare, Inc. (USA). Beim Aufruf verarbeitet Cloudflare technisch nötige Daten wie IP-Adresse, Zeitpunkt, aufgerufene Adresse und Browserkennung, um die Seite auszuliefern und vor Angriffen zu schützen. Rechtsgrundlage ist unser berechtigtes Interesse an einem sicheren, funktionierenden Angebot (Art. 6 Abs. 1 lit. f DSGVO). Cloudflare ist nach dem EU-US Data Privacy Framework zertifiziert.</p>
+  <p><strong>Fehlerberichte:</strong> Tritt in der App ein Programmfehler auf, schickt dein Browser eine kurze Meldung an unseren Server: Fehlertext, betroffene Datei und Zeile, die aufgerufene Seite und die Browserkennung, höchstens drei pro Seitenaufruf. Sie landen in den Protokollen bei Cloudflare und werden dort nach wenigen Tagen automatisch gelöscht. Wir nutzen sie nur, um Fehler zu finden. Rechtsgrundlage ist unser berechtigtes Interesse an einer funktionierenden App (Art. 6 Abs. 1 lit. f DSGVO).</p>
+  <!-- Gilt, sobald CF_ANALYTICS_TOKEN in wrangler.jsonc gesetzt ist. -->
+  <p><strong>Reichweitenmessung:</strong> Um zu sehen, wie viele Seiten aufgerufen werden und woher Besucher kommen, nutzen wir Cloudflare Web Analytics. Es setzt keine Cookies, speichert nichts in deinem Browser und erstellt keine Profile; gezählt werden Seitenaufrufe, Seite, Herkunftsseite, Land und Browsertyp, ohne dich wiederzuerkennen. Rechtsgrundlage ist unser berechtigtes Interesse, das Angebot zu verbessern (Art. 6 Abs. 1 lit. f DSGVO).</p>
 
-  <h2>3. Konto und Anmeldung mit Google</h2>
-  <p>Ein Regal anlegen kannst du nur mit einem Konto. Die Anmeldung läuft über Google. Dabei erhalten wir von Google deinen Namen, deine E-Mail-Adresse und dein Profilbild. Dazu speichern wir den Nutzernamen und Anzeigenamen, die du wählst. Rechtsgrundlage ist die Bereitstellung des Dienstes, den du nutzen willst (Art. 6 Abs. 1 lit. b DSGVO).</p>
+  <h2>3. Konto und Anmeldung</h2>
+  <p>Ein Regal anlegen kannst du nur mit einem Konto. Anmelden kannst du dich auf zwei Wegen:</p>
+  <ul>
+    <li><strong>Mit Google:</strong> Dabei erhalten wir von Google deinen Namen, deine E-Mail-Adresse und dein Profilbild.</li>
+    <li><strong>Per E-Mail-Link:</strong> Du gibst deine E-Mail-Adresse ein, und wir schicken dir einen Link, mit dem du ohne Passwort angemeldet wirst. Dafür speichern wir deine E-Mail-Adresse. Verschickt wird die E-Mail über Supabase (siehe Abschnitt 4) und unseren E-Mail-Versanddienst.<!-- Den E-Mail-Dienst (SMTP in Supabase) hier mit Namen und Sitz nennen, sobald er eingerichtet ist. --></li>
+  </ul>
+  <p>Dazu speichern wir den Nutzernamen und Anzeigenamen, die du wählst. Rechtsgrundlage ist die Bereitstellung des Dienstes, den du nutzen willst (Art. 6 Abs. 1 lit. b DSGVO).</p>
 
   <h2>4. Deine Regale (Supabase)</h2>
-  <p>Konto und Regaldaten liegen in einer Datenbank von Supabase, Inc., mit Servern in Irland (EU). Gespeichert werden deine Bücher mit allem, was du einträgst (Titel, Autor, Reihe, Bewertung, Lesedatum, Seitenzahl, Klappentext, Notizen, Kategorien), außerdem wem du folgst und deine Mitteilungen.</p>
+  <p>Konto und Regaldaten liegen in einer Datenbank von Supabase, Inc., mit Servern in Irland (EU). Gespeichert werden deine Bücher mit allem, was du einträgst (Titel, Autor, Reihe, Bewertung, Lesestatus, Lesedatum, Seitenzahl, Klappentext, Notizen, Kategorien, Coveradresse), außerdem wem du folgst und deine Mitteilungen.</p>
+  <p><strong>Import aus Goodreads oder StoryGraph:</strong> Die Exportdatei liest nur dein Browser. Zu uns gelangen allein die Bücher, die du zum Import auswählst, mit Titel, Autor, Reihe, Bewertung, Lesedatum, Seitenzahl und Status; Rezensionen nur, wenn du das ausdrücklich ankreuzt. Alle anderen Angaben der Datei verlassen dein Gerät nicht.</p>
   <p><strong>Was andere sehen:</strong> Dein Regal mit Nutzername, Anzeigename und Profilbild ist über seinen Link öffentlich lesbar, mit allen Büchern samt Bewertungen, Lesedaten, Klappentexten und Notizen. Das gilt auch für ein privates Profil. Mit einem öffentlichen Profil findet man dich außerdem in der Personensuche. In der Übersicht „Bücherregale ansehen“ erscheinst du nur, wenn du das in den Einstellungen erlaubst. Ein privates Profil fehlt in Suche und Übersicht, bleibt aber über den Link erreichbar. Deine E-Mail-Adresse sehen andere Nutzer nie.</p>
+  <p><strong>Link-Vorschau:</strong> Teilst du den Link zu einem Regal (zum Beispiel in WhatsApp), zeigt die Vorschau den Namen des Regals, die Zahl der Bücher, die größten Reihen und ein Cover. Das sind nur Angaben, die über den Link ohnehin öffentlich sind. Suchmaschinen sollen nur Regale aufnehmen, die in der Übersicht stehen; private und nicht gelistete Regale sind für sie gesperrt.</p>
   <p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO.</p>
 
   <h2>5. Buchsuche und Cover</h2>
@@ -53,7 +63,8 @@
     <li><strong>Google Books</strong> (Google): Die Suchanfrage geht über unseren Server an Google. Google erfährt dabei nur den Suchbegriff, nicht deine IP-Adresse.</li>
     <li><strong>Open Library</strong> (Internet Archive, USA): Dein Browser lädt Suchergebnisse direkt von dort. Das Internet Archive erfährt dabei deine IP-Adresse und den Suchbegriff.</li>
   </ul>
-  <p>Coverbilder lädt dein Browser direkt von dem Server, auf dem sie liegen: meist Open Library oder Google Books, bei einem selbst eingetragenen Cover von der angegebenen Adresse. Dieser Server erfährt dabei deine IP-Adresse.</p>
+  <p>Coverbilder lädt dein Browser direkt von dem Server, auf dem sie liegen: meist Open Library oder Google Books, bei einem selbst eingetragenen Cover von der angegebenen Adresse. Dieser Server erfährt dabei deine IP-Adresse. Hat die App für eines deiner Bücher ein Cover gefunden, merken wir uns seine Adresse in deinem Regal, damit spätere Besucher nicht erneut suchen müssen.</p>
+  <p>Für ein Bild zum Teilen („Als Bild für Instagram, WhatsApp &amp; Co.“) holt unser Server die Cover von Open Library oder Google Books. Diese erfahren dabei nur die Adresse des Covers, nicht deine IP-Adresse. Das Bild selbst entsteht in deinem Browser; wir speichern es nicht.</p>
   <p>Rechtsgrundlage ist unser berechtigtes Interesse, Buchdaten und Cover anzuzeigen (Art. 6 Abs. 1 lit. f DSGVO).</p>
 
   <h2 id="scan">6. Regal scannen (Premium)</h2>
