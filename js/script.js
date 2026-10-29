@@ -2316,8 +2316,14 @@ document.getElementById('accDeleteForm').addEventListener('submit', async e=>{
 // Die Seite ist nur die Oberfläche: jede Aktion läuft über eine Datenbankfunktion,
 // die selbst prüft, ob die Sitzung einem Admin gehört und per Zwei-Faktor bestätigt ist.
 let adminUsers = [];
+let adminLogEntries = [];
 let adminOpenId = null;
 let adminLoadSeq = 0;
+let adminFilter = 'all';
+let limitPeak = null; // { name, pct } des vollsten Gratis-Kontingents, für die Übersicht
+const ADMIN_TAB_KEY = 'bookshelf-admin-tab';
+const ADMIN_TABS = ['overview', 'users', 'costs', 'limits', 'log'];
+let adminTab = ADMIN_TABS.includes(getPref(ADMIN_TAB_KEY, '')) ? getPref(ADMIN_TAB_KEY, '') : 'overview';
 const ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg>';
 
@@ -2361,8 +2367,45 @@ async function renderAdmin(){
   document.getElementById('adminGate').classList.add('hidden');
   document.getElementById('adminContent').classList.remove('hidden');
   document.getElementById('adminRefreshBtn').classList.remove('hidden');
+  setAdminTab(adminTab);
   await loadAdminData();
 }
+
+// ---- Verwaltung: Reiter ----
+function setAdminTab(tab, focus = false){
+  adminTab = tab;
+  setPref(ADMIN_TAB_KEY, tab);
+  document.querySelectorAll('#adminTabs [role="tab"]').forEach(btn=>{
+    const on = btn.getAttribute('data-tab') === tab;
+    btn.setAttribute('aria-selected', on);
+    btn.tabIndex = on ? 0 : -1;
+    if(on && focus) btn.focus();
+  });
+  ADMIN_TABS.forEach(t=>document.getElementById(`adminPanel-${t}`).classList.toggle('hidden', t !== tab));
+}
+document.getElementById('adminTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('[role="tab"]');
+  if(btn) setAdminTab(btn.getAttribute('data-tab'));
+});
+document.getElementById('adminTabs').addEventListener('keydown', e=>{
+  const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if(!step) return;
+  e.preventDefault();
+  setAdminTab(ADMIN_TABS[(ADMIN_TABS.indexOf(adminTab) + step + ADMIN_TABS.length) % ADMIN_TABS.length], true);
+});
+// Kacheln und Knöpfe der Übersicht springen in den passenden Reiter.
+document.getElementById('adminContent').addEventListener('click', e=>{
+  const go = e.target.closest('[data-goto]');
+  if(go){ setAdminTab(go.getAttribute('data-goto')); window.scrollTo({ top: 0 }); return; }
+  const user = e.target.closest('[data-user]');
+  if(!user) return;
+  adminOpenId = user.getAttribute('data-user');
+  adminFilter = 'all';
+  document.getElementById('adminSearch').value = '';
+  setAdminTab('users');
+  renderAdminUsers();
+  document.querySelector(`.admin-user[data-id="${CSS.escape(adminOpenId)}"]`)?.scrollIntoView({ block: 'center' });
+});
 
 async function renderMfaGate(){
   const { data: factors, error } = await supabaseClient.auth.mfa.listFactors();
@@ -2437,23 +2480,65 @@ async function loadAdminData(){
     return;
   }
   adminUsers = users.data || [];
-  renderAdminStats();
+  adminLogEntries = log.data || [];
+  document.getElementById('adminTabUsersCount').textContent = adminUsers.length;
+  renderAdminOverview();
   renderAdminUsers();
-  renderAdminLog(log.data || []);
+  renderAdminLog();
   loadAdminCosts(seq);
 }
 
-function renderAdminStats(){
+function adminTileHtml(label, value, note = '', goto = ''){
+  return `<div class="admin-tile">${goto ? `<button type="button" class="admin-tile-link" data-goto="${goto}" aria-label="${label}: Details"></button>` : ''}
+    <dt>${label}</dt><dd>${value}</dd>${note ? `<small>${note}</small>` : ''}</div>`;
+}
+
+// Kacheln, neue Konten und die letzten Aktionen. Kosten und Grenzen kommen nach, sobald sie geladen sind.
+function renderAdminOverview(){
   const books = adminUsers.reduce((s, u)=>s + Number(u.book_count || 0), 0);
   const banned = adminUsers.filter(u=>u.banned_at).length;
   const premium = adminUsers.filter(u=>u.is_premium).length;
   const bought = adminUsers.filter(u=>u.premium_source === 'purchase').length;
-  document.getElementById('adminStats').innerHTML = `
-    <div><dt>Konten</dt><dd>${adminUsers.length}</dd></div>
-    <div><dt>Bücher</dt><dd>${books}</dd></div>
-    <div><dt>Premium</dt><dd>${premium}</dd></div>
-    <div><dt>Gekauft</dt><dd>${bought}</dd></div>
-    <div><dt>Gesperrt</dt><dd>${banned}</dd></div>`;
+  const monthAgo = Date.now() - 30 * 86400000;
+  const fresh = adminUsers.filter(u=>new Date(u.created_at) >= monthAgo).length;
+  const active = adminUsers.filter(u=>u.last_sign_in_at && new Date(u.last_sign_in_at) >= monthAgo).length;
+  const n = costStats ? costNumbers() : null;
+  const peakNote = limitPeak ? `${escapeHtml(limitPeak.name)}` : '';
+  document.getElementById('adminStats').innerHTML = [
+    adminTileHtml('Konten', fmtNum(adminUsers.length), `${fresh} neu in 30 Tagen${banned ? ` · ${banned}\u00a0gesperrt` : ''}`, 'users'),
+    adminTileHtml('Aktiv', fmtNum(active), 'in 30 Tagen angemeldet', 'users'),
+    adminTileHtml('Bücher', fmtNum(books), adminUsers.length ? `Ø ${fmtNum(books / adminUsers.length, 1)} pro Konto` : ''),
+    adminTileHtml('Premium', fmtNum(premium), `davon ${bought} gekauft`, 'users'),
+    adminTileHtml('Kosten pro Monat', n ? fmtEur(n.month) : '…', n ? `${fmtEur(n.month * 12)} im Jahr` : 'wird geladen', 'costs'),
+    adminTileHtml('Gratis-Grenzen', limitPeak ? `${limitPeak.pct < 0.1 && limitPeak.pct > 0 ? '< 0,1' : fmtNum(limitPeak.pct, 1)} %` : '…',
+      limitPeak ? `am vollsten: ${peakNote}` : 'wird geladen', 'limits'),
+  ].join('');
+  const newest = adminUsers.slice().sort((a, b)=>new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+  document.getElementById('adminNewUsers').innerHTML = newest.length ? newest.map(u=>`
+    <li><button type="button" class="admin-mini-user" data-user="${escapeHtml(u.id)}">
+      ${adminAvatarHtml(u)}
+      <span><b>${escapeHtml(u.username ? shownName(u) : 'Ohne Nutzernamen')}</b><small>${escapeHtml(u.username ? '@' + u.username : u.email || '')}</small></span>
+      <time>${relDay(u.created_at)}</time>
+    </button></li>`).join('') : '<li class="admin-muted">Noch keine Konten.</li>';
+  document.getElementById('adminRecentLog').innerHTML = adminLogEntries.length
+    ? adminLogEntries.slice(0, 5).map(l=>`<li><time>${relDay(l.created_at)}, ${fmtTime(l.created_at)}</time><span>${logEntryText(l)}</span></li>`).join('')
+    : '<li class="admin-muted">Noch keine Aktionen.</li>';
+}
+
+const fmtTime = d=>new Date(d).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+// „Heute“, „Gestern“ oder das Datum, nach dem Kalendertag in der Ortszeit.
+function relDay(d){
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - day) / 86400000);
+  if(diff === 0) return 'Heute';
+  if(diff === 1) return 'Gestern';
+  return day.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: day.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
+}
+function adminAvatarHtml(u){
+  return u.avatar_url
+    ? `<img class="reader-avatar" src="${escapeHtml(u.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+    : `<span class="reader-avatar reader-avatar-fallback" aria-hidden="true">${escapeHtml((u.username || '?').charAt(0).toUpperCase())}</span>`;
 }
 
 function adminUserHtml(u){
@@ -2462,9 +2547,7 @@ function adminUserHtml(u){
   const badges = (u.is_admin ? '<span class="badge">Admin</span>' : '')
     + (u.is_premium ? `<span class="badge badge-premium">${u.premium_source === 'purchase' ? 'Gekauft' : 'Premium'}</span>` : '')
     + (u.banned_at ? '<span class="badge badge-danger">Gesperrt</span>' : '');
-  const avatar = u.avatar_url
-    ? `<img class="reader-avatar" src="${escapeHtml(u.avatar_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
-    : `<span class="reader-avatar reader-avatar-fallback" aria-hidden="true">${escapeHtml((u.username || '?').charAt(0).toUpperCase())}</span>`;
+  const avatar = adminAvatarHtml(u);
   const body = open ? `
     <div class="admin-user-body">
       ${u.banned_at ? `<p class="admin-note">Gesperrt seit ${fmtDate(u.banned_at)}${u.ban_reason ? ': ' + escapeHtml(u.ban_reason) : ''}</p>` : ''}
@@ -2493,13 +2576,33 @@ function adminUserHtml(u){
   </article>`;
 }
 
+const ADMIN_FILTERS = {
+  all: ['Alle', ()=>true],
+  premium: ['Premium', u=>u.is_premium],
+  banned: ['Gesperrt', u=>u.banned_at],
+  admin: ['Admins', u=>u.is_admin],
+  empty: ['Ohne Bücher', u=>!Number(u.book_count)],
+};
+const ADMIN_SORTS = {
+  new: (a, b)=>new Date(b.created_at) - new Date(a.created_at),
+  active: (a, b)=>new Date(b.last_sign_in_at || 0) - new Date(a.last_sign_in_at || 0),
+  books: (a, b)=>Number(b.book_count) - Number(a.book_count),
+  name: (a, b)=>(a.username || '~').localeCompare(b.username || '~', 'de'),
+};
+
 function renderAdminUsers(){
   const q = document.getElementById('adminSearch').value.trim().toLowerCase();
-  const list = q
-    ? adminUsers.filter(u=>[u.username, u.email, u.display_name].some(v=>v && v.toLowerCase().includes(q)))
-    : adminUsers;
+  document.getElementById('adminFilters').innerHTML = Object.entries(ADMIN_FILTERS).map(([k, [label, test]])=>
+    `<button type="button" class="filter-pill ${adminFilter === k ? 'active' : ''}" data-filter="${k}" aria-pressed="${adminFilter === k}">${label} <span class="admin-pill-count">${adminUsers.filter(test).length}</span></button>`).join('');
+  const list = adminUsers
+    .filter(ADMIN_FILTERS[adminFilter][1])
+    .filter(u=>!q || [u.username, u.email, u.display_name].some(v=>v && v.toLowerCase().includes(q)))
+    .sort(ADMIN_SORTS[document.getElementById('adminSort').value]);
+  document.getElementById('adminUserCount').textContent = list.length === adminUsers.length
+    ? `${list.length} ${list.length === 1 ? 'Konto' : 'Konten'}` : `${list.length} von ${adminUsers.length} Konten`;
   const box = document.getElementById('adminUsers');
-  box.innerHTML = list.length ? list.map(adminUserHtml).join('') : '<p class="cards-error">Niemand gefunden.</p>';
+  box.classList.toggle('is-empty', !list.length);
+  box.innerHTML = list.length ? list.map(adminUserHtml).join('') : '<p class="admin-empty">Niemand gefunden.</p>';
   if(adminOpenId && list.some(u=>u.id === adminOpenId)) loadAdminBooks(adminOpenId);
 }
 
@@ -2595,6 +2698,13 @@ document.getElementById('adminUsers').addEventListener('click', async e=>{
   adminAction(btn.getAttribute('data-act'), u);
 });
 document.getElementById('adminSearch').addEventListener('input', renderAdminUsers);
+document.getElementById('adminSort').addEventListener('change', renderAdminUsers);
+document.getElementById('adminFilters').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-filter]');
+  if(!btn) return;
+  adminFilter = btn.getAttribute('data-filter');
+  renderAdminUsers();
+});
 document.getElementById('adminRefreshBtn').addEventListener('click', loadAdminData);
 
 const LOG_LABELS = {
@@ -2607,18 +2717,28 @@ const LOG_LABELS = {
   premium_on: 'hat Premium vergeben an',
   premium_off: 'hat Premium entzogen:',
 };
-function renderAdminLog(entries){
+function logEntryText(l){
+  const d = l.details || {};
+  const extra = l.action === 'rename' ? ` (@${d.from || '–'} → @${d.to || '–'})`
+    : l.action === 'delete_book' ? ` („${d.title || ''}“)`
+    : l.action === 'clear_shelf' ? ` (${d.books || 0} Bücher)`
+    : l.action === 'ban' && d.reason ? ` (${d.reason})` : '';
+  return `<b>@${escapeHtml(l.admin_name || '?')}</b> ${LOG_LABELS[l.action] || escapeHtml(l.action)} <b>${l.target_name ? '@' + escapeHtml(l.target_name) : 'gelöschtes Konto'}</b>${escapeHtml(extra)}`;
+}
+// Nach Kalendertagen gegliedert, neueste zuerst wie aus admin_list_log.
+function renderAdminLog(){
   const box = document.getElementById('adminLog');
-  if(!entries.length){ box.innerHTML = '<li class="admin-muted">Noch keine Aktionen.</li>'; return; }
-  box.innerHTML = entries.map(l=>{
-    const d = l.details || {};
-    const extra = l.action === 'rename' ? ` (@${d.from || '–'} → @${d.to || '–'})`
-      : l.action === 'delete_book' ? ` („${d.title || ''}“)`
-      : l.action === 'clear_shelf' ? ` (${d.books || 0} Bücher)`
-      : l.action === 'ban' && d.reason ? ` (${d.reason})` : '';
-    const when = new Date(l.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    return `<li><time>${when}</time><span><b>@${escapeHtml(l.admin_name || '?')}</b> ${LOG_LABELS[l.action] || escapeHtml(l.action)} <b>${l.target_name ? '@' + escapeHtml(l.target_name) : 'gelöschtes Konto'}</b>${escapeHtml(extra)}</span></li>`;
-  }).join('');
+  if(!adminLogEntries.length){ box.innerHTML = '<p class="admin-empty">Noch keine Aktionen.</p>'; return; }
+  const days = [];
+  adminLogEntries.forEach(l=>{
+    const label = relDay(l.created_at);
+    if(!days.length || days[days.length - 1].label !== label) days.push({ label, items: [] });
+    days[days.length - 1].items.push(l);
+  });
+  box.innerHTML = days.map(day=>`<section class="admin-log-day">
+    <h3>${day.label}<span>${day.items.length} ${day.items.length === 1 ? 'Aktion' : 'Aktionen'}</span></h3>
+    <ol class="admin-log">${day.items.map(l=>`<li><time>${fmtTime(l.created_at)}</time><span>${logEntryText(l)}</span></li>`).join('')}</ol>
+  </section>`).join('');
 }
 
 // ---- Verwaltung: Kosten ----
@@ -2748,6 +2868,7 @@ function limitForecast(used, limit, s){
 
 function meterHtml({ name, host, used, limit, value, of, note }){
   const pct = limit ? used / limit * 100 : 0;
+  if(!limitPeak || pct > limitPeak.pct) limitPeak = { name, pct };
   const state = pct >= 100 ? ['is-over', 'Über der Grenze'] : pct >= 80 ? ['is-near', 'Fast voll'] : ['', ''];
   const shown = pct > 0 && pct < 0.1 ? '< 0,1' : fmtNum(pct, 1);
   return `<div class="limit-meter ${state[0]}">
@@ -2759,6 +2880,7 @@ function meterHtml({ name, host, used, limit, value, of, note }){
 }
 
 function renderLimits(){
+  limitPeak = null;
   const s = costStats && !costStats.error ? costStats : null;
   const days = workerUsage && workerUsage.days;
   const meters = [];
@@ -2786,6 +2908,7 @@ function renderLimits(){
   document.getElementById('adminLimitMeters').innerHTML = meters.join('')
     + hints.map(h=>`<p class="admin-muted limit-hint">${escapeHtml(h)}</p>`).join('')
     + '<p class="admin-muted limit-hint">Egress (5 GB im Monat) zeigt nur Supabase selbst: Dashboard → Usage.</p>';
+  renderAdminOverview();
   renderUsageChart();
 }
 
@@ -2879,9 +3002,11 @@ function costItemHtml(it, i){
 
 function renderCostList(){
   document.getElementById('adminCostList').innerHTML = `
+    <div class="admin-cost-group">Aus echten Zahlen berechnet</div>
     <div class="admin-cost-row is-auto" id="adminCostGemini"><span class="admin-cost-main"><b>Gemini 3.5 Flash-Lite (Regal scannen)</b><small></small></span><output class="admin-cost-month"></output></div>
     <div class="admin-cost-row is-auto" id="adminCostStripe"><span class="admin-cost-main"><b>Stripe-Gebühren (Supporter-Käufe)</b><small></small></span><output class="admin-cost-month"></output></div>
-    ${costCfg.items.map(costItemHtml).join('')}`;
+    <div class="admin-cost-group">Eigene Posten<span>Betrag · Rhythmus · pro Monat</span></div>
+    ${costCfg.items.length ? costCfg.items.map(costItemHtml).join('') : '<p class="admin-empty">Noch keine eigenen Posten.</p>'}`;
   document.getElementById('adminCostAssume').innerHTML = COST_ASSUME_FIELDS.map(([k, label, step])=>`
     <label class="field"><span>${label}</span><input type="number" data-k="${k}" value="${escapeHtml(String(costCfg[k]))}" min="0" step="${step}" inputmode="decimal"></label>`).join('');
   renderCostTotals();
@@ -2893,11 +3018,12 @@ function renderCostTotals(){
   const fmtCt = v=>`${(v * 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} ct`;
   const missing = costStats === null ? 'Zahlen werden geladen …'
     : costStats.error ? 'Keine echten Zahlen: supabase/021_admin_costs.sql im Supabase SQL Editor ausführen.' : '';
-  document.getElementById('adminCostStats').innerHTML = `
-    <div><dt>Pro Monat</dt><dd>${fmtEur(n.month)}</dd></div>
-    <div><dt>Pro Jahr</dt><dd>${fmtEur(n.month * 12)}</dd></div>
-    <div><dt>Einmalig</dt><dd>${fmtEur(n.once)}</dd></div>
-    <div><dt>Supporter netto, 30 Tage</dt><dd>${fmtEur(n.revenue)}</dd></div>`;
+  document.getElementById('adminCostStats').innerHTML = [
+    adminTileHtml('Pro Monat', fmtEur(n.month)),
+    adminTileHtml('Pro Jahr', fmtEur(n.month * 12)),
+    adminTileHtml('Einmalig', fmtEur(n.once)),
+    adminTileHtml('Supporter netto', fmtEur(n.revenue), 'letzte 30 Tage'),
+  ].join('');
   const gemini = document.getElementById('adminCostGemini');
   gemini.querySelector('small').textContent = [
     missing || `${n.s.scans_7d} Scans in 7 Tagen, heute ${n.s.scans_today}`,
@@ -2917,6 +3043,7 @@ function renderCostTotals(){
     const it = costCfg.items[row.getAttribute('data-i')];
     row.querySelector('output').textContent = it.every === 'once' ? 'einmalig' : `${fmtEur(perMonth(it))}/Monat`;
   });
+  renderAdminOverview();
 }
 
 document.getElementById('adminCostList').addEventListener('input', e=>{

@@ -235,25 +235,66 @@
   <section class="admin-gate hidden" id="adminGate" aria-live="polite"></section>
 
   <div class="hidden" id="adminContent">
-    <dl class="stats admin-stats" id="adminStats"></dl>
-    <div class="admin-toolbar">
-      <div class="search-box browse-search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="adminSearch" placeholder="Name oder E-Mail" aria-label="Nutzer filtern" autocomplete="off">
-      </div>
+    <div class="admin-tabs" role="tablist" aria-label="Bereiche der Verwaltung" id="adminTabs">
+      <button type="button" role="tab" id="adminTab-overview" aria-controls="adminPanel-overview" data-tab="overview">Übersicht</button>
+      <button type="button" role="tab" id="adminTab-users" aria-controls="adminPanel-users" data-tab="users">Nutzer <span class="admin-tab-count" id="adminTabUsersCount"></span></button>
+      <button type="button" role="tab" id="adminTab-costs" aria-controls="adminPanel-costs" data-tab="costs">Kosten</button>
+      <button type="button" role="tab" id="adminTab-limits" aria-controls="adminPanel-limits" data-tab="limits">Gratis-Grenzen</button>
+      <button type="button" role="tab" id="adminTab-log" aria-controls="adminPanel-log" data-tab="log">Protokoll</button>
     </div>
-    <div class="admin-users" id="adminUsers"></div>
 
-    <section class="admin-costs" aria-labelledby="adminCostsTitle">
-      <h2 class="section-title admin-log-title" id="adminCostsTitle">Kosten</h2>
+    <section class="admin-panel" role="tabpanel" id="adminPanel-overview" aria-labelledby="adminTab-overview" tabindex="-1">
+      <dl class="admin-tiles" id="adminStats"></dl>
+      <div class="admin-overview-grid">
+        <div class="admin-card">
+          <div class="admin-card-head"><h2>Neu dabei</h2><button type="button" class="btn btn-ghost btn-sm" data-goto="users">Alle Nutzer</button></div>
+          <ul class="admin-mini-list" id="adminNewUsers"></ul>
+        </div>
+        <div class="admin-card">
+          <div class="admin-card-head"><h2>Letzte Aktionen</h2><button type="button" class="btn btn-ghost btn-sm" data-goto="log">Ganzes Protokoll</button></div>
+          <ol class="admin-log is-compact" id="adminRecentLog"></ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-panel hidden" role="tabpanel" id="adminPanel-users" aria-labelledby="adminTab-users" tabindex="-1">
+      <div class="admin-toolbar">
+        <div class="search-box browse-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="adminSearch" placeholder="Name oder E-Mail" aria-label="Nutzer filtern" autocomplete="off">
+        </div>
+        <div class="admin-filters" id="adminFilters" role="group" aria-label="Nutzer eingrenzen"></div>
+      </div>
+      <div class="admin-list-head">
+        <p class="admin-muted admin-count" id="adminUserCount" aria-live="polite"></p>
+        <label class="admin-sort">
+          <span>Sortieren</span>
+          <select id="adminSort">
+            <option value="new">Neueste zuerst</option>
+            <option value="active">Zuletzt angemeldet</option>
+            <option value="books">Meiste Bücher</option>
+            <option value="name">Name</option>
+          </select>
+        </label>
+      </div>
+      <div class="admin-users" id="adminUsers"></div>
+    </section>
+
+    <section class="admin-panel hidden" role="tabpanel" id="adminPanel-costs" aria-labelledby="adminTab-costs" tabindex="-1">
       <p class="admin-muted admin-costs-lede">Was im Monat und im Jahr auf dich zukommt. Gemini und Stripe rechnen mit den echten Scans und Käufen, alles andere kannst du hier anpassen. Deine Änderungen bleiben in diesem Browser.</p>
-      <dl class="stats admin-stats" id="adminCostStats"></dl>
+      <dl class="admin-tiles" id="adminCostStats"></dl>
       <div class="admin-cost-list" id="adminCostList"></div>
       <div class="admin-cost-foot">
         <button type="button" class="btn btn-secondary" id="adminCostAdd">Posten hinzufügen</button>
         <button type="button" class="btn btn-ghost" id="adminCostReset">Auf Standard zurücksetzen</button>
       </div>
-      <h3 class="admin-sub">Gratis-Grenzen</h3>
+      <details class="admin-cost-assume">
+        <summary>Annahmen für die Rechnung</summary>
+        <div class="admin-cost-fields" id="adminCostAssume"></div>
+      </details>
+    </section>
+
+    <section class="admin-panel hidden" role="tabpanel" id="adminPanel-limits" aria-labelledby="adminTab-limits" tabindex="-1">
       <p class="admin-muted admin-costs-lede">Wie viel vom Gratis-Plan schon belegt ist. Die Hochrechnung teilt den Verbrauch durch die Zahl der Konten und rechnet mit dem Wachstum der letzten 30 Tage weiter, ist also grob. Darüber kosten Supabase Pro 25 $ und Cloudflare Workers Paid 5 $ im Monat.</p>
       <div class="limit-meters" id="adminLimitMeters"></div>
       <figure class="usage-chart">
@@ -264,14 +305,11 @@
           <table id="adminUsageTable"></table>
         </details>
       </figure>
-      <details class="admin-cost-assume">
-        <summary>Annahmen für die Rechnung</summary>
-        <div class="admin-cost-fields" id="adminCostAssume"></div>
-      </details>
     </section>
 
-    <h2 class="section-title admin-log-title">Protokoll</h2>
-    <ol class="admin-log" id="adminLog"></ol>
+    <section class="admin-panel hidden" role="tabpanel" id="adminPanel-log" aria-labelledby="adminTab-log" tabindex="-1">
+      <div class="admin-log-days" id="adminLog"></div>
+    </section>
   </div>
 </main>
 
