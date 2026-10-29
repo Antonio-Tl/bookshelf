@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://bookshelf.antonio-tl.com/sitemap.xml
+Sitemap: https://buecherregal.app/sitemap.xml
