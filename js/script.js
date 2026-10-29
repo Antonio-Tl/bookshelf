@@ -3597,8 +3597,10 @@ function render(){
 
   if(books.length === 0){
     container.innerHTML = owner
-      ? '<div class="empty-state"><p>Dein Regal ist noch leer. Stell mit „+ Buch“ dein erstes Buch hinein.</p></div>'
+      ? '<div class="empty-state"><p>Dein Regal ist noch leer. Stell mit „+ Buch“ dein erstes Buch hinein.</p><p><button type="button" class="btn btn-secondary" id="emptyImportBtn">Aus Goodreads oder StoryGraph importieren</button></p></div>'
       : '<div class="empty-state"><p>Dieses Regal ist noch leer.</p></div>';
+    const importBtn = document.getElementById('emptyImportBtn');
+    if(importBtn) importBtn.addEventListener('click', openImport);
     lastGroups = [];
     updateToc([]);
     updateBookDetailPanel();
@@ -4841,6 +4843,243 @@ saveScanBtn.addEventListener('click', async ()=>{
   showToast(added === chosen.length
     ? (added === 1 ? '1 Buch steht jetzt im Regal' : `${added} Bücher stehen jetzt im Regal`)
     : `${added} von ${chosen.length} Büchern gespeichert, dann ist ein Fehler aufgetreten`);
+});
+
+// ---- Import aus Goodreads und StoryGraph ----
+// Beide Dienste exportieren die eigene Bibliothek als CSV. Die Datei liest nur der Browser; in die Datenbank
+// gehen per import_books() (supabase/025_import_books.sql) die Bücher selbst, ohne Cover. Die sucht das
+// Regal danach wie immer selbst und merkt sie sich (rememberCover).
+const importOverlay = document.getElementById('importOverlay');
+const importBody = document.getElementById('importBody');
+const importFileInput = document.getElementById('importFileInput');
+const IMPORT_CHUNK = 500;
+let importState = null; // { source, items: [{title, author, series, series_order, rating, date_read, page_count, status, review}], dupes }
+
+// CSV nach RFC 4180: Felder in Anführungszeichen dürfen Kommas, Zeilenumbrüche und "" enthalten.
+function parseCsv(text){
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(quoted){
+      if(c === '"' && text[i + 1] === '"'){ field += '"'; i++; }
+      else if(c === '"') quoted = false;
+      else field += c;
+    } else if(c === '"') quoted = true;
+    else if(c === ','){ row.push(field); field = ''; }
+    else if(c === '\n' || c === '\r'){
+      if(c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); rows.push(row); row = []; field = '';
+    } else field += c;
+  }
+  if(field || row.length){ row.push(field); rows.push(row); }
+  const head = (rows.shift() || []).map(h=>h.replace(/^﻿/, '').trim());
+  return rows.filter(r=>r.some(v=>v.trim())).map(r=>Object.fromEntries(head.map((h, i)=>[h, (r[i] || '').trim()])));
+}
+
+// Goodreads hängt die Reihe an den Titel: „Der Name des Windes (Die Königsmörder-Chronik, #1)“.
+function splitSeries(title){
+  const m = title.match(/^(.*\S)\s*\(([^()]+?),?\s*#(\d+(?:\.\d+)?)(?:-\d+)?\)\s*$/);
+  if(!m) return { title, series: '', order: null };
+  return { title: m[1], series: m[2].trim(), order: /^\d+$/.test(m[3]) ? Number(m[3]) : null };
+}
+// "2023/05/14" oder "2023-05-14" (bei StoryGraph auch mehrere, durch Komma getrennt: das letzte zählt)
+function importDate(raw){
+  const all = String(raw || '').match(/\d{4}[/-]\d{1,2}[/-]\d{1,2}/g);
+  if(!all) return null;
+  const [y, m, d] = all[all.length - 1].split(/[/-]/).map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if(date.getUTCMonth() !== m - 1) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+const IMPORT_STATUS = { 'read': 'read', 'currently-reading': 'reading', 'to-read': 'want' };
+
+function importItemsFromCsv(rows){
+  if(!rows.length) return null;
+  const cols = Object.keys(rows[0]);
+  if(cols.includes('Exclusive Shelf')){
+    return { source: 'Goodreads', items: rows.map(r=>{
+      const { title, series, order } = splitSeries(r['Title'] || '');
+      return {
+        title, series, series_order: order,
+        author: r['Author'] || '',
+        rating: Math.max(0, Math.min(5, parseInt(r['My Rating'], 10) || 0)),
+        date_read: importDate(r['Date Read']),
+        page_count: parseInt(r['Number of Pages'], 10) || null,
+        status: IMPORT_STATUS[r['Exclusive Shelf']] || null,
+        review: r['My Review'] || '',
+      };
+    }) };
+  }
+  if(cols.includes('Read Status')){
+    return { source: 'StoryGraph', items: rows.map(r=>{
+      const { title, series, order } = splitSeries(r['Title'] || '');
+      return {
+        title, series, series_order: order,
+        author: (r['Authors'] || '').split(',')[0].trim(),
+        rating: Math.max(0, Math.min(5, Math.round(parseFloat(r['Star Rating']) || 0))),
+        date_read: importDate(r['Last Date Read'] || r['Dates Read']),
+        page_count: null,
+        status: IMPORT_STATUS[r['Read Status']] || null, // did-not-finish bleibt draußen
+        review: r['Review'] || '',
+      };
+    }) };
+  }
+  return null;
+}
+
+const importKey = (title, author)=>normTitle(title) + '|' + normTitle(author);
+
+function openImport(){
+  if(!isOwnerView()) return;
+  importState = null;
+  renderImport();
+  importOverlay.classList.remove('hidden');
+}
+
+function renderImport(phase = 'pick', info = ''){
+  if(phase === 'pick'){
+    importBody.innerHTML = `
+      <p class="modal-lede">Hol deine Bücher aus Goodreads oder StoryGraph ins Regal, mit Bewertung, Lesedatum und Reihe. Die Datei bleibt in deinem Browser.</p>
+      <ol class="import-steps">
+        <li><b>Goodreads:</b> Meine Bücher → Import und Export → „Export Library“, dann die CSV-Datei herunterladen.</li>
+        <li><b>StoryGraph:</b> Manage Account → „Export StoryGraph Library“, die CSV kommt per E-Mail.</li>
+      </ol>
+      ${info ? `<p class="import-error" role="alert">${escapeHtml(info)}</p>` : ''}
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-import-close>Abbrechen</button>
+        <button type="button" class="btn btn-primary" id="importPickBtn">CSV-Datei wählen</button>
+      </div>`;
+    document.getElementById('importPickBtn').addEventListener('click', ()=>{ importFileInput.value = ''; importFileInput.click(); });
+  } else if(phase === 'review'){
+    const st = importState;
+    const by = { read: 0, reading: 0, want: 0 };
+    st.items.forEach(b=>{ if(b.status && !b.dupe) by[b.status]++; });
+    const dupes = st.items.filter(b=>b.dupe).length;
+    const opt = (key, label, n, on)=>n ? `<label class="import-opt"><input type="checkbox" class="scan-check" data-import-status="${key}" ${on ? 'checked' : ''}><span><b>${label}</b><small>${n} ${n === 1 ? 'Buch' : 'Bücher'}</small></span></label>` : '';
+    importBody.innerHTML = `
+      <p class="modal-lede">${st.items.length} Einträge aus ${st.source} gelesen.${dupes ? ` ${dupes} ${dupes === 1 ? 'steht' : 'stehen'} schon in deinem Regal und ${dupes === 1 ? 'wird' : 'werden'} übersprungen.` : ''}</p>
+      <div class="import-opts">
+        ${opt('read', 'Gelesen', by.read, true)}
+        ${opt('reading', 'Lese ich gerade', by.reading, true)}
+        ${opt('want', 'Will ich lesen (Merkliste)', by.want, false)}
+      </div>
+      <div class="import-opts">
+        <label class="import-opt"><input type="checkbox" class="scan-check" id="importRatings" checked><span><b>Bewertungen übernehmen</b><small>Deine Follower bekommen dafür keine Mitteilungen.</small></span></label>
+        <label class="import-opt"><input type="checkbox" class="scan-check" id="importReviews"><span><b>Rezensionen als Notizen übernehmen</b><small>Notizen sind in deinem Regal für alle sichtbar.</small></span></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-import-close>Abbrechen</button>
+        <button type="button" class="btn btn-primary" id="importGoBtn"></button>
+      </div>`;
+    const sync = ()=>{
+      const n = importSelection().length;
+      const btn = document.getElementById('importGoBtn');
+      btn.disabled = n === 0;
+      btn.textContent = n === 1 ? '1 Buch importieren' : `${n} Bücher importieren`;
+    };
+    importBody.querySelectorAll('[data-import-status]').forEach(c=>c.addEventListener('change', sync));
+    sync();
+    document.getElementById('importGoBtn').addEventListener('click', runImport);
+  } else if(phase === 'busy'){
+    importBody.innerHTML = `<p class="modal-lede import-busy" aria-live="polite">${escapeHtml(info)}</p>`;
+  }
+  importBody.querySelectorAll('[data-import-close]').forEach(b=>b.addEventListener('click', ()=>importOverlay.classList.add('hidden')));
+}
+
+function importSelection(){
+  const on = new Set([...importBody.querySelectorAll('[data-import-status]:checked')].map(c=>c.getAttribute('data-import-status')));
+  return importState.items.filter(b=>!b.dupe && on.has(b.status));
+}
+
+importFileInput.addEventListener('change', async ()=>{
+  const file = importFileInput.files[0];
+  if(!file) return;
+  if(file.size > 20 * 1024 * 1024){ renderImport('pick', 'Die Datei ist größer als 20 MB. Ist das wirklich der Export?'); return; }
+  let parsed = null;
+  try { parsed = importItemsFromCsv(parseCsv(await file.text())); } catch(e){}
+  if(!parsed){ renderImport('pick', 'Das sieht nicht nach einem Export aus Goodreads oder StoryGraph aus. Wähl die CSV-Datei aus dem Export.'); return; }
+  const have = new Set(books.map(b=>importKey(b.title, b.author)));
+  const seen = new Set();
+  parsed.items = parsed.items.filter(b=>b.title && b.status).map(b=>{
+    const k = importKey(b.title, b.author);
+    const dupe = have.has(k) || seen.has(k);
+    seen.add(k);
+    return { ...b, dupe };
+  });
+  if(!parsed.items.length){ renderImport('pick', 'In der Datei stehen keine Bücher, die sich importieren lassen.'); return; }
+  importState = parsed;
+  renderImport('review');
+});
+
+async function runImport(){
+  const ratings = document.getElementById('importRatings').checked;
+  const reviews = document.getElementById('importReviews').checked;
+  const chosen = importSelection().map(b=>({
+    title: b.title, author: b.author, series: b.series, series_order: b.series_order,
+    rating: ratings ? b.rating : 0,
+    date_read: b.status === 'read' ? b.date_read : null,
+    page_count: b.page_count,
+    status: b.status,
+    notes: reviews ? htmlToText(b.review).slice(0, 5000) : '',
+  }));
+  // Reihen zusammen anlegen und in Band-Reihenfolge, damit Band 1 vorne steht.
+  chosen.sort((a, b)=>(a.series || a.title).localeCompare(b.series || b.title, 'de') || (a.series_order || 999) - (b.series_order || 999));
+  let added = 0;
+  try {
+    if(devSandboxActive()){
+      added = await importIntoSandbox(chosen);
+    } else {
+      for(let i = 0; i < chosen.length; i += IMPORT_CHUNK){
+        renderImport('busy', `Importiere … ${i} von ${chosen.length}`);
+        const { data, error } = await supabaseClient.rpc('import_books', { p_books: chosen.slice(i, i + IMPORT_CHUNK) });
+        if(error) throw error;
+        added += data || 0;
+      }
+    }
+  } catch(e){
+    await refreshAndRender();
+    renderImport('pick', added
+      ? `${added} von ${chosen.length} Büchern importiert, dann ist ein Fehler aufgetreten. Versuch es noch einmal; was schon im Regal steht, wird übersprungen.`
+      : 'Der Import hat nicht geklappt. Versuch es gleich noch einmal.');
+    return;
+  }
+  resetDirectory();
+  await refreshAndRender();
+  importOverlay.classList.add('hidden');
+  showToast(added === 1 ? '1 Buch importiert' : `${added} Bücher importiert`);
+}
+
+// Lokaler Testmodus: dieselbe Logik wie import_books(), nur in der Testkopie.
+async function importIntoSandbox(list){
+  let added = 0;
+  for(const b of list){
+    const label = (b.series || b.title).slice(0, 200);
+    let shelf = shelves.find(s=>s.is_series && s.label.toLowerCase() === label.toLowerCase());
+    if(!shelf){
+      const { data } = await db('shelves').insert({ label, is_series: true }).select().single();
+      shelf = { ...data, categoryIds: [] };
+      shelves.push(shelf);
+    }
+    const same = books.filter(x=>x.shelf_id === shelf.id);
+    const taken = same.some(x=>x.series_order === b.series_order);
+    const order = b.series_order && !taken ? b.series_order : (same.length ? Math.max(...same.map(x=>x.series_order || 0)) + 1 : 1);
+    const { data } = await db('books').insert({ shelf_id: shelf.id, title: b.title, author: b.author, series_order: order, rating: b.rating, notes: b.notes, summary: null, date_read: b.date_read, page_count: b.page_count, cover_url: null, status: b.status }).select().single();
+    books.push(data);
+    added++;
+  }
+  return added;
+}
+
+document.getElementById('importCloseBtn').addEventListener('click', ()=>importOverlay.classList.add('hidden'));
+importOverlay.addEventListener('click', e=>{ if(e.target === importOverlay) importOverlay.classList.add('hidden'); });
+document.getElementById('setImportBtn').addEventListener('click', ()=>{
+  settingsOverlay.classList.add('hidden');
+  openImport();
+});
+document.getElementById('addImportLink').addEventListener('click', ()=>{
+  overlay.classList.add('hidden');
+  openImport();
 });
 
 // ---- Cover nachträglich ändern ----

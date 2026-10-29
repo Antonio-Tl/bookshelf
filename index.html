@@ -412,7 +412,7 @@
             <input type="text" id="f-title" required aria-required="true" placeholder="Titel suchen, z. B. Red Rising" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addSuggest" aria-describedby="addSearchHint">
           </div>
           <div class="suggest-list hidden" id="addSuggest" role="listbox" aria-label="Buchvorschläge"></div>
-          <small id="addSearchHint">Wähl einen Vorschlag, dann werden Autor, Seiten, Genres, Klappentext und Cover ergänzt.</small>
+          <small id="addSearchHint">Wähl einen Vorschlag, dann werden Autor, Seiten, Genres, Klappentext und Cover ergänzt. Viele Bücher auf einmal? <button type="button" class="link-btn" id="addImportLink">Aus Goodreads oder StoryGraph importieren</button></small>
         </div>
       </div>
 
@@ -485,6 +485,17 @@
       <button type="button" class="btn btn-ghost" id="cancelScanBtn">Abbrechen</button>
       <button type="button" class="btn btn-primary" id="saveScanBtn" disabled>Ins Regal stellen</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="importOverlay">
+  <div class="modal import-modal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <div class="modal-title-row">
+      <h2 id="importTitle">Bücher importieren</h2>
+      <button type="button" class="icon-btn" id="importCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    </div>
+    <div id="importBody"></div>
+    <input type="file" id="importFileInput" accept=".csv,text/csv" class="visually-hidden" tabindex="-1" aria-hidden="true">
   </div>
 </div>
 
@@ -592,6 +603,7 @@
     <section class="settings-group hidden" id="ownerSettings">
       <h3>Mein Regal</h3>
       <div class="setting-actions">
+        <button type="button" class="btn btn-secondary" id="setImportBtn">Bücher importieren</button>
         <button type="button" class="btn btn-secondary" id="setCategoriesBtn">Kategorien verwalten</button>
         <button type="button" class="btn btn-secondary hidden" id="setUsernameBtn">Profil und Konto</button>
         <button type="button" class="btn btn-secondary" id="setShareBtn">Regal-Link teilen</button>

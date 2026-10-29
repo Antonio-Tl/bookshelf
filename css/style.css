@@ -6784,3 +6784,58 @@ body:has(#homeView:not(.hidden)) .site-legal {
   color: var(--dim);
   font-size: 12px;
 }
+
+/* ---------- Import aus Goodreads und StoryGraph ---------- */
+.import-modal {
+  max-width: 520px;
+}
+.import-steps {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.import-steps li + li {
+  margin-top: 6px;
+}
+.import-error {
+  margin: 14px 0 0;
+  color: var(--danger, #b3261e);
+  font-size: 14px;
+}
+.import-opts {
+  display: grid;
+  margin-top: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.import-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.import-opt + .import-opt {
+  border-top: 1px solid var(--line-soft);
+}
+.import-opt span {
+  display: grid;
+  gap: 2px;
+}
+.import-opt b {
+  font-size: 14px;
+}
+.import-opt small {
+  color: var(--dim);
+  font-size: 13px;
+}
+.import-busy {
+  padding: 24px 0;
+  text-align: center;
+}
+.empty-state p + p {
+  margin-top: 18px;
+}
