@@ -73,6 +73,9 @@ const SCAN_MODEL = 'gemini-3.5-flash-lite';
 // (HEIC in Chrome, Riesenfotos auf schwachen Handys), kommt die Originaldatei bis 10 MB, also ~14 MB als Base64.
 const SCAN_MAX_BASE64 = 14 * 1024 * 1024;
 const SCAN_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+// Obergrenze für die Antwort, damit ein präpariertes Foto keine endlose (teure) Ausgabe erzeugt: 150 Bücher
+// (mehr nimmt cleanScan nicht) brauchen ~9.000 Tokens. So kostet ein Scan höchstens ~4 Cent Ausgabe.
+const SCAN_MAX_OUTPUT_TOKENS = 16384;
 const SCAN_PROMPT = `Das Foto zeigt ein Bücherregal. Liste jedes Buch auf, dessen Rücken oder Cover zu sehen ist:
 von links nach rechts, oberstes Regalbrett zuerst. Gib Titel und Autor so an, wie sie gedruckt sind
 (Originalsprache beibehalten, normale Groß-/Kleinschreibung statt GROSSBUCHSTABEN).
@@ -144,7 +147,11 @@ async function scanShelf(request, env){
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
         body: JSON.stringify({
           contents: [{ parts: [{ inline_data: { mime_type: mime, data: image } }, { text: SCAN_PROMPT }] }],
-          generationConfig: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'minimal' } },
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: SCAN_MAX_OUTPUT_TOKENS,
+            thinkingConfig: { thinkingLevel: 'minimal' },
+          },
         }),
       });
     } catch(e){
@@ -376,9 +383,21 @@ async function workerUsage(request, env){
   }, 200, { 'Cache-Control': 'no-store' });
 }
 
+// Endpunkte, hinter denen Supabase, Stripe oder Gemini stecken (nicht der Webhook: der kommt von Stripe).
+// Die eigentlichen Grenzen pro Konto stehen in der Datenbank (claim_scan); das hier hält nur Skripte auf,
+// die mit vielen Anfragen pro Sekunde kommen. GET /api/checkout fragt die App bei jedem Seitenaufruf, das
+// kostet nichts und bleibt frei.
+const LIMITED_PATHS = ['/api/scan', '/api/checkout', '/api/withdraw', '/api/usage'];
+const isLimited = (pathname, method)=>LIMITED_PATHS.includes(pathname) && !(pathname === '/api/checkout' && method === 'GET');
+
 export default {
   async fetch(request, env, ctx){
     const { pathname } = new URL(request.url);
+    if(isLimited(pathname, request.method) && env.API_LIMITER){
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const { success } = await env.API_LIMITER.limit({ key: ip });
+      if(!success) return json({ error: 'rate limited' }, 429, { 'Retry-After': '60' });
+    }
     if(pathname === '/api/books'){
       if(request.method !== 'GET') return json({ error: 'method not allowed' }, 405, { Allow: 'GET' });
       return searchBooks(request, env, ctx);
