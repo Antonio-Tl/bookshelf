@@ -350,6 +350,8 @@
     </div>
   </section>
 
+  <div class="reading-now hidden" id="readingNow"></div>
+
   <div id="appContent">
     <div class="toolbar">
       <div class="search-box shelf-search">
@@ -430,6 +432,14 @@
               </label>
             </div>
             <small class="field-hint" id="f-series-hint">Einzelband? Dann einfach den Buchtitel als Reihe eintragen.</small>
+          </div>
+        </div>
+
+        <div class="field"><span>Status</span>
+          <div class="seg seg-status" id="f-status" role="group" aria-label="Lesestatus">
+            <button type="button" data-add-status="read" aria-pressed="true">Gelesen</button>
+            <button type="button" data-add-status="reading" aria-pressed="false">Lese gerade</button>
+            <button type="button" data-add-status="want" aria-pressed="false">Will ich lesen</button>
           </div>
         </div>
 

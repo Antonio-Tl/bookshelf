@@ -23,6 +23,7 @@ let shelfLoading = true;
 let shelfLoadError = false;
 let editingBookId = null;
 let activeCategory = null;
+let activeStatus = null;   // Filter nach Lesestatus: null (alle), 'read', 'reading' oder 'want'
 let searchQuery = '';
 let lastGroups = [];
 
@@ -1825,7 +1826,7 @@ async function loadHeroEntry(){
     if(!profile){ heroLoading = null; return null; }
     const [{ data: shelfRows, error: sErr }, { data: bookRows, error: bErr }, { data: showcaseRows }] = await Promise.all([
       supabaseClient.from('shelves').select('id, user_id, label').eq('user_id', profile.id).eq('is_private', false),
-      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read, rating').eq('user_id', profile.id).eq('is_private', false),
+      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read, rating').eq('user_id', profile.id).eq('is_private', false).neq('status', 'want'),
       supabaseClient.rpc('showcases_of', { p_users: [profile.id] }),
     ]);
     heroLoading = null;
@@ -2224,7 +2225,7 @@ async function openAccount(){
   accountOverlay.classList.remove('hidden');
 
   const [books, series] = await Promise.all([
-    supabaseClient.from('books').select('id', { count: 'exact', head: true }).eq('user_id', p.id),
+    supabaseClient.from('books').select('id', { count: 'exact', head: true }).eq('user_id', p.id).eq('status', 'read'),
     supabaseClient.from('shelves').select('id', { count: 'exact', head: true }).eq('user_id', p.id),
   ]);
   if(books.count != null) document.getElementById('accBooks').textContent = books.count;
@@ -3234,14 +3235,28 @@ function renderFilterBar(){
   const bar = document.getElementById('filterBar');
   const allGroups = buildGroups();
   const cats = [...new Set(allGroups.flatMap(g=>g.categories.map(c=>c.name)))].sort((a,b)=>a.localeCompare(b,'de'));
-  if(cats.length === 0){ bar.innerHTML = ''; return; }
-  const pills = [`<button class="filter-pill ${activeCategory===null?'active':''}" data-cat="" aria-pressed="${activeCategory===null}">Alle</button>`]
+  // Status-Filter nur, wenn es neben gelesenen Büchern auch andere gibt.
+  const counts = { read: 0, reading: 0, want: 0 };
+  books.forEach(b=>counts[bookStatus(b)]++);
+  const statuses = counts.reading || counts.want ? Object.keys(STATUS_FILTERS).filter(st=>counts[st]) : [];
+  if(activeStatus && !statuses.includes(activeStatus)) activeStatus = null;
+  if(cats.length === 0 && !statuses.length){ bar.innerHTML = ''; return; }
+  const all = activeCategory === null && activeStatus === null;
+  const pills = [`<button class="filter-pill ${all?'active':''}" data-cat="" aria-pressed="${all}">Alle</button>`]
+    .concat(statuses.map(st=>`<button class="filter-pill filter-status ${activeStatus===st?'active':''}" data-status="${st}" aria-pressed="${activeStatus===st}">${STATUS_FILTERS[st]} <span class="filter-count">${counts[st]}</span></button>`))
+    .concat(statuses.length && cats.length ? ['<span class="filter-sep" aria-hidden="true"></span>'] : [])
     .concat(cats.map(c=>`<button class="filter-pill ${activeCategory===c?'active':''}" data-cat="${escapeHtml(c)}" aria-pressed="${activeCategory===c}">${escapeHtml(c)}</button>`));
   bar.innerHTML = pills.join('');
   bar.querySelectorAll('.filter-pill').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      const cat = btn.getAttribute('data-cat');
-      activeCategory = cat === '' ? null : cat;
+      const st = btn.getAttribute('data-status');
+      if(st){
+        activeStatus = activeStatus === st ? null : st;
+      } else {
+        const cat = btn.getAttribute('data-cat');
+        activeCategory = cat === '' ? null : cat;
+        if(cat === '') activeStatus = null;
+      }
       selectedId = null;
       render();
     });
@@ -3292,11 +3307,12 @@ function renderHeader(owner){
     banner.classList.remove('hidden');
   }
 
-  const rated = books.filter(b=>b.rating > 0);
+  const read = readBooks();
+  const rated = read.filter(b=>b.rating > 0);
   const avg = rated.length ? (rated.reduce((s,b)=>s+b.rating,0) / rated.length).toLocaleString('de-DE', {minimumFractionDigits:1, maximumFractionDigits:1}) : '–';
   const seriesCount = buildGroups().length;
   stats.innerHTML = `
-    <div><dt>Bücher</dt><dd>${books.length}</dd></div>
+    <div><dt>Gelesen</dt><dd>${read.length}</dd></div>
     <div><dt>${seriesCount === 1 ? 'Reihe' : 'Reihen'}</dt><dd>${seriesCount}</dd></div>
     <div><dt>Ø Bewertung</dt><dd>${avg}</dd></div>`;
 }
@@ -3504,16 +3520,34 @@ function showcaseControlHtml(book, group){
 
 const PRIVATE_BADGE = `<span class="private-badge" title="Nur du siehst dieses Buch">${ICON_LOCK}</span>`;
 
+// ---- Lesestatus: gelesen, lese ich gerade, will ich lesen (books.status, supabase/024_reading_status.sql) ----
+const STATUS_LABELS = { read: 'Gelesen', reading: 'Lese ich gerade', want: 'Will ich lesen' };
+const STATUS_FILTERS = { read: 'Gelesen', reading: 'Lese gerade', want: 'Merkliste' };
+function bookStatus(b){
+  return b.status === 'reading' || b.status === 'want' ? b.status : 'read';
+}
+const readBooks = ()=>books.filter(b=>bookStatus(b) === 'read');
+function statusMarkHtml(b){
+  const st = bookStatus(b);
+  if(st === 'read') return '';
+  return `<span class="status-mark status-mark-${st}" title="${STATUS_LABELS[st]}"></span>`;
+}
+function todayIso(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function bookHtml(b, group){
   const v = bookVisual(b, group.label);
   const isSel = String(b.id) === String(selectedId);
   const isOut = faceOutId(group) === String(b.id);
   const multi = group.items.length > 1;
-  const label = multi ? `${b.title}, Band ${b.series_order}` : b.title;
-  return `<button type="button" class="book ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${v.emblem?'has-emblem':''} ${isOut?'open':''} ${isSel?'selected':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-label="${escapeHtml(label)}" aria-pressed="${isSel}">
+  const st = bookStatus(b);
+  const label = (multi ? `${b.title}, Band ${b.series_order}` : b.title) + (st === 'read' ? '' : ` (${STATUS_LABELS[st]})`);
+  return `<button type="button" class="book status-${st} ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${v.emblem?'has-emblem':''} ${isOut?'open':''} ${isSel?'selected':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-label="${escapeHtml(label)}" aria-pressed="${isSel}">
     <span class="book-3d">
-      <span class="face spine"><span class="spine-emblem"></span><span class="spine-title">${escapeHtml(b.title)}</span><span class="spine-no">${multi ? b.series_order : ''}</span></span>
-      <span class="face front">${genCoverHtml(b, group)}</span>
+      <span class="face spine"><span class="spine-emblem"></span><span class="spine-title">${escapeHtml(b.title)}</span><span class="spine-no">${multi ? b.series_order : ''}</span>${statusMarkHtml(b)}</span>
+      <span class="face front">${genCoverHtml(b, group)}${statusMarkHtml(b)}</span>
     </span>
     ${b.is_private ? PRIVATE_BADGE : ''}
   </button>`;
@@ -3524,10 +3558,11 @@ function tileHtml(b, group){
   const isSel = String(b.id) === String(selectedId);
   const multi = group.items.length > 1;
   const stars = b.rating > 0 ? `<span class="tile-stars" aria-label="${b.rating} von 5 Sternen">${[1,2,3,4,5].map(i=>starsSVG(i<=b.rating)).join('')}</span>` : '';
-  return `<button type="button" class="tile ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${isSel?'open':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-pressed="${isSel}">
-    <span class="tile-cover">${genCoverHtml(b, group)}${b.is_private ? PRIVATE_BADGE : ''}</span>
+  const st = bookStatus(b);
+  return `<button type="button" class="tile status-${st} ${v.ink} ${v.has?'has-cover':''} ${v.loading?'is-loading':''} ${isSel?'open':''}" data-book="${escapeHtml(b.id)}" style="${escapeHtml(visualStyle(v))}" aria-pressed="${isSel}">
+    <span class="tile-cover">${genCoverHtml(b, group)}${statusMarkHtml(b)}${b.is_private ? PRIVATE_BADGE : ''}</span>
     <span class="tile-title">${escapeHtml(b.title)}</span>
-    <span class="tile-meta">${multi ? `Band ${b.series_order}` : escapeHtml(b.author || 'Einzelband')}</span>
+    <span class="tile-meta">${st === 'read' ? '' : `${STATUS_FILTERS[st]} · `}${multi ? `Band ${b.series_order}` : escapeHtml(b.author || 'Einzelband')}</span>
     ${stars}
   </button>`;
 }
@@ -3558,6 +3593,7 @@ function render(){
   }
 
   renderFilterBar();
+  renderReadingNow(owner);
 
   if(books.length === 0){
     container.innerHTML = owner
@@ -3573,6 +3609,11 @@ function render(){
   if(activeCategory){
     groups = groups.filter(g=>g.categories.some(c=>c.name===activeCategory));
   }
+  if(activeStatus){
+    groups = groups
+      .map(g=>({ ...g, items: g.items.filter(b=>bookStatus(b) === activeStatus) }))
+      .filter(g=>g.items.length);
+  }
   const q = searchQuery.trim().toLowerCase();
   if(q){
     groups = groups.filter(g=>
@@ -3586,13 +3627,13 @@ function render(){
   if(groups.length === 0){
     container.innerHTML = q
       ? '<div class="empty-state"><p>Keine Treffer für „' + escapeHtml(searchQuery.trim()) + '“.</p></div>'
-      : '<div class="empty-state"><p>Keine Bücher in dieser Kategorie.</p></div>';
+      : `<div class="empty-state"><p>Keine Bücher ${activeStatus && activeCategory ? 'mit diesem Status in dieser Kategorie' : activeStatus ? 'mit diesem Status' : 'in dieser Kategorie'}.</p></div>`;
     updateToc([]);
     updateBookDetailPanel();
     return;
   }
 
-  const sc = !q && !activeCategory ? showcaseEntries() : null;
+  const sc = !q && !activeCategory && !activeStatus ? showcaseEntries() : null;
   container.innerHTML = (sc ? vitrineHtml(sc) : '') + groups.map(group=>{
     const body = viewMode === 'grid'
       ? `<div class="tile-grid">${group.items.map(b=>tileHtml(b, group)).join('')}</div>`
@@ -3616,6 +3657,29 @@ function render(){
   updateBookDetailPanel();
   queueCovers((sc ? sc.items.map(x=>x.b) : []).concat(groups.flatMap(g=>g.items)));
   scheduleFit();
+}
+
+// „Lese ich gerade“: die angefangenen Bücher als kleine Leiste unter dem Kopf, ein Klick öffnet das Buch.
+function renderReadingNow(owner){
+  const el = document.getElementById('readingNow');
+  const list = viewedProfile ? books.filter(b=>bookStatus(b) === 'reading') : [];
+  el.classList.toggle('hidden', !list.length);
+  if(!list.length){ el.innerHTML = ''; return; }
+  const who = owner ? 'Lese ich gerade' : `${escapeHtml(shownName(viewedProfile))} liest gerade`;
+  el.innerHTML = `<span class="reading-now-label">${who}</span>` + list.slice(0, 4).map(b=>{
+    const g = { label: (shelves.find(s=>s.id === b.shelf_id) || {}).label || b.title, items: [b] };
+    return `<button type="button" class="reading-now-book" data-reading="${escapeHtml(b.id)}">${thumbHtml(b, g)}<span><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.author || '')}</small></span></button>`;
+  }).join('');
+  el.querySelectorAll('[data-reading]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-reading');
+      if(activeStatus && activeStatus !== 'reading') activeStatus = null;
+      if(!bookIndex.has(String(id))){ activeCategory = null; searchQuery = ''; document.getElementById('searchInput').value = ''; render(); }
+      selectBook(id);
+      const target = document.querySelector(`#shelves [data-book="${CSS.escape(String(id))}"]`);
+      if(target) revealAfterTurn(target);
+    });
+  });
 }
 
 // Rückentitel dürfen nie über den Buchrand laufen: lange Titel werden schrittweise kleiner gesetzt.
@@ -3724,7 +3788,14 @@ function buildDetailCard(book, group, owner){
        </div>`
     : `<p class="detail-row"><span class="row-label">Kategorien</span><span class="row-value">${escapeHtml(group.categories.map(c=>c.name).join(', '))}</span></p>`;
 
-  const dateBlockHtml = owner
+  const st = bookStatus(book);
+  const statusBlockHtml = owner
+    ? `<div class="rating-row"><span class="row-label">Status</span><div class="seg seg-status" role="group" aria-label="Lesestatus">
+         ${Object.keys(STATUS_LABELS).map(k=>`<button type="button" data-book-status="${k}" aria-pressed="${st === k}">${STATUS_FILTERS[k] === 'Merkliste' ? 'Will ich lesen' : STATUS_FILTERS[k]}</button>`).join('')}
+       </div></div>`
+    : (st === 'read' ? '' : `<p class="detail-row"><span class="row-label">Status</span><span class="row-value">${STATUS_LABELS[st]}</span></p>`);
+
+  const dateBlockHtml = st !== 'read' ? '' : owner
     ? `<label class="detail-row"><span class="row-label">Gelesen am</span><span class="date-field ${book.date_read ? '' : 'is-empty'}"><input type="date" class="f-date" value="${escapeHtml(book.date_read||'')}"><span class="date-placeholder" aria-hidden="true">Datum wählen</span></span></label>`
     : (book.date_read ? `<p class="detail-row"><span class="row-label">Gelesen am</span><span class="row-value">${escapeHtml(formatDate(book.date_read))}</span></p>` : '');
 
@@ -3779,7 +3850,8 @@ function buildDetailCard(book, group, owner){
     <div class="detail-body">
       ${titleBlockHtml}
       <div class="detail-rows">
-        <div class="rating-row"><span class="row-label">Bewertung</span><div class="stars">${starsHtml}</div></div>
+        ${statusBlockHtml}
+        ${st === 'want' && !book.rating ? '' : `<div class="rating-row"><span class="row-label">Bewertung</span><div class="stars">${starsHtml}</div></div>`}
         ${dateBlockHtml}
         ${privacyBlockHtml}
         ${showcaseControlHtml(book, group)}
@@ -3867,10 +3939,24 @@ function buildDetailCard(book, group, owner){
         await refreshAndRender();
       });
     });
-    wrap.querySelector('.f-date').addEventListener('input', e=>{
+    wrap.querySelectorAll('[data-book-status]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const next = btn.getAttribute('data-book-status');
+        if(next === st) return;
+        // Fertig gelesen: ohne Datum gilt heute.
+        const patch = { status: next };
+        if(next === 'read' && !book.date_read) patch.date_read = todayIso();
+        const { error } = await db('books').update(patch).eq('id', book.id);
+        if(error){ showToast('Fehler beim Speichern'); return; }
+        await refreshAndRender();
+        showToast(next === 'read' ? 'Als gelesen eingetragen' : next === 'reading' ? 'Steht jetzt bei „Lese ich gerade“' : 'Steht jetzt auf der Merkliste');
+      });
+    });
+    const dateInput = wrap.querySelector('.f-date');
+    if(dateInput) dateInput.addEventListener('input', e=>{
       e.target.parentElement.classList.toggle('is-empty', !e.target.value);
     });
-    wrap.querySelector('.f-date').addEventListener('change', async (e)=>{
+    if(dateInput) dateInput.addEventListener('change', async (e)=>{
       const { error } = await db('books').update({date_read: e.target.value || null}).eq('id', book.id);
       if(error){ showToast('Fehler beim Speichern'); return; }
       await refreshAndRender();
@@ -4196,12 +4282,22 @@ document.getElementById('openAddBtn').addEventListener('click', ()=>{
   addFreshGenres = [];
   moreGenresEl.open = false;
   addPicker.set('', []);
+  setAddStatus('read');
   closeSuggest();
   updateCategoryFieldForSeries();
   overlay.classList.remove('hidden');
   document.getElementById('f-title').focus();
 });
 seriesInput.addEventListener('input', updateCategoryFieldForSeries);
+
+let addStatus = 'read';
+function setAddStatus(st){
+  addStatus = st;
+  document.querySelectorAll('#f-status [data-add-status]').forEach(b=>b.setAttribute('aria-pressed', b.getAttribute('data-add-status') === st));
+}
+document.querySelectorAll('#f-status [data-add-status]').forEach(btn=>{
+  btn.addEventListener('click', ()=>setAddStatus(btn.getAttribute('data-add-status')));
+});
 
 document.getElementById('cancelAddBtn').addEventListener('click', ()=>overlay.classList.add('hidden'));
 document.getElementById('closeAddBtn').addEventListener('click', ()=>overlay.classList.add('hidden'));
@@ -4249,7 +4345,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e)=>{
 
   const coverChoice = addPicker.value || null;
   const { data: newBook, error: bookErr } = await db('books')
-    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', summary, date_read:null, page_count: pageCount, cover_url: coverChoice })
+    .insert({ shelf_id: shelf.id, title, author, series_order: seriesOrder, rating:0, notes:'', summary, date_read: null, page_count: pageCount, cover_url: coverChoice, status: addStatus })
     .select().single();
   if(bookErr){ showToast('Fehler beim Speichern des Buchs'); return; }
 

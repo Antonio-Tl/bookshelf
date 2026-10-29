@@ -6671,3 +6671,116 @@ body:has(#homeView:not(.hidden)) .site-legal {
     transition-delay: 0s !important;
   }
 }
+
+/* ---------- Lesestatus ---------- */
+/* Merkliste: noch nicht gelesen, steht blass und gestrichelt umrandet im Regal. */
+.book.status-want:not(.open) .book-3d,
+.tile.status-want .tile-cover {
+  opacity: 0.5;
+  filter: saturate(0.6);
+}
+.book.status-want:not(.open):hover .book-3d,
+.book.status-want.selected .book-3d,
+.tile.status-want:hover .tile-cover {
+  opacity: 0.85;
+}
+/* Lesezeichen oben am Rücken (lese gerade) bzw. ein leerer Ring (Merkliste). */
+.status-mark {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.status-mark-reading {
+  width: 14px;
+  height: 28px;
+  background: #fff;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
+}
+/* Heller Rand, damit das Lesezeichen auf dunklen wie hellen Rücken zu sehen ist. */
+.status-mark-reading::before {
+  content: "";
+  position: absolute;
+  inset: 0 2px 2px;
+  background: var(--red);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+}
+.status-mark-want {
+  top: auto;
+  bottom: 28px;
+  width: 12px;
+  height: 12px;
+  border: 2px dashed var(--surface);
+  border-radius: 50%;
+}
+.tile .status-mark,
+.book .face.front .status-mark {
+  left: auto;
+  right: 10px;
+  transform: none;
+}
+.tile .status-mark-want {
+  top: 8px;
+  bottom: auto;
+}
+.filter-sep {
+  flex: none;
+  width: 1px;
+  margin: 6px 4px;
+  background: var(--line);
+}
+.filter-count {
+  margin-left: 2px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.seg-status {
+  flex-wrap: wrap;
+}
+.reading-now {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: -12px 0 24px;
+}
+.reading-now-label {
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+.reading-now-book {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 280px;
+  padding: 6px 14px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.reading-now-book:hover {
+  border-color: var(--line-strong);
+}
+.reading-now-book span {
+  display: grid;
+  min-width: 0;
+}
+.reading-now-book b,
+.reading-now-book small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.reading-now-book b {
+  font-size: 13px;
+}
+.reading-now-book small {
+  color: var(--dim);
+  font-size: 12px;
+}
