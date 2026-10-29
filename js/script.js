@@ -342,10 +342,11 @@ const COVER_CONCURRENCY = 6; // Erste Ladung ohne Cache: mehr parallele Lookups 
 function pumpCovers(){
   while(coverActive < COVER_CONCURRENCY && coverQueue.length){
     const b = coverQueue.shift();
+    const k = coverKey(b); // rememberCover ändert den Schlüssel unterwegs
     coverActive++;
     processCover(b).finally(()=>{
       coverActive--;
-      coverQueued.delete(coverKey(b));
+      coverQueued.delete(k);
       pumpCovers();
     });
   }
@@ -406,9 +407,26 @@ async function processCover(b){
     entry.done = true;
     saveCoverCache();
   }
+  rememberCover(b, entry.src);
   const meta = bookIndex.get(String(b.id));
   (meta ? meta.group.items : [b]).forEach(refreshBookVisual);
   scheduleFit();
+}
+
+// Ein gefundenes Cover als Adresse in books.cover_url ablegen (rund 70 Byte pro Buch, kein Bild), damit
+// Besucher nicht jedes Mal Open Library und Google Books durchsuchen. Schreiben darf nur der Besitzer;
+// fremde Regale bekommen ihre Cover, sobald ihr Besitzer sie einmal öffnet.
+function rememberCover(b, url){
+  if(!url || b.cover_url || !b.id || !/^https:\/\/(covers\.openlibrary\.org|books\.google\.com)\//.test(url)) return;
+  const mine = devSandboxActive() ? isOwnerView() && books.includes(b) : !!(currentUser && b.user_id === currentUser.id && !ownBan);
+  if(!mine) return;
+  const entry = coverCache[coverKey(b)];
+  b.cover_url = url;
+  coverCache[coverKey(b)] = entry; // Farben und Seitenverhältnis gelten auch unter der neuen Adresse
+  saveCoverCache();
+  db('books').update({ cover_url: url }).eq('id', b.id).then(({ error })=>{
+    if(error) b.cover_url = null; // beim nächsten Laden erneut versuchen
+  });
 }
 
 function isLight(rgb){
@@ -1280,7 +1298,7 @@ document.getElementById('saveUsernameBtn').addEventListener('click', async ()=>{
   }
   currentProfile.username = val;
   setPref(AFTER_LOGIN_KEY, '');
-  directory = null;
+  resetDirectory();
   usernameModalOverlay.classList.add('hidden');
   loadSocial();
   await goToUser(val);
@@ -1717,59 +1735,98 @@ window.addEventListener('popstate', applyRoute);
 // ---- Startseite und Regal-Übersicht ----
 const AFTER_LOGIN_KEY = 'bookshelf-after-login';
 const browseIndex = new Map(); // id -> {book, group}, für Bücher außerhalb des geöffneten Regals
-let directory = null;          // [{profile, groups, bookCount}], Antonio zuerst
+const BROWSE_PAGE = 20;
+let directory = null;          // Übersicht: {q, entries: [{profile, bookCount, seriesCount, series, picks}], total}
 let directoryLoading = null;
+let heroEntry = null;          // Schaufenster der Startseite: Antonios Regal, {profile, groups, bookCount, showcase}
+let heroLoading = null;
+
+// Nach eigenen Änderungen (Name, Sichtbarkeit, Bücher) Übersicht und Schaufenster neu laden.
+function resetDirectory(){
+  directory = null;
+  heroEntry = null;
+}
 
 // Nur Regale, die ausdrücklich in der Übersicht stehen wollen. Alle anderen öffentlichen
-// findet man über „Leute finden“, private nur per Link.
-async function loadDirectory(){
-  if(directory) return directory;
+// findet man über „Leute finden“, private nur per Link. Seitenweise über directory_page()
+// (supabase/022_directory_page.sql): pro Regal nur Zahlen, Reihentitel und sechs Cover.
+async function loadDirectoryPage(q, more = false){
+  if(directory && directory.q === q && !more) return directory;
   if(directoryLoading) return directoryLoading;
+  const offset = more && directory && directory.q === q ? directory.entries.length : 0;
   directoryLoading = (async ()=>{
-    const { data: profiles, error: pErr } = await supabaseClient
-      .from('profiles').select('id, username, display_name, avatar_url, created_at')
-      .not('username', 'is', null).eq('listed', true).eq('is_private', false);
-    if(pErr){ directoryLoading = null; return null; }
-    const ids = (profiles || []).map(p=>p.id);
-    const [{ data: shelfRows, error: sErr }, { data: bookRows, error: bErr }, { data: showcaseRows }] = ids.length ? await Promise.all([
-      supabaseClient.from('shelves').select('id, user_id, label').in('user_id', ids).eq('is_private', false),
-      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read').in('user_id', ids).eq('is_private', false).limit(5000),
-      supabaseClient.rpc('showcases_of', { p_users: ids }),
-    ]) : [{ data: [] }, { data: [] }, { data: [] }];
-    if(sErr || bErr){ directoryLoading = null; return null; }
-    // Die Datenbank liefert Fremden ohnehin keine privaten Einträge; die Filter oben sorgen dafür,
-    // dass auch der Besitzer sein Regal hier so sieht wie alle anderen.
-    const openShelves = new Set((shelfRows || []).map(s=>s.id));
-    directory = (profiles || []).map(profile=>{
-      const own = (bookRows || []).filter(b=>b.user_id === profile.id && openShelves.has(b.shelf_id));
-      const groups = (shelfRows || [])
-        .filter(s=>s.user_id === profile.id)
-        .map(s=>({
-          key: s.id,
-          label: s.label,
-          items: own.filter(b=>b.shelf_id === s.id).sort((a, b)=>(a.series_order || 0) - (b.series_order || 0)),
-        }))
-        .filter(g=>g.items.length)
-        .sort((a, b)=>a.label.localeCompare(b.label, 'de'));
-      groups.forEach(g=>g.items.forEach(b=>browseIndex.set(String(b.id), { book: b, group: g })));
-      // Vitrine (nur Premium): ihre Bücher stehen auf Startseite und Karten vorne.
-      const sc = (showcaseRows || []).find(r=>r.user_id === profile.id);
-      const scGroup = sc && sc.shelf_id && groups.find(g=>g.key === sc.shelf_id);
-      const showcaseItems = scGroup
-        ? scGroup.items.filter(b=>sc.book_ids.includes(b.id)).map(b=>({ b, g: scGroup }))
-        : ((sc && sc.book_ids) || []).map(id=>{
-            const g = groups.find(x=>x.items.some(b=>b.id === id));
-            return g ? { b: g.items.find(b=>b.id === id), g } : null;
-          }).filter(Boolean);
-      return { profile, groups, bookCount: own.length, showcase: showcaseItems };
-    }).sort((a, b)=>
-      (b.profile.username === DEFAULT_USERNAME) - (a.profile.username === DEFAULT_USERNAME) ||
-      b.bookCount - a.bookCount ||
-      a.profile.username.localeCompare(b.profile.username, 'de')
-    );
+    const { data, error } = await supabaseClient.rpc('directory_page', { p_query: q, p_limit: BROWSE_PAGE, p_offset: offset });
+    directoryLoading = null;
+    if(error) return null;
+    const entries = (data || []).map(directoryRowEntry);
+    const total = data && data.length ? Number(data[0].total) : offset;
+    directory = { q, entries: offset ? directory.entries.concat(entries) : entries, total };
     return directory;
   })();
   return directoryLoading;
+}
+
+function directoryRowEntry(row){
+  const groups = new Map();
+  const picks = (row.picks || []).map(b=>{
+    if(!groups.has(b.shelf_id)) groups.set(b.shelf_id, { key: b.shelf_id, label: b.label, items: [] });
+    const g = groups.get(b.shelf_id);
+    g.items.push(b);
+    browseIndex.set(String(b.id), { book: b, group: g });
+    return { b, g };
+  });
+  return {
+    profile: { id: row.id, username: row.username, display_name: row.display_name, avatar_url: row.avatar_url, created_at: row.created_at },
+    bookCount: row.book_count,
+    seriesCount: row.series_count,
+    series: row.series || [],
+    picks,
+  };
+}
+
+// Ein ganzes Regal so aufbereitet, wie Startseite und Karten es brauchen.
+function directoryEntry(profile, shelfRows, bookRows, showcaseRows){
+  const openShelves = new Set((shelfRows || []).map(s=>s.id));
+  const own = (bookRows || []).filter(b=>openShelves.has(b.shelf_id));
+  const groups = (shelfRows || [])
+    .map(s=>({
+      key: s.id,
+      label: s.label,
+      items: own.filter(b=>b.shelf_id === s.id).sort((a, b)=>(a.series_order || 0) - (b.series_order || 0)),
+    }))
+    .filter(g=>g.items.length)
+    .sort((a, b)=>a.label.localeCompare(b.label, 'de'));
+  groups.forEach(g=>g.items.forEach(b=>browseIndex.set(String(b.id), { book: b, group: g })));
+  // Vitrine (nur Premium): ihre Bücher stehen auf Startseite und Karten vorne.
+  const sc = (showcaseRows || [])[0];
+  const scGroup = sc && sc.shelf_id && groups.find(g=>g.key === sc.shelf_id);
+  const showcaseItems = scGroup
+    ? scGroup.items.filter(b=>sc.book_ids.includes(b.id)).map(b=>({ b, g: scGroup }))
+    : ((sc && sc.book_ids) || []).map(id=>{
+        const g = groups.find(x=>x.items.some(b=>b.id === id));
+        return g ? { b: g.items.find(b=>b.id === id), g } : null;
+      }).filter(Boolean);
+  return { profile, groups, bookCount: own.length, showcase: showcaseItems };
+}
+
+// Schaufenster der Startseite: nur ein Regal laden, nicht alle.
+async function loadHeroEntry(){
+  if(heroEntry) return heroEntry;
+  if(heroLoading) return heroLoading;
+  heroLoading = (async ()=>{
+    const { data: profile } = await supabaseClient.rpc('profile_by_username', { p_username: DEFAULT_USERNAME }).maybeSingle();
+    if(!profile){ heroLoading = null; return null; }
+    const [{ data: shelfRows, error: sErr }, { data: bookRows, error: bErr }, { data: showcaseRows }] = await Promise.all([
+      supabaseClient.from('shelves').select('id, user_id, label').eq('user_id', profile.id).eq('is_private', false),
+      supabaseClient.from('books').select('id, user_id, shelf_id, title, author, series_order, page_count, cover_url, date_read, rating').eq('user_id', profile.id).eq('is_private', false),
+      supabaseClient.rpc('showcases_of', { p_users: [profile.id] }),
+    ]);
+    heroLoading = null;
+    if(sErr || bErr) return null;
+    heroEntry = directoryEntry(profile, shelfRows, bookRows, showcaseRows);
+    return heroEntry;
+  })();
+  return heroLoading;
 }
 
 // Nicht anklickbare Kopie eines Regalbuchs für Startseite und Karten; dreht sich wie im echten Regal.
@@ -1829,16 +1886,16 @@ function heroGroups(entry){
 
 function readerRowHtml(entry){
   const p = entry.profile;
-  const series = entry.groups.length;
+  const series = entry.seriesCount;
   const meta = entry.bookCount
     ? `${entry.bookCount} ${entry.bookCount === 1 ? 'Buch' : 'Bücher'} · ${series} ${series === 1 ? 'Reihe' : 'Reihen'}`
     : 'Noch keine Bücher';
-  const names = entry.groups.map(g=>g.label);
+  const names = entry.series;
   const seriesLine = names.length
-    ? `<span class="reader-series">${escapeHtml(names.slice(0, 4).join(' · '))}${names.length > 4 ? ` <em>+${names.length - 4}</em>` : ''}</span>`
+    ? `<span class="reader-series">${escapeHtml(names.join(' · '))}${series > names.length ? ` <em>+${series - names.length}</em>` : ''}</span>`
     : '';
   // Auch leer vorhanden, damit der Pfeil in jeder Zeile an derselben Stelle steht.
-  const covers = `<span class="reader-covers" aria-hidden="true">${entry.bookCount ? coverPicks(entry, 6).map(({ b, g })=>thumbHtml(b, g)).join('') : ''}</span>`;
+  const covers = `<span class="reader-covers" aria-hidden="true">${entry.picks.map(({ b, g })=>thumbHtml(b, g)).join('')}</span>`;
   return `<a class="reader-row ${entry.bookCount ? '' : 'is-empty'}" href="?u=${encodeURIComponent(p.username)}" data-user="${escapeHtml(p.username)}">
     ${avatarHtml(p)}
     <span class="reader-text"><b>${escapeHtml(possessive(shownName(p)))} Regal</b><small>@${escapeHtml(p.username)} · ${meta}</small>${seriesLine}</span>
@@ -1870,13 +1927,13 @@ document.getElementById('homeCreateBtn').addEventListener('click', ()=>{
 
 async function renderHome(){
   updateHomeCta();
-  const list = await loadDirectory();
-  if(currentRoute !== 'home' || !list) return;
-  renderHero(list.find(e=>e.profile.username === DEFAULT_USERNAME) || list.find(e=>e.bookCount));
+  const entry = await loadHeroEntry();
+  if(currentRoute !== 'home' || !entry) return;
+  renderHero(entry.bookCount ? entry : null);
 }
 
 const narrowQuery = window.matchMedia('(max-width: 640px)');
-narrowQuery.addEventListener('change', ()=>{ if(currentRoute === 'home' && directory) renderHome(); });
+narrowQuery.addEventListener('change', ()=>{ if(currentRoute === 'home' && heroEntry) renderHome(); });
 
 // Schaufenster statt vollem Regal: je Reihe ein Cover, alle gleich groß. Die weiteren Bände
 // liegen unsichtbar dahinter und werden nacheinander eingeblendet.
@@ -1927,21 +1984,23 @@ function renderHero(entry){
   scheduleFit();
 }
 
-async function renderBrowse(){
+async function renderBrowse(more = false){
   const rows = document.getElementById('browseCards');
-  if(!directory) rows.innerHTML = readerSkeleton(4);
-  const list = await loadDirectory();
-  if(currentRoute !== 'browse') return;
+  const q = document.getElementById('browseSearch').value.trim();
+  if(!directory || directory.q !== q) rows.innerHTML = readerSkeleton(4);
+  const list = await loadDirectoryPage(q, more);
+  if(currentRoute !== 'browse' || q !== document.getElementById('browseSearch').value.trim()) return;
   if(!list){
     rows.innerHTML = '<p class="cards-error">Die Regale konnten gerade nicht geladen werden. <button type="button" class="link-btn" id="browseRetry">Neu laden</button></p>';
-    document.getElementById('browseRetry').addEventListener('click', renderBrowse);
+    document.getElementById('browseRetry').addEventListener('click', ()=>renderBrowse());
     return;
   }
-  const q = document.getElementById('browseSearch').value.trim().toLowerCase();
-  const shown = q ? list.filter(e=>e.profile.username.includes(q) || shownName(e.profile).toLowerCase().includes(q)) : list;
-  document.getElementById('browseCount').textContent = `${list.length} ${list.length === 1 ? 'Regal' : 'Regale'}`;
-  rows.innerHTML = shown.length
-    ? shown.map(readerRowHtml).join('')
+  if(!q) document.getElementById('browseCount').textContent = `${list.total} ${list.total === 1 ? 'Regal' : 'Regale'}`;
+  const moreBtn = list.entries.length < list.total
+    ? `<button type="button" class="btn btn-secondary browse-more" id="browseMore">Weitere Regale laden</button>`
+    : '';
+  rows.innerHTML = list.entries.length
+    ? list.entries.map(readerRowHtml).join('') + moreBtn
     : `<p class="cards-error">Kein Regal mit „${escapeHtml(q)}“ in der Übersicht. Über „Leute finden“ oben suchst du in allen öffentlichen Regalen.</p>`;
   rows.querySelectorAll('.reader-row[data-user]').forEach(row=>{
     row.addEventListener('click', e=>{
@@ -1950,9 +2009,15 @@ async function renderBrowse(){
       goToUser(row.getAttribute('data-user'));
     });
   });
-  queueCovers(shown.flatMap(e=>coverPicks(e, 6).map(x=>x.b)));
+  const btn = document.getElementById('browseMore');
+  if(btn) btn.addEventListener('click', ()=>{ btn.disabled = true; renderBrowse(true); });
+  queueCovers(list.entries.flatMap(e=>e.picks.map(x=>x.b)));
 }
-document.getElementById('browseSearch').addEventListener('input', ()=>renderBrowse());
+let browseSearchTimer = 0;
+document.getElementById('browseSearch').addEventListener('input', ()=>{
+  clearTimeout(browseSearchTimer);
+  browseSearchTimer = setTimeout(()=>renderBrowse(), 250);
+});
 
 // Startseite: im Schaufenster blendet ab und zu ein Cover zum nächsten Band über,
 // in Schritt 2 dreht sich ein anderer Band nach vorne.
@@ -2092,7 +2157,7 @@ async function saveVisibility(patch, success){
   const { data, error } = await supabaseClient.from('profiles').update(patch).eq('id', currentUser.id).select().single();
   if(error){ showToast(dbErrorText(error, 'Fehler beim Speichern')); syncPrivacyRows(); return; }
   currentProfile = data;
-  directory = null;
+  resetDirectory();
   if(viewedProfile && viewedProfile.id === currentUser.id) Object.assign(viewedProfile, { is_private: data.is_private, listed: data.listed });
   syncPrivacyRows();
   render();
@@ -2239,7 +2304,7 @@ document.getElementById('accDisplayForm').addEventListener('submit', async e=>{
   btn.disabled = false;
   if(error){ showToast(dbErrorText(error, 'Fehler beim Speichern')); return; }
   currentProfile = data;
-  directory = null;
+  resetDirectory();
   if(viewedProfile && viewedProfile.id === currentUser.id) viewedProfile.display_name = data.display_name;
   syncDisplayRow();
   closeAccountForms();
@@ -2270,7 +2335,7 @@ document.getElementById('accRenameForm').addEventListener('submit', async e=>{
   if(error){ showToast(dbErrorText(error, 'Fehler beim Speichern')); return; }
   const wasViewingOwn = currentRoute === 'shelf' && viewedProfile && viewedProfile.id === currentUser.id;
   currentProfile = data;
-  directory = null;
+  resetDirectory();
   document.getElementById('accHandle').textContent = '@' + val;
   syncDisplayRow();
   syncRenameRow();
@@ -2306,7 +2371,7 @@ document.getElementById('accDeleteForm').addEventListener('submit', async e=>{
   }
   accountOverlay.classList.add('hidden');
   setPref(LAST_USER_KEY, '');
-  directory = null;
+  resetDirectory();
   await supabaseClient.auth.signOut({ scope: 'local' });
   navigate('');
   showToast('Dein Konto wurde gelöscht');
@@ -2625,7 +2690,7 @@ async function runAdmin(fn, args, success){
   const { error } = await supabaseClient.rpc(fn, args);
   if(error){ showToast(dbErrorText(error, 'Aktion fehlgeschlagen')); return false; }
   showToast(success);
-  directory = null;
+  resetDirectory();
   await loadAdminData();
   return true;
 }
@@ -3119,7 +3184,7 @@ async function loadShelfData(profileId){
 }
 
 async function refreshAndRender(){
-  directory = null; // Übersicht beim nächsten Öffnen neu laden
+  resetDirectory(); // Übersicht beim nächsten Öffnen neu laden
   if(viewedProfile) await loadShelfData(viewedProfile.id);
   render();
 }
@@ -3363,7 +3428,7 @@ async function saveShowcase(next, message){
   }
   if(error){ showToast(dbErrorText(error, 'Vitrine konnte nicht gespeichert werden')); return false; }
   showcase = empty ? null : row;
-  directory = null;
+  resetDirectory();
   render();
   if(message) showToast(message);
   return true;

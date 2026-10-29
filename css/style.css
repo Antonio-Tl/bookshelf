@@ -4967,6 +4967,10 @@ a.reader-row:hover .reader-go {
   color: var(--ink-2);
   font-weight: 600;
 }
+.browse-more {
+  display: flex;
+  margin: 14px auto 18px;
+}
 .cards-error {
   grid-column: 1 / -1;
   margin: 0;
