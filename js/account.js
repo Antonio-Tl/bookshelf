@@ -1212,6 +1212,7 @@ const DB_ERRORS = {
   admin_required: 'Keine Berechtigung. Bitte bestätige dich erneut mit dem Zwei-Faktor-Code.',
   not_on_self: 'Das geht nicht mit deinem eigenen Konto.',
   target_is_admin: 'Andere Admins lassen sich hier nicht sperren oder löschen.',
+  avatar_url_not_allowed: 'Dieses Profilbild ist nicht erlaubt.',
 };
 function dbErrorText(error, fallback){
   if(!error) return fallback;
@@ -1294,6 +1295,98 @@ function syncDisplayRow(){
   document.getElementById('accDisplayBtn').disabled = !!ownBan;
 }
 
+// ---- Profilbild: eigenes im Storage-Bucket „avatars“ (supabase/026_avatar_upload.sql) oder das vom Anmeldeanbieter ----
+const AVATAR_PX = 512;
+const avatarBucketUrl = ()=>`${window.SUPABASE_URL}/storage/v1/object/public/avatars/${currentUser.id}/`;
+function providerAvatar(){
+  const meta = (currentUser && currentUser.user_metadata) || {};
+  return meta.avatar_url || meta.picture || null;
+}
+
+function syncPhotoRow(){
+  const url = currentProfile.avatar_url;
+  const own = !!url && url.startsWith(avatarBucketUrl());
+  const avatar = document.getElementById('accAvatar');
+  avatar.classList.toggle('hidden', !url);
+  if(url) avatar.src = url;
+  document.getElementById('accPhotoState').textContent = own ? 'Eigenes Bild' : url ? 'Vom Anmelden übernommen' : 'Kein Bild';
+  document.getElementById('accPhotoBtn').textContent = url ? 'Ändern' : 'Hochladen';
+  document.getElementById('accPhotoBtn').disabled = !!ownBan;
+  // Entfernen heißt: zurück zum Bild vom Anmelden, und gibt es keins, gar kein Bild.
+  const remove = document.getElementById('accPhotoRemoveBtn');
+  remove.classList.toggle('hidden', !own);
+  remove.disabled = !!ownBan;
+}
+
+// Mittig quadratisch zuschneiden und als JPEG; decodePhoto (edit.js) dreht Handyfotos richtig und verkleinert vorab.
+async function avatarBlob(file){
+  const photo = await decodePhoto(file);
+  try {
+    const side = Math.min(photo.width, photo.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = Math.min(AVATAR_PX, side);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(photo.source, (photo.width - side) / 2, (photo.height - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(res=>canvas.toBlob(res, 'image/jpeg', 0.85));
+    if(!blob) throw new Error('no jpeg');
+    return blob;
+  } finally {
+    if(photo.source.close) photo.source.close();
+    if(photo.url) URL.revokeObjectURL(photo.url);
+  }
+}
+
+// Alle eigenen Dateien außer keep löschen; jedes neue Bild hat einen neuen Namen, damit kein Cache das alte zeigt.
+async function removeOwnAvatarFiles(keep){
+  const { data } = await supabaseClient.storage.from('avatars').list(currentUser.id);
+  const old = (data || []).map(f=>`${currentUser.id}/${f.name}`).filter(p=>p !== keep);
+  if(old.length) await supabaseClient.storage.from('avatars').remove(old);
+}
+
+async function saveAvatarUrl(url, success){
+  const { data, error } = await supabaseClient.from('profiles').update({ avatar_url: url }).eq('id', currentUser.id).select().single();
+  if(error){ showToast(dbErrorText(error, 'Profilbild konnte nicht gespeichert werden')); return false; }
+  currentProfile = data;
+  resetDirectory();
+  if(viewedProfile && viewedProfile.id === currentUser.id) viewedProfile.avatar_url = data.avatar_url;
+  syncPhotoRow();
+  renderAuthUI();
+  render();
+  showToast(success);
+  return true;
+}
+
+document.getElementById('accPhotoBtn').addEventListener('click', ()=>document.getElementById('accPhotoInput').click());
+document.getElementById('accPhotoInput').addEventListener('change', async e=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file || !currentUser) return;
+  const btn = document.getElementById('accPhotoBtn');
+  const avatar = document.getElementById('accAvatar');
+  btn.disabled = true;
+  avatar.classList.add('is-busy');
+  try {
+    let blob;
+    try { blob = await avatarBlob(file); } catch(err){ showToast('Dieses Bild lässt sich nicht öffnen. Versuch ein JPEG oder PNG.'); return; }
+    const path = `${currentUser.id}/${Date.now()}.jpg`;
+    const { error } = await supabaseClient.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
+    if(error){ showToast('Hochladen hat nicht geklappt. Prüf deine Verbindung und versuch es nochmal.'); return; }
+    if(await saveAvatarUrl(avatarBucketUrl() + path.split('/')[1], 'Profilbild gespeichert')) removeOwnAvatarFiles(path).catch(()=>{});
+    else supabaseClient.storage.from('avatars').remove([path]).catch(()=>{});
+  } finally {
+    btn.disabled = !!ownBan;
+    avatar.classList.remove('is-busy');
+  }
+});
+document.getElementById('accPhotoRemoveBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('accPhotoRemoveBtn');
+  btn.disabled = true;
+  if(await saveAvatarUrl(providerAvatar(), 'Profilbild entfernt')) removeOwnAvatarFiles(null).catch(()=>{});
+  btn.disabled = false;
+});
+
 function syncPrivacyRows(){
   const priv = !!currentProfile.is_private;
   document.querySelectorAll('[data-privacy]').forEach(b=>{
@@ -1351,9 +1444,6 @@ async function openAccount(){
   if(!currentProfile) return;
   document.getElementById('profilePanel').classList.add('hidden');
   const p = currentProfile;
-  const avatar = document.getElementById('accAvatar');
-  avatar.classList.toggle('hidden', !p.avatar_url);
-  if(p.avatar_url) avatar.src = p.avatar_url;
   document.getElementById('accHandle').textContent = p.username ? '@' + p.username : '';
   document.getElementById('accSince').textContent = p.created_at ? fmtMonth(p.created_at) : '–';
   document.getElementById('accBooks').textContent = '–';
@@ -1373,6 +1463,7 @@ async function openAccount(){
   document.getElementById('accDeleteLabel').textContent = p.username
     ? `Zur Bestätigung „${p.username}“ eintippen`
     : 'Zur Bestätigung „löschen“ eintippen';
+  syncPhotoRow();
   syncDisplayRow();
   syncRenameRow();
   syncPrivacyRows();
@@ -1534,6 +1625,8 @@ document.getElementById('accDeleteForm').addEventListener('submit', async e=>{
     return;
   }
   accountOverlay.classList.add('hidden');
+  // Das Konto ist weg, die Anmeldung gilt aber noch kurz: reicht, um das eigene Profilbild mitzunehmen.
+  await removeOwnAvatarFiles(null).catch(()=>{});
   setPref(LAST_USER_KEY, '');
   resetDirectory();
   await supabaseClient.auth.signOut({ scope: 'local' });

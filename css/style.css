@@ -2222,6 +2222,11 @@ html[data-theme="midnight"] .vitrine {
   gap: 8px;
   padding: 10px 0 2px;
 }
+.setting-buttons {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
 .install-steps {
   margin: 14px 0 0;
   padding-left: 20px;
@@ -5141,6 +5146,9 @@ body:has(#homeView:not(.hidden)) .site-legal {
   border-radius: 50%;
   object-fit: cover;
   background: var(--wall-2);
+}
+.account-avatar.is-busy {
+  opacity: 0.4;
 }
 .account-name {
   margin: 0;

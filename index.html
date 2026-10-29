@@ -830,6 +830,18 @@
     <p class="account-banned hidden" id="accBanned"></p>
 
     <section class="settings-group">
+      <h3>Profilbild</h3>
+      <div class="setting-row">
+        <span><b id="accPhotoState"></b><small>Wird quadratisch zugeschnitten. Andere sehen es neben deinem Namen.</small></span>
+        <div class="setting-buttons">
+          <button type="button" class="btn btn-ghost hidden" id="accPhotoRemoveBtn">Entfernen</button>
+          <button type="button" class="btn btn-secondary" id="accPhotoBtn">Hochladen</button>
+        </div>
+      </div>
+      <input type="file" id="accPhotoInput" accept="image/*" hidden>
+    </section>
+
+    <section class="settings-group">
       <h3>Anzeigename</h3>
       <div class="setting-row" id="accDisplayRow">
         <span><b id="accDisplay"></b><small>Steht über deinem Regal und in der Übersicht. Muss nicht einzigartig sein, jederzeit änderbar.</small></span>
