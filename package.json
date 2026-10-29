@@ -1,0 +1,14 @@
+{
+  "name": "bookshelf",
+  "private": true,
+  "description": "Bücherregal: statische Seite plus Cloudflare Worker. Kein Build-Schritt; package.json nur für Tests und Deploy.",
+  "scripts": {
+    "dev": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "test": "playwright test",
+    "deploy": "playwright test && wrangler deploy"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "wrangler": "4.155.0"
+  }
+}

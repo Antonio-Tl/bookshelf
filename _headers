@@ -1,6 +1,6 @@
 # Sicherheits-Header für alle statischen Dateien (Cloudflare liest diese Datei beim Deploy, ausgeliefert wird sie nicht).
 # Skripte nur vom eigenen Server; Bilder von überall per https, weil Cover beliebige Adressen haben dürfen.
-# Neue externe Datenquelle in script.js? Dann ihren Host bei connect-src ergänzen, sonst blockt der Browser die Anfrage.
+# Neue externe Datenquelle in js/? Dann ihren Host bei connect-src ergänzen, sonst blockt der Browser die Anfrage.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self' https://cloudflareinsights.com https://zlbedwktggcdyfvaerop.supabase.co wss://zlbedwktggcdyfvaerop.supabase.co https://openlibrary.org https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
   X-Content-Type-Options: nosniff
@@ -9,3 +9,12 @@
   Strict-Transport-Security: max-age=31536000
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Cross-Origin-Opener-Policy: same-origin-allow-popups
+
+# Dateien, deren Inhalt sich unter demselben Namen nie ändert (Version im Namen), ein Jahr cachen.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+/js/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+# Bilder ändern sich selten; eine Woche, danach fragt der Browser nach.
+/img/*
+  Cache-Control: public, max-age=604800

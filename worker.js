@@ -406,7 +406,7 @@ async function logClientError(request){
 }
 
 // GET /api/cover?url=… liefert ein Cover von Open Library oder Google Books über die eigene Domain aus.
-// Nur für das Story-Bild (script.js): ein Canvas darf fremde Bilder ohne CORS-Freigabe nicht exportieren.
+// Nur für das Story-Bild (js/shelf.js): ein Canvas darf fremde Bilder ohne CORS-Freigabe nicht exportieren.
 // Nur diese Hosts, nur Bilder bis 5 MB, eine Woche im Edge-Cache.
 const COVER_HOSTS = ['covers.openlibrary.org', 'books.google.com', 'books.googleusercontent.com'];
 const COVER_MAX_BYTES = 5 * 1024 * 1024;
@@ -441,11 +441,11 @@ async function coverProxy(request, env, ctx){
 // fünf Minuten im Edge-Cache. Alte Links ?u=name leiten dauerhaft auf /@name um.
 const PROFILE_PATH = /^\/@([a-z0-9_]{3,20})\/?$/i;
 const PREVIEW_SECONDS = 300;
-// Erfundene Beispielregale (wie DEMO_USERNAMES in script.js): nicht in die Sitemap, nicht in Suchmaschinen.
+// Erfundene Beispielregale (wie DEMO_USERNAMES in js/core.js): nicht in die Sitemap, nicht in Suchmaschinen.
 const DEMO_USERNAMES = ['lenamarie', 'jonas_kr', 'sophie_liest'];
 const DEFAULT_OG_IMAGE = '/img/og-image.jpg';
 
-// „Antonios Regal“, aber „Orientdreams’ Regal“ (wie in script.js).
+// „Antonios Regal“, aber „Orientdreams’ Regal“ (wie in js/account.js).
 const possessive = (name)=>/[sßxz]$/i.test(name) ? name + '’' : name + 's';
 const shownName = (p)=>(p.display_name && p.display_name.trim()) || p.username.charAt(0).toUpperCase() + p.username.slice(1);
 

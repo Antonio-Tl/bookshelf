@@ -19,3 +19,10 @@ PRODUCT.md
 js/config.example.js
 buecherregal.html
 .playwright-mcp
+# Tests und Werkzeuge
+package.json
+package-lock.json
+playwright.config.js
+tests
+test-results
+playwright-report

@@ -29,7 +29,7 @@ Not a reading tracker with lists and progress bars: books live as spines on shel
 
 ## Capabilities and Constraints
 
-- Static HTML/CSS/vanilla JS served as files (`index.html`, `css/style.css`, `js/script.js`), Supabase for auth (Google OAuth), data, and row-level security. No build step.
+- Static HTML/CSS/vanilla JS served as files (`index.html`, `css/style.css`, `js/*.js`, six classic scripts in a fixed order), Supabase for auth (Google OAuth or an email magic link), data, and row-level security. No build step.
 - Data model: profiles (username, display name, avatar, created_at, is_private, listed), shelves (label, is_series, is_private), books (title, author, series_order, rating 0–5, notes, summary, date_read, page_count, is_private), categories, shelf_categories, follows (follower, followee, notify), notifications (created by a trigger on the first rating of a book), showcases (premium Vitrine: a series with up to three chosen volumes, or up to three single books). Private series and books are only ever returned to their owner.
 - UI copy is German.
 - `buecherregal.html` is a legacy standalone prototype, not part of the live app.
