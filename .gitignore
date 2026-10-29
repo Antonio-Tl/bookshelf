@@ -1,5 +1,9 @@
-
 .claude
-supabase
 .dev.vars
 .wrangler
+.DS_Store
+node_modules
+test-results
+playwright-report
+# Ergebnisse von supabase/audit.sql bleiben lokal
+supabase/*.csv
