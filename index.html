@@ -130,7 +130,7 @@
         <button type="button" class="btn btn-primary btn-lg" id="homeCreateBtn">Eigenes Regal erstellen</button>
         <a class="btn btn-secondary btn-lg" href="/?view=regale" data-route="browse">Bücherregale ansehen</a>
       </div>
-      <p class="hero-note" id="homeCreateNote">Kostenlos, Anmeldung mit Google oder E-Mail</p>
+      <p class="hero-note" id="homeCreateNote">Kostenlos, Anmeldung mit Google</p>
     </div>
     <figure class="hero-scene">
       <div class="hero-shelf" id="heroShelf" aria-hidden="true"></div>
@@ -496,28 +496,64 @@
       <button type="button" class="icon-btn" id="loginCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
     </div>
     <div id="loginChoose">
-      <p class="modal-lede">Leg dein eigenes Regal an oder öffne es wieder. Kostenlos, ohne Passwort.</p>
-      <button type="button" class="google-btn login-google" id="loginGoogleBtn">
-        <svg viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
-        <span>Mit Google anmelden</span>
-      </button>
-      <p class="login-or"><span>oder per E-Mail</span></p>
-      <form class="login-email" id="loginEmailForm" autocomplete="on">
-        <label class="visually-hidden" for="loginEmail">E-Mail-Adresse</label>
-        <input type="email" id="loginEmail" name="email" required placeholder="deine@email.de" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false">
-        <button type="submit" class="btn btn-primary" id="loginEmailBtn">Anmeldelink schicken</button>
-      </form>
-      <p class="login-error hidden" id="loginError" role="alert"></p>
+      <p class="modal-lede" id="loginLede">Öffne dein Regal wieder oder leg ein neues an. Kostenlos.</p>
+      <div class="login-providers">
+        <button type="button" class="apple-btn hidden" id="loginAppleBtn">
+          <svg viewBox="0 0 17 20" width="15" height="18" fill="currentColor" aria-hidden="true"><path d="M14.05 10.63c-.02-2.13 1.74-3.16 1.82-3.21-1-1.45-2.54-1.65-3.08-1.67-1.31-.13-2.56.77-3.22.77-.67 0-1.69-.75-2.78-.73-1.43.02-2.75.83-3.48 2.11-1.49 2.58-.38 6.39 1.07 8.48.71 1.02 1.55 2.17 2.65 2.13 1.07-.04 1.47-.69 2.76-.69 1.29 0 1.65.69 2.78.67 1.15-.02 1.87-1.04 2.57-2.07.81-1.18 1.14-2.33 1.16-2.39-.03-.01-2.22-.85-2.25-3.4zM11.93 4.37c.59-.71.98-1.7.87-2.69-.85.03-1.88.57-2.49 1.28-.55.63-1.03 1.64-.9 2.61.95.07 1.92-.48 2.52-1.2z"/></svg>
+          <span>Mit Apple anmelden</span>
+        </button>
+        <button type="button" class="google-btn login-google" id="loginGoogleBtn">
+          <svg viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+          <span>Mit Google anmelden</span>
+        </button>
+      </div>
+      <div id="loginEmailPart">
+        <p class="login-or"><span>oder mit E-Mail</span></p>
+        <form class="login-email" id="loginEmailForm" autocomplete="on" novalidate>
+          <label class="visually-hidden" for="loginEmail">E-Mail-Adresse</label>
+          <input type="email" id="loginEmail" name="email" required placeholder="deine@email.de" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false">
+          <label class="visually-hidden" for="loginPassword">Passwort</label>
+          <input type="password" id="loginPassword" name="password" placeholder="Passwort" autocomplete="current-password" minlength="8">
+          <small class="login-pw-hint hidden" id="loginPasswordHint">Mindestens 8 Zeichen.</small>
+          <button type="submit" class="btn btn-primary" id="loginSubmitBtn">Anmelden</button>
+        </form>
+        <p class="login-error hidden" id="loginError" role="alert"></p>
+        <p class="login-links">
+          <button type="button" class="link-btn" id="loginForgotBtn">Passwort vergessen?</button>
+          <button type="button" class="link-btn" id="loginMagicBtn">Ohne Passwort: Link per E-Mail</button>
+        </p>
+        <p class="login-switch" id="loginSwitch"></p>
+      </div>
       <p class="login-legal">Mit der Anmeldung gilt unsere <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzerklärung</a>.</p>
     </div>
     <div class="login-sent hidden" id="loginSent" aria-live="polite">
-      <p class="modal-lede">Wir haben dir einen Anmeldelink an <b id="loginSentTo"></b> geschickt. Öffne ihn auf diesem Gerät, dann bist du angemeldet. Schau auch im Spam-Ordner nach.</p>
+      <p class="modal-lede" id="loginSentText"></p>
       <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" id="loginAgainBtn">Andere Adresse</button>
+        <button type="button" class="btn btn-ghost" id="loginAgainBtn">Zurück</button>
         <button type="button" class="btn btn-primary" id="loginDoneBtn">Verstanden</button>
       </div>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay hidden" id="passwordOverlay">
+  <form class="modal password-modal" role="dialog" aria-modal="true" aria-labelledby="passwordTitle" id="passwordForm" autocomplete="on" novalidate>
+    <div class="modal-title-row">
+      <h2 id="passwordTitle">Neues Passwort</h2>
+      <button type="button" class="icon-btn" id="passwordCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    </div>
+    <p class="modal-lede" id="passwordLede">Leg ein neues Passwort für dein Konto fest.</p>
+    <input type="text" class="visually-hidden" name="username" id="passwordUser" autocomplete="username" tabindex="-1" aria-hidden="true">
+    <label class="field"><span>Neues Passwort</span>
+      <input type="password" id="passwordNew" autocomplete="new-password" minlength="8" required>
+      <small>Mindestens 8 Zeichen.</small>
+    </label>
+    <p class="login-error hidden" id="passwordError" role="alert"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="passwordCancelBtn">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="passwordSaveBtn">Speichern</button>
+    </div>
+  </form>
 </div>
 
 <div class="modal-overlay hidden" id="shareOverlay">
@@ -859,6 +895,10 @@
 
     <section class="settings-group">
       <h3>Konto</h3>
+      <div class="setting-row hidden" id="accPasswordRow">
+        <span><b>Passwort</b><small id="accPasswordHint">Zum Anmelden mit E-Mail und Passwort.</small></span>
+        <button type="button" class="btn btn-secondary" id="accPasswordBtn">Ändern</button>
+      </div>
       <div class="setting-row">
         <span><b>Konto löschen</b><small>Löscht dein Profil, dein Regal und alle Bücher endgültig.</small></span>
         <button type="button" class="btn btn-danger-outline" id="accDeleteBtn">Löschen …</button>

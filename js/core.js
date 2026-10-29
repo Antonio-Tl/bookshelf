@@ -3,6 +3,8 @@
 // Gültigkeitsbereich und laden in index.html in fester Reihenfolge: core, account, admin, shelf, edit, extras.
 // Was beim Laden sofort läuft (nicht erst bei einem Klick), darf nur auf Früheres zugreifen.
 
+// Vor createClient merken: Supabase räumt die Adresse nach dem Lesen des Links auf.
+const PASSWORD_RECOVERY_LINK = /[#&]type=recovery\b/.test(window.location.hash);
 const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
 const DEFAULT_USERNAME = 'antonio';

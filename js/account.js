@@ -7,7 +7,13 @@
 async function initAuth(){
   const { data:{ session } } = await supabaseClient.auth.getSession();
   await handleSession(session);
-  supabaseClient.auth.onAuthStateChange((_event, session)=>{ handleSession(session); });
+  supabaseClient.auth.onAuthStateChange((event, session)=>{
+    handleSession(session);
+    if(event === 'PASSWORD_RECOVERY') openPasswordDialog(true);
+  });
+  // Kam die Seite über den Link „Passwort zurücksetzen“, ist das Ereignis oft schon vor dem Zuhören vorbei.
+  if(PASSWORD_RECOVERY_LINK && session) openPasswordDialog(true);
+  loadAuthProviders();
 }
 
 async function handleSession(session){
@@ -147,52 +153,216 @@ async function signOut(){
   await supabaseClient.auth.signOut();
 }
 
-// ---- Anmelden: Google oder ein Anmeldelink per E-Mail (Supabase „Magic Link“) ----
+// ---- Anmelden: Apple, Google oder E-Mail (mit Passwort oder per Anmeldelink) ----
+// Welche Wege es gibt, sagt Supabase selbst (/auth/v1/settings): Apple und E-Mail erscheinen erst, wenn sie
+// unter Authentication → Sign In / Providers eingeschaltet sind. Bis die Antwort da ist, gilt nur Google.
 const loginOverlay = document.getElementById('loginOverlay');
-function openLogin(after){
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const loginError = document.getElementById('loginError');
+const loginSubmitBtn = document.getElementById('loginSubmitBtn');
+let loginMode = 'signin'; // 'signin', 'signup', 'reset' (Link zum Zurücksetzen) oder 'magic' (Link ohne Passwort)
+let authProviders = { google: true, apple: false, email: false };
+
+async function loadAuthProviders(){
+  try {
+    const r = await fetch(`${window.SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: window.SUPABASE_ANON_KEY } });
+    if(!r.ok) return;
+    const ext = (await r.json()).external || {};
+    authProviders = { google: !!ext.google, apple: !!ext.apple, email: !!ext.email };
+  } catch(e){}
+  syncLoginProviders();
+  updateHomeCta();
+}
+
+function syncLoginProviders(){
+  document.getElementById('loginAppleBtn').classList.toggle('hidden', !authProviders.apple);
+  document.getElementById('loginGoogleBtn').classList.toggle('hidden', !authProviders.google);
+  document.getElementById('loginEmailPart').classList.toggle('hidden', !authProviders.email);
+}
+
+function loginWays(){
+  const ways = [authProviders.google && 'Google', authProviders.apple && 'Apple', authProviders.email && 'E-Mail'].filter(Boolean);
+  return ways.length > 1 ? `${ways.slice(0, -1).join(', ')} oder ${ways[ways.length - 1]}` : (ways[0] || 'Google');
+}
+
+const LOGIN_MODES = {
+  signin: { title: 'Anmelden', submit: 'Anmelden', password: true, lede: 'Öffne dein Regal wieder oder leg ein neues an. Kostenlos.' },
+  signup: { title: 'Konto erstellen', submit: 'Konto erstellen', password: true, lede: 'Dein eigenes Regal, kostenlos und ohne Werbung.' },
+  reset: { title: 'Passwort vergessen', submit: 'Link zum Zurücksetzen schicken', password: false, lede: 'Wir schicken dir einen Link, mit dem du ein neues Passwort festlegst.' },
+  magic: { title: 'Anmelden ohne Passwort', submit: 'Anmeldelink schicken', password: false, lede: 'Wir schicken dir einen Link, der dich direkt anmeldet.' },
+};
+
+function setLoginMode(mode){
+  loginMode = mode;
+  const m = LOGIN_MODES[mode];
+  document.getElementById('loginTitle').textContent = m.title;
+  document.getElementById('loginLede').textContent = m.lede;
+  loginSubmitBtn.textContent = m.submit;
+  loginPassword.classList.toggle('hidden', !m.password);
+  loginPassword.required = m.password;
+  loginPassword.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  document.getElementById('loginPasswordHint').classList.toggle('hidden', mode !== 'signup');
+  document.querySelector('.login-providers').classList.toggle('hidden', mode === 'reset' || mode === 'magic');
+  document.querySelector('.login-or').classList.toggle('hidden', mode === 'reset' || mode === 'magic');
+  document.getElementById('loginForgotBtn').classList.toggle('hidden', mode !== 'signin');
+  document.getElementById('loginMagicBtn').classList.toggle('hidden', mode !== 'signin');
+  const sw = document.getElementById('loginSwitch');
+  sw.innerHTML = mode === 'signup'
+    ? 'Schon ein Konto? <button type="button" class="link-btn" data-login-mode="signin">Anmelden</button>'
+    : mode === 'signin'
+      ? 'Noch kein Konto? <button type="button" class="link-btn" data-login-mode="signup">Registrieren</button>'
+      : '<button type="button" class="link-btn" data-login-mode="signin">Zurück zur Anmeldung</button>';
+  sw.querySelector('[data-login-mode]').addEventListener('click', e=>setLoginMode(e.target.getAttribute('data-login-mode')));
+  loginError.classList.add('hidden');
+}
+
+function openLogin(after, mode = 'signin'){
   if(after) setPref(AFTER_LOGIN_KEY, after);
+  syncLoginProviders();
+  setLoginMode(mode);
+  loginPassword.value = '';
   document.getElementById('loginChoose').classList.remove('hidden');
   document.getElementById('loginSent').classList.add('hidden');
-  document.getElementById('loginError').classList.add('hidden');
-  document.getElementById('loginEmailBtn').disabled = false;
+  loginSubmitBtn.disabled = false;
   loginOverlay.classList.remove('hidden');
 }
 function closeLogin(){
   loginOverlay.classList.add('hidden');
 }
-const LOGIN_ERRORS = {
-  over_email_send_rate_limit: 'Gerade wurden zu viele Links verschickt. Versuch es in einer Minute noch einmal.',
-  email_address_invalid: 'Diese E-Mail-Adresse sieht nicht richtig aus.',
-  email_provider_disabled: 'Die Anmeldung per E-Mail ist gerade ausgeschaltet. Nimm bitte Google.',
-};
-document.getElementById('loginEmailForm').addEventListener('submit', async e=>{
-  e.preventDefault();
-  const input = document.getElementById('loginEmail');
-  const email = input.value.trim();
-  const errorEl = document.getElementById('loginError');
-  if(!email) return;
-  const btn = document.getElementById('loginEmailBtn');
-  btn.disabled = true;
-  errorEl.classList.add('hidden');
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.origin + '/' },
-  });
-  btn.disabled = false;
-  if(error){
-    errorEl.textContent = LOGIN_ERRORS[error.code] || (error.status === 429 ? LOGIN_ERRORS.over_email_send_rate_limit : 'Der Link ließ sich nicht verschicken. Versuch es gleich noch einmal.');
-    errorEl.classList.remove('hidden');
-    return;
-  }
-  document.getElementById('loginSentTo').textContent = email;
+function showLoginSent(text){
+  document.getElementById('loginSentText').innerHTML = text;
   document.getElementById('loginChoose').classList.add('hidden');
   document.getElementById('loginSent').classList.remove('hidden');
+}
+function showLoginError(text){
+  loginError.innerHTML = text;
+  loginError.classList.remove('hidden');
+}
+
+const LOGIN_ERRORS = {
+  invalid_credentials: 'E-Mail-Adresse oder Passwort stimmen nicht.',
+  email_not_confirmed: 'Bitte bestätige zuerst deine E-Mail-Adresse über den Link in deinem Postfach. <button type="button" class="link-btn" id="loginResendBtn">Link noch einmal schicken</button>',
+  user_already_exists: 'Mit dieser Adresse gibt es schon ein Konto. Melde dich an oder setz dein Passwort zurück.',
+  email_exists: 'Mit dieser Adresse gibt es schon ein Konto. Melde dich an oder setz dein Passwort zurück.',
+  weak_password: 'Das Passwort ist zu schwach. Nimm mindestens 8 Zeichen, am besten mit Zahlen oder Sonderzeichen.',
+  over_email_send_rate_limit: 'Gerade wurden zu viele E-Mails verschickt. Versuch es in einer Minute noch einmal.',
+  over_request_rate_limit: 'Zu viele Versuche. Warte einen Moment und versuch es dann noch einmal.',
+  email_address_invalid: 'Diese E-Mail-Adresse sieht nicht richtig aus.',
+  validation_failed: 'Diese E-Mail-Adresse sieht nicht richtig aus.',
+  signup_disabled: 'Neue Konten lassen sich gerade nicht anlegen.',
+  email_provider_disabled: 'Die Anmeldung per E-Mail ist gerade ausgeschaltet.',
+};
+function loginErrorText(error){
+  return LOGIN_ERRORS[error.code] || (error.status === 429 ? LOGIN_ERRORS.over_request_rate_limit : 'Das hat nicht geklappt. Versuch es gleich noch einmal.');
+}
+
+const loginRedirect = ()=>window.location.origin + '/';
+
+document.getElementById('loginEmailForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value;
+  loginError.classList.add('hidden');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showLoginError(LOGIN_ERRORS.email_address_invalid); loginEmail.focus(); return; }
+  if(LOGIN_MODES[loginMode].password && password.length < 8){
+    showLoginError(loginMode === 'signup' ? 'Das Passwort braucht mindestens 8 Zeichen.' : 'Bitte gib dein Passwort ein.');
+    loginPassword.focus();
+    return;
+  }
+  loginSubmitBtn.disabled = true;
+  let result;
+  if(loginMode === 'signin'){
+    result = await supabaseClient.auth.signInWithPassword({ email, password });
+  } else if(loginMode === 'signup'){
+    result = await supabaseClient.auth.signUp({ email, password, options: { emailRedirectTo: loginRedirect() } });
+  } else if(loginMode === 'reset'){
+    result = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: loginRedirect() });
+  } else {
+    result = await supabaseClient.auth.signInWithOtp({ email, options: { emailRedirectTo: loginRedirect() } });
+  }
+  loginSubmitBtn.disabled = false;
+  const { data, error } = result;
+  if(error){
+    showLoginError(loginErrorText(error));
+    const resend = document.getElementById('loginResendBtn');
+    if(resend) resend.addEventListener('click', async ()=>{
+      const { error: err } = await supabaseClient.auth.resend({ type: 'signup', email, options: { emailRedirectTo: loginRedirect() } });
+      showLoginError(err ? loginErrorText(err) : 'Wir haben dir den Bestätigungslink noch einmal geschickt.');
+    });
+    return;
+  }
+  const to = `<b>${escapeHtml(email)}</b>`;
+  if(loginMode === 'signin') return; // handleSession schließt den Dialog
+  if(loginMode === 'signup'){
+    // Gibt es die Adresse schon, meldet Supabase zum Schutz vor Ausspähen trotzdem Erfolg, nur ohne Identität.
+    if(data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0){
+      setLoginMode('signin');
+      showLoginError(LOGIN_ERRORS.user_already_exists);
+      return;
+    }
+    if(data.session) return; // Bestätigung in Supabase ausgeschaltet: direkt angemeldet
+    showLoginSent(`Fast geschafft: Wir haben dir an ${to} einen Link geschickt. Klick ihn an, um deine Adresse zu bestätigen, dann geht es los. Schau auch im Spam-Ordner nach.`);
+  } else if(loginMode === 'reset'){
+    showLoginSent(`Falls es zu ${to} ein Konto gibt, ist ein Link zum Zurücksetzen unterwegs. Öffne ihn auf diesem Gerät und leg dort ein neues Passwort fest.`);
+  } else {
+    showLoginSent(`Wir haben dir einen Anmeldelink an ${to} geschickt. Öffne ihn auf diesem Gerät, dann bist du angemeldet. Schau auch im Spam-Ordner nach.`);
+  }
 });
+
+async function signInWithApple(){
+  const { error } = await supabaseClient.auth.signInWithOAuth({ provider: 'apple', options: { redirectTo: loginRedirect() } });
+  if(error) showToast('Anmeldung fehlgeschlagen');
+}
+
+document.getElementById('loginAppleBtn').addEventListener('click', signInWithApple);
 document.getElementById('loginGoogleBtn').addEventListener('click', signInWithGoogle);
-document.getElementById('loginAgainBtn').addEventListener('click', ()=>openLogin());
+document.getElementById('loginForgotBtn').addEventListener('click', ()=>setLoginMode('reset'));
+document.getElementById('loginMagicBtn').addEventListener('click', ()=>setLoginMode('magic'));
+document.getElementById('loginAgainBtn').addEventListener('click', ()=>openLogin(null, loginMode));
 document.getElementById('loginDoneBtn').addEventListener('click', closeLogin);
 document.getElementById('loginCloseBtn').addEventListener('click', closeLogin);
 loginOverlay.addEventListener('click', e=>{ if(e.target === loginOverlay) closeLogin(); });
+
+// ---- Passwort festlegen: nach dem Link „Passwort zurücksetzen“ oder im Konto-Fenster ----
+const passwordOverlay = document.getElementById('passwordOverlay');
+function openPasswordDialog(recovery){
+  document.getElementById('passwordTitle').textContent = recovery ? 'Neues Passwort festlegen' : 'Passwort ändern';
+  document.getElementById('passwordLede').textContent = recovery
+    ? 'Du bist über den Link angemeldet. Leg jetzt ein neues Passwort fest.'
+    : 'Damit meldest du dich künftig mit deiner E-Mail-Adresse und diesem Passwort an.';
+  document.getElementById('passwordUser').value = (currentUser && currentUser.email) || '';
+  document.getElementById('passwordNew').value = '';
+  document.getElementById('passwordError').classList.add('hidden');
+  passwordOverlay.classList.remove('hidden');
+  setTimeout(()=>document.getElementById('passwordNew').focus(), 50);
+}
+document.getElementById('passwordForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const input = document.getElementById('passwordNew');
+  const errorEl = document.getElementById('passwordError');
+  if(input.value.length < 8){
+    errorEl.textContent = 'Das Passwort braucht mindestens 8 Zeichen.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  const btn = document.getElementById('passwordSaveBtn');
+  btn.disabled = true;
+  const { error } = await supabaseClient.auth.updateUser({ password: input.value });
+  btn.disabled = false;
+  if(error){
+    errorEl.innerHTML = error.code === 'same_password' ? 'Das ist dein bisheriges Passwort. Nimm ein anderes.'
+      : error.code === 'reauthentication_needed' ? 'Aus Sicherheitsgründen bitte erst ab- und neu anmelden, dann noch einmal.'
+      : loginErrorText(error);
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  passwordOverlay.classList.add('hidden');
+  showToast('Passwort gespeichert');
+});
+document.getElementById('accPasswordBtn').addEventListener('click', ()=>openPasswordDialog(false));
+document.getElementById('passwordCancelBtn').addEventListener('click', ()=>passwordOverlay.classList.add('hidden'));
+document.getElementById('passwordCloseBtn').addEventListener('click', ()=>passwordOverlay.classList.add('hidden'));
 
 document.getElementById('googleLoginBtn').addEventListener('click', ()=>openLogin());
 document.getElementById('devResetBtn').addEventListener('click', resetSandbox);
@@ -897,7 +1067,7 @@ function updateHomeCta(){
   const note = document.getElementById('homeCreateNote');
   const mine = currentProfile && currentProfile.username;
   btn.textContent = mine ? 'Zu meinem Regal' : 'Eigenes Regal erstellen';
-  note.textContent = mine ? `Angemeldet als @${currentProfile.username}` : 'Kostenlos, Anmeldung mit Google oder E-Mail';
+  note.textContent = mine ? `Angemeldet als @${currentProfile.username}` : `Kostenlos, Anmeldung mit ${loginWays()}`;
 }
 
 document.getElementById('homeCreateBtn').addEventListener('click', ()=>{
@@ -1188,6 +1358,13 @@ async function openAccount(){
   document.getElementById('accSince').textContent = p.created_at ? fmtMonth(p.created_at) : '–';
   document.getElementById('accBooks').textContent = '–';
   document.getElementById('accSeries').textContent = '–';
+  // Passwort: nur wenn Anmelden per E-Mail eingeschaltet ist. Wer bisher mit Google, Apple oder Link kam,
+  // kann so zusätzlich ein Passwort festlegen.
+  const hasPassword = !!(currentUser && (currentUser.identities || []).some(i=>i.provider === 'email'));
+  document.getElementById('accPasswordRow').classList.toggle('hidden', !(authProviders.email && currentUser && currentUser.email));
+  document.getElementById('accPasswordHint').textContent = currentUser && currentUser.email
+    ? `Zum Anmelden mit ${currentUser.email} und Passwort.` : '';
+  document.getElementById('accPasswordBtn').textContent = hasPassword ? 'Ändern' : 'Festlegen';
   const banned = document.getElementById('accBanned');
   banned.classList.toggle('hidden', !ownBan);
   if(ownBan){
