@@ -488,6 +488,29 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="shareOverlay">
+  <div class="modal share-modal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <div class="modal-title-row">
+      <h2 id="shareTitle">Regal teilen</h2>
+      <button type="button" class="icon-btn" id="shareCloseBtn" aria-label="Schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+    </div>
+    <div class="share-link">
+      <span class="share-url" id="shareUrl"></span>
+      <button type="button" class="btn btn-secondary" id="shareLinkBtn">Link teilen</button>
+    </div>
+    <h3 class="share-sub">Als Bild für Instagram, WhatsApp &amp; Co.</h3>
+    <div class="seg" role="group" aria-label="Bild" id="shareKind">
+      <button type="button" data-share-kind="shelf" aria-pressed="true">Regal</button>
+      <button type="button" data-share-kind="year" aria-pressed="false" id="shareYearBtn">Lesejahr</button>
+    </div>
+    <div class="share-preview" id="sharePreview" aria-live="polite"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="shareDownloadBtn" disabled>Herunterladen</button>
+      <button type="button" class="btn btn-primary" id="shareImageBtn" disabled>Bild teilen</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="importOverlay">
   <div class="modal import-modal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
     <div class="modal-title-row">

@@ -3317,7 +3317,7 @@ function renderHeader(owner){
     <div><dt>Ø Bewertung</dt><dd>${avg}</dd></div>`;
 }
 
-async function shareShelf(){
+async function shareShelfLink(){
   if(!viewedProfile) return;
   const shareUrl = window.location.origin + shelfPath(viewedProfile.username);
 
@@ -3333,7 +3333,282 @@ async function shareShelf(){
     showToast(shareUrl);
   }
 }
-document.getElementById('shareBtn').addEventListener('click', shareShelf);
+document.getElementById('shareBtn').addEventListener('click', openShare);
+
+// ---- Teilen: Link oder Story-Bild (Regal bzw. Lesejahr), 1080 × 1920 wie eine Instagram-Story ----
+// Gezeichnet im Browser auf einem Canvas. Cover kommen über /api/cover (worker.js) von der eigenen Domain,
+// sonst ließe sich das Bild nicht exportieren. Bücher ohne Cover bekommen eine Farbfläche mit Titel.
+const shareOverlay = document.getElementById('shareOverlay');
+const sharePreview = document.getElementById('sharePreview');
+const STORY_W = 1080, STORY_H = 1920;
+let shareKind = 'shelf';
+let shareBlob = null;
+let shareSeq = 0;
+
+function storyYear(){
+  const years = readBooks().map(b=>b.date_read && Number(b.date_read.slice(0, 4))).filter(Boolean);
+  const now = new Date().getFullYear();
+  // Im Januar ist das alte Jahr spannender als drei Bücher im neuen.
+  if(years.includes(now) && !(new Date().getMonth() === 0 && years.includes(now - 1))) return now;
+  return years.length ? Math.max(...years.filter(y=>y <= now)) : now;
+}
+
+function openShare(){
+  if(!viewedProfile) return;
+  closeToc();
+  document.getElementById('shareUrl').textContent = location.host + shelfPath(viewedProfile.username);
+  const year = storyYear();
+  const yearBtn = document.getElementById('shareYearBtn');
+  yearBtn.textContent = `Lesejahr ${year}`;
+  yearBtn.classList.toggle('hidden', !readBooks().some(b=>b.date_read && b.date_read.startsWith(String(year))));
+  if(yearBtn.classList.contains('hidden')) shareKind = 'shelf';
+  syncShareKind();
+  shareOverlay.classList.remove('hidden');
+  renderSharePreview();
+}
+
+function syncShareKind(){
+  document.querySelectorAll('[data-share-kind]').forEach(b=>b.setAttribute('aria-pressed', b.getAttribute('data-share-kind') === shareKind));
+}
+
+// Bücher fürs Bild: beim Regal Vitrine, dann die bestbewerteten und zuletzt gelesenen; beim Lesejahr alle aus dem Jahr.
+function storyBooks(kind, year){
+  const read = readBooks();
+  if(kind === 'year'){
+    return read.filter(b=>b.date_read && b.date_read.startsWith(String(year)))
+      .sort((a, b)=>a.date_read.localeCompare(b.date_read));
+  }
+  const sc = new Set(showcaseBookIds());
+  return [...read].sort((a, b)=>
+    (sc.has(b.id) - sc.has(a.id)) || (b.rating || 0) - (a.rating || 0) || String(b.date_read || '').localeCompare(String(a.date_read || ''))
+  );
+}
+
+function loadStoryImage(url){
+  return new Promise(resolve=>{
+    if(!url || !/^https:\/\/(covers\.openlibrary\.org|books\.google\.com|books\.googleusercontent\.com)\//.test(url)){ resolve(null); return; }
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = ()=>resolve(null);
+    img.src = '/api/cover?url=' + encodeURIComponent(url);
+  });
+}
+
+function cssVar(name, fallback){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+// Text auf eine Breite kürzen, mit „…“.
+function fitText(ctx, text, max){
+  if(ctx.measureText(text).width <= max) return text;
+  while(text.length > 1 && ctx.measureText(text + '…').width > max) text = text.slice(0, -1);
+  return text.trimEnd() + '…';
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+async function drawStory(kind){
+  const year = storyYear();
+  const list = storyBooks(kind, year);
+  const shown = list.slice(0, 12);
+  // Fehlende Cover erst suchen (höchstens ein paar Sekunden), dann zeichnen.
+  await Promise.race([
+    Promise.all(shown.map(b=>{ const e = coverCache[coverKey(b)]; return e && e.done ? null : processCover(b); })),
+    new Promise(r=>setTimeout(r, 4000)),
+  ]);
+  await document.fonts.load('800 80px Geist').catch(()=>{});
+  const images = await Promise.all(shown.map(b=>{
+    const e = coverCache[coverKey(b)];
+    return loadStoryImage(e && e.src ? (e.largeOk ? e.srcLarge : largeCoverUrl(e.src)) : null)
+      .then(img=>img || (e && e.src ? loadStoryImage(e.src) : null));
+  }));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = STORY_W;
+  canvas.height = STORY_H;
+  const ctx = canvas.getContext('2d');
+  const wall = cssVar('--wall', '#efeeeb'), ink = cssVar('--ink', '#141414'), dim = cssVar('--dim', '#5e5c58'), accent = cssVar('--red', '#d23a24');
+  const font = (w, px)=>`${w} ${px}px Geist, system-ui, sans-serif`;
+  const glow = ctx.createLinearGradient(0, 0, 0, STORY_H);
+  glow.addColorStop(0, cssVar('--wall-glow', wall));
+  glow.addColorStop(1, wall);
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, STORY_W, STORY_H);
+
+  // Kopf: Marke, Titel, Zahlen
+  const logo = await new Promise(r=>{ const i = new Image(); i.onload = ()=>r(i); i.onerror = ()=>r(null); i.src = document.querySelector('.brand-mark:not(.brand-mark-negativ)').src; });
+  if(logo) ctx.drawImage(logo, 80, 96, 56, 48);
+  ctx.fillStyle = ink;
+  ctx.font = font(700, 38);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Bücherregal', logo ? 152 : 80, 122);
+
+  const name = shownName(viewedProfile);
+  const title = kind === 'year' ? `${possessive(name)} Lesejahr ${year}` : `${possessive(name)} Regal`;
+  ctx.textBaseline = 'alphabetic';
+  let size = 104;
+  ctx.font = font(800, size);
+  while(ctx.measureText(title).width > STORY_W - 160 && size > 60){ size -= 4; ctx.font = font(800, size); }
+  ctx.fillText(title, 80, 300);
+
+  const pages = list.reduce((sum, b)=>sum + (b.page_count || ((coverCache[coverKey(b)] || {}).pages) || 0), 0);
+  const rated = list.filter(b=>b.rating > 0);
+  const avg = rated.length ? (rated.reduce((s, b)=>s + b.rating, 0) / rated.length).toLocaleString('de-DE', { maximumFractionDigits: 1 }) : null;
+  const stats = [
+    [list.length.toLocaleString('de-DE'), list.length === 1 ? 'Buch' : 'Bücher'],
+    pages ? [pages.toLocaleString('de-DE'), 'Seiten'] : null,
+    avg ? [avg + ' ★', 'im Schnitt'] : null,
+  ].filter(Boolean);
+  stats.forEach(([value, label], i)=>{
+    const x = 80 + i * 320;
+    ctx.fillStyle = kind === 'year' && i === 0 ? accent : ink;
+    ctx.font = font(800, 72);
+    ctx.fillText(value, x, 440);
+    ctx.fillStyle = dim;
+    ctx.font = font(500, 32);
+    ctx.fillText(label, x, 488);
+  });
+
+  // Drei Regalbretter mit je vier Covern
+  const cols = 4, coverW = 200, gap = 40, coverH = 300;
+  const rowTop = [600, 990, 1380];
+  const shelfX = 60, shelfW = STORY_W - 120;
+  rowTop.forEach((top, r)=>{
+    const row = shown.slice(r * cols, r * cols + cols);
+    if(!row.length && r > 0) return;
+    const startX = (STORY_W - (cols * coverW + (cols - 1) * gap)) / 2;
+    row.forEach((b, i)=>{
+      const img = images[r * cols + i];
+      const x = startX + i * (coverW + gap);
+      const v = bookVisual(b, (shelves.find(s=>s.id === b.shelf_id) || {}).label || b.title);
+      const h = img ? Math.min(coverH, Math.round(coverW * img.naturalHeight / img.naturalWidth)) : coverH;
+      const y = top + coverH - h;
+      ctx.save();
+      ctx.shadowColor = 'rgba(20, 20, 20, 0.35)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 14;
+      roundRect(ctx, x, y, coverW, h, 6);
+      ctx.fillStyle = `rgb(${v.rgb.join(',')})`;
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      roundRect(ctx, x, y, coverW, h, 6);
+      ctx.clip();
+      if(img){
+        ctx.drawImage(img, x, y, coverW, h);
+      } else {
+        ctx.fillStyle = isLight(v.rgb) ? '#161616' : '#fafafa';
+        ctx.font = font(700, 26);
+        const words = b.title.split(/\s+/);
+        let line = '', ly = y + 56;
+        for(const w of words){
+          if(ctx.measureText(line + ' ' + w).width > coverW - 32 && line){ ctx.fillText(line, x + 16, ly); line = w; ly += 32; if(ly > y + h - 60) break; }
+          else line = line ? line + ' ' + w : w;
+        }
+        if(ly <= y + h - 60) ctx.fillText(fitText(ctx, line, coverW - 32), x + 16, ly);
+        ctx.font = font(500, 20);
+        ctx.fillText(fitText(ctx, b.author || '', coverW - 32), x + 16, y + h - 28);
+      }
+      ctx.restore();
+    });
+    // Brett: Oberkante, Vorderseite, Schatten
+    const by = top + coverH;
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.12)';
+    ctx.fillRect(shelfX + 10, by + 34, shelfW - 20, 18);
+    const wood = ctx.createLinearGradient(0, by, 0, by + 34);
+    wood.addColorStop(0, cssVar('--shelf-top', '#4a4a4c'));
+    wood.addColorStop(0.35, cssVar('--shelf-front', '#29292b'));
+    wood.addColorStop(1, cssVar('--shelf-front-2', '#141415'));
+    ctx.fillStyle = wood;
+    roundRect(ctx, shelfX, by, shelfW, 34, 4);
+    ctx.fill();
+  });
+
+  // Fuß: Lieblingsbuch im Lesejahr, und wo man das Regal findet
+  ctx.textBaseline = 'alphabetic';
+  if(kind === 'year' && rated.length){
+    const fav = [...rated].sort((a, b)=>b.rating - a.rating || b.date_read.localeCompare(a.date_read))[0];
+    ctx.fillStyle = dim;
+    ctx.font = font(500, 32);
+    ctx.fillText('Lieblingsbuch', 80, 1790);
+    ctx.fillStyle = ink;
+    ctx.font = font(700, 40);
+    ctx.fillText(fitText(ctx, fav.title, STORY_W - 160), 80, 1840);
+  } else if(list.length > shown.length){
+    ctx.fillStyle = dim;
+    ctx.font = font(500, 32);
+    ctx.fillText(`und ${list.length - shown.length} weitere`, 80, 1820);
+  }
+  ctx.fillStyle = ink;
+  ctx.font = font(600, 34);
+  ctx.textAlign = 'right';
+  ctx.fillText(location.host + shelfPath(viewedProfile.username), STORY_W - 80, kind === 'year' && rated.length ? 1840 : 1820);
+  ctx.textAlign = 'left';
+
+  return new Promise(r=>canvas.toBlob(r, 'image/png'));
+}
+
+async function renderSharePreview(){
+  const seq = ++shareSeq;
+  shareBlob = null;
+  document.getElementById('shareImageBtn').disabled = true;
+  document.getElementById('shareDownloadBtn').disabled = true;
+  sharePreview.innerHTML = '<span class="share-loading">Bild wird gezeichnet …</span>';
+  let blob = null;
+  try { blob = await drawStory(shareKind); } catch(e){}
+  if(seq !== shareSeq) return;
+  if(!blob){ sharePreview.innerHTML = '<span class="share-loading">Das Bild ließ sich nicht erstellen.</span>'; return; }
+  shareBlob = blob;
+  const old = sharePreview.querySelector('img');
+  if(old) URL.revokeObjectURL(old.src);
+  sharePreview.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Vorschau des Bildes zum Teilen">`;
+  document.getElementById('shareImageBtn').disabled = false;
+  document.getElementById('shareDownloadBtn').disabled = false;
+}
+
+function shareFileName(){
+  return shareKind === 'year' ? `lesejahr-${storyYear()}-${viewedProfile.username}.png` : `regal-${viewedProfile.username}.png`;
+}
+function downloadShareImage(){
+  if(!shareBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(shareBlob);
+  a.download = shareFileName();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+document.getElementById('shareImageBtn').addEventListener('click', async ()=>{
+  if(!shareBlob) return;
+  const file = new File([shareBlob], shareFileName(), { type: 'image/png' });
+  if(navigator.canShare && navigator.canShare({ files: [file] })){
+    try { await navigator.share({ files: [file], title: document.title }); } catch(e){ /* abgebrochen */ }
+    return;
+  }
+  downloadShareImage();
+  showToast('Bild gespeichert');
+});
+document.getElementById('shareDownloadBtn').addEventListener('click', downloadShareImage);
+document.getElementById('shareLinkBtn').addEventListener('click', shareShelfLink);
+document.querySelectorAll('[data-share-kind]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(shareKind === btn.getAttribute('data-share-kind')) return;
+    shareKind = btn.getAttribute('data-share-kind');
+    syncShareKind();
+    renderSharePreview();
+  });
+});
+document.getElementById('shareCloseBtn').addEventListener('click', ()=>shareOverlay.classList.add('hidden'));
+shareOverlay.addEventListener('click', e=>{ if(e.target === shareOverlay) shareOverlay.classList.add('hidden'); });
 
 // ---- Ansicht (Regal / Cover) ----
 const viewButtons = document.querySelectorAll('.seg [data-view]');
@@ -5739,7 +6014,10 @@ document.getElementById('setUsernameBtn').addEventListener('click', ()=>{
   settingsOverlay.classList.add('hidden');
   openAccount();
 });
-document.getElementById('setShareBtn').addEventListener('click', shareShelf);
+document.getElementById('setShareBtn').addEventListener('click', ()=>{
+  settingsOverlay.classList.add('hidden');
+  openShare();
+});
 document.getElementById('setReloadCoversBtn').addEventListener('click', ()=>{
   coverCache = {};
   coverGaveUp.clear();

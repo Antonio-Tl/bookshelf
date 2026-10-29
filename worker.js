@@ -384,6 +384,35 @@ async function workerUsage(request, env){
   }, 200, { 'Cache-Control': 'no-store' });
 }
 
+// GET /api/cover?url=… liefert ein Cover von Open Library oder Google Books über die eigene Domain aus.
+// Nur für das Story-Bild (script.js): ein Canvas darf fremde Bilder ohne CORS-Freigabe nicht exportieren.
+// Nur diese Hosts, nur Bilder bis 5 MB, eine Woche im Edge-Cache.
+const COVER_HOSTS = ['covers.openlibrary.org', 'books.google.com', 'books.googleusercontent.com'];
+const COVER_MAX_BYTES = 5 * 1024 * 1024;
+async function coverProxy(request, env, ctx){
+  if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'forbidden' }, 403);
+  const url = new URL(request.url);
+  let target;
+  try { target = new URL(url.searchParams.get('url') || ''); } catch(e){ return json({ error: 'bad request' }, 400); }
+  if(target.protocol !== 'https:' || !COVER_HOSTS.includes(target.hostname)) return json({ error: 'host not allowed' }, 400);
+  const cacheKey = new Request(`${url.origin}/api/cover?url=${encodeURIComponent(target.href)}`);
+  const hit = await caches.default.match(cacheKey);
+  if(hit) return hit;
+  if(env.BOOKS_LIMITER){
+    const { success } = await env.BOOKS_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });
+    if(!success) return json({ error: 'rate limited' }, 429, { 'Retry-After': '60' });
+  }
+  let r;
+  try { r = await fetch(target.href, { redirect: 'follow' }); } catch(e){ return json({ error: 'upstream unreachable' }, 502); }
+  const type = r.headers.get('Content-Type') || '';
+  if(!r.ok || !type.startsWith('image/')) return json({ error: 'upstream', status: r.status }, 502);
+  const body = await r.arrayBuffer();
+  if(body.byteLength > COVER_MAX_BYTES) return json({ error: 'too large' }, 413);
+  const res = new Response(body, { headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=604800' } });
+  ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
+  return res;
+}
+
 // ---- Seiten: Regal-Adressen /@name mit eigener Link-Vorschau, Sitemap ----
 // Die App ist eine einzige Seite (index.html). Für /@name schreibt der Worker Titel, Beschreibung und Bild
 // des Regals in die Kopfzeilen, damit ein geteilter Link in WhatsApp, Instagram oder bei Google zeigt,
@@ -530,6 +559,10 @@ export default {
     if(pathname === '/api/books'){
       if(request.method !== 'GET') return json({ error: 'method not allowed' }, 405, { Allow: 'GET' });
       return searchBooks(request, env, ctx);
+    }
+    if(pathname === '/api/cover'){
+      if(request.method !== 'GET') return json({ error: 'method not allowed' }, 405, { Allow: 'GET' });
+      return coverProxy(request, env, ctx);
     }
     if(pathname === '/api/scan'){
       if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
