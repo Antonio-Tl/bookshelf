@@ -1084,6 +1084,7 @@ async function initAuth(){
 
 async function handleSession(session){
   currentUser = session ? session.user : null;
+  if(currentUser) document.getElementById('loginOverlay').classList.add('hidden');
   if(currentUser){
     await loadProfile();
     if(currentProfile && !currentProfile.username){
@@ -1218,9 +1219,56 @@ async function signOut(){
   await supabaseClient.auth.signOut();
 }
 
-document.getElementById('googleLoginBtn').addEventListener('click', signInWithGoogle);
+// ---- Anmelden: Google oder ein Anmeldelink per E-Mail (Supabase „Magic Link“) ----
+const loginOverlay = document.getElementById('loginOverlay');
+function openLogin(after){
+  if(after) setPref(AFTER_LOGIN_KEY, after);
+  document.getElementById('loginChoose').classList.remove('hidden');
+  document.getElementById('loginSent').classList.add('hidden');
+  document.getElementById('loginError').classList.add('hidden');
+  document.getElementById('loginEmailBtn').disabled = false;
+  loginOverlay.classList.remove('hidden');
+}
+function closeLogin(){
+  loginOverlay.classList.add('hidden');
+}
+const LOGIN_ERRORS = {
+  over_email_send_rate_limit: 'Gerade wurden zu viele Links verschickt. Versuch es in einer Minute noch einmal.',
+  email_address_invalid: 'Diese E-Mail-Adresse sieht nicht richtig aus.',
+  email_provider_disabled: 'Die Anmeldung per E-Mail ist gerade ausgeschaltet. Nimm bitte Google.',
+};
+document.getElementById('loginEmailForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const input = document.getElementById('loginEmail');
+  const email = input.value.trim();
+  const errorEl = document.getElementById('loginError');
+  if(!email) return;
+  const btn = document.getElementById('loginEmailBtn');
+  btn.disabled = true;
+  errorEl.classList.add('hidden');
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin + '/' },
+  });
+  btn.disabled = false;
+  if(error){
+    errorEl.textContent = LOGIN_ERRORS[error.code] || (error.status === 429 ? LOGIN_ERRORS.over_email_send_rate_limit : 'Der Link ließ sich nicht verschicken. Versuch es gleich noch einmal.');
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  document.getElementById('loginSentTo').textContent = email;
+  document.getElementById('loginChoose').classList.add('hidden');
+  document.getElementById('loginSent').classList.remove('hidden');
+});
+document.getElementById('loginGoogleBtn').addEventListener('click', signInWithGoogle);
+document.getElementById('loginAgainBtn').addEventListener('click', ()=>openLogin());
+document.getElementById('loginDoneBtn').addEventListener('click', closeLogin);
+document.getElementById('loginCloseBtn').addEventListener('click', closeLogin);
+loginOverlay.addEventListener('click', e=>{ if(e.target === loginOverlay) closeLogin(); });
+
+document.getElementById('googleLoginBtn').addEventListener('click', ()=>openLogin());
 document.getElementById('devResetBtn').addEventListener('click', resetSandbox);
-document.getElementById('loginHintAction').addEventListener('click', signInWithGoogle);
+document.getElementById('loginHintAction').addEventListener('click', ()=>openLogin());
 document.getElementById('logoutBtn').addEventListener('click', signOut);
 // ---- Mein-Regal-Knopf in der Kopfleiste ----
 // Führt von überall (fremdes Regal, Übersicht, Startseite, offenes Buch) zurück ins eigene Regal.
@@ -1921,7 +1969,7 @@ function updateHomeCta(){
   const note = document.getElementById('homeCreateNote');
   const mine = currentProfile && currentProfile.username;
   btn.textContent = mine ? 'Zu meinem Regal' : 'Eigenes Regal erstellen';
-  note.textContent = mine ? `Angemeldet als @${currentProfile.username}` : 'Kostenlos, Anmeldung mit Google';
+  note.textContent = mine ? `Angemeldet als @${currentProfile.username}` : 'Kostenlos, Anmeldung mit Google oder E-Mail';
 }
 
 document.getElementById('homeCreateBtn').addEventListener('click', ()=>{
@@ -1929,8 +1977,7 @@ document.getElementById('homeCreateBtn').addEventListener('click', ()=>{
   if(currentUser){ openUsernameModal(); return; }
   // Lokal gibt es keinen Google-Login: der Testmodus macht Antonios Regal zum eigenen.
   if(DEV_LOCAL){ goToUser(devAs); return; }
-  setPref(AFTER_LOGIN_KEY, '1');
-  signInWithGoogle();
+  openLogin('1');
 });
 
 async function renderHome(){
@@ -2421,11 +2468,8 @@ function showAdminGate(html){
 async function renderAdmin(){
   if(!currentUser){
     showAdminGate(gateHtml('Bitte anmelden', 'Die Verwaltung ist nur für angemeldete Admins.',
-      '<button type="button" class="btn btn-primary" id="adminLoginBtn">Mit Google anmelden</button>'));
-    document.getElementById('adminLoginBtn').addEventListener('click', ()=>{
-      setPref(AFTER_LOGIN_KEY, 'admin');
-      signInWithGoogle();
-    });
+      '<button type="button" class="btn btn-primary" id="adminLoginBtn">Anmelden</button>'));
+    document.getElementById('adminLoginBtn').addEventListener('click', ()=>openLogin('admin'));
     return;
   }
   if(!isAdminMember){
@@ -5890,8 +5934,8 @@ const CHECKOUT_ERRORS = {
 };
 async function startCheckout(){
   if(!currentUser){
-    setPref(AFTER_LOGIN_KEY, 'buy');
-    signInWithGoogle();
+    closeSupportFlow();
+    openLogin('buy');
     return;
   }
   buyConfirmBtn.disabled = true;
