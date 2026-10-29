@@ -233,14 +233,26 @@ function storyBooks(kind, year){
   );
 }
 
+// Einmal geladene Cover bleiben für die Sitzung, damit der Wechsel Regal/Lesejahr nicht alles neu lädt.
+// Fehlgeschlagene nicht, die dürfen beim nächsten Mal erneut versuchen.
+const storyImages = new Map();
 function loadStoryImage(url){
-  return new Promise(resolve=>{
-    if(!url || !/^https:\/\//.test(url)){ resolve(null); return; }
-    const img = new Image();
-    img.onload = ()=>resolve(img);
-    img.onerror = ()=>resolve(null);
-    img.src = '/api/cover?url=' + encodeURIComponent(url);
-  });
+  if(!url || !/^https:\/\//.test(url)) return Promise.resolve(null);
+  if(!storyImages.has(url)){
+    storyImages.set(url, new Promise(resolve=>{
+      const img = new Image();
+      img.onload = ()=>resolve(img);
+      img.onerror = ()=>{ storyImages.delete(url); resolve(null); };
+      img.src = '/api/cover?url=' + encodeURIComponent(url);
+    }));
+  }
+  return storyImages.get(url);
+}
+
+// Hängt Open Library bei einem Cover, soll nicht das ganze Bild warten: was bis dahin fehlt, wird Farbfläche.
+const STORY_COVER_MS = 5000;
+function withDeadline(promise, ms){
+  return Promise.race([promise, new Promise(r=>setTimeout(()=>r(null), ms))]);
 }
 
 // Lieber scharf, aber nie Googles „image not available“: Google liefert für manche Bände statt der großen
@@ -286,7 +298,7 @@ async function drawStory(kind){
     new Promise(r=>setTimeout(r, 4000)),
   ]);
   await document.fonts.load('800 80px Geist').catch(()=>{});
-  const images = await Promise.all(shown.map(b=>storyCover(coverCache[coverKey(b)])));
+  const images = await Promise.all(shown.map(b=>withDeadline(storyCover(coverCache[coverKey(b)]), STORY_COVER_MS)));
 
   const canvas = document.createElement('canvas');
   canvas.width = STORY_W;
@@ -410,7 +422,8 @@ async function drawStory(kind){
   ctx.fillText(location.host + shelfPath(viewedProfile.username), STORY_W - 80, kind === 'year' && rated.length ? 1840 : 1820);
   ctx.textAlign = 'left';
 
-  return new Promise(r=>canvas.toBlob(r, 'image/png'));
+  // JPEG statt PNG: etwa ein Sechstel der Größe und auf dem Handy schneller kodiert; Instagram & Co. speichern ohnehin JPEG.
+  return new Promise(r=>canvas.toBlob(r, 'image/jpeg', 0.9));
 }
 
 async function renderSharePreview(){
@@ -432,7 +445,7 @@ async function renderSharePreview(){
 }
 
 function shareFileName(){
-  return shareKind === 'year' ? `lesejahr-${storyYear()}-${viewedProfile.username}.png` : `regal-${viewedProfile.username}.png`;
+  return shareKind === 'year' ? `lesejahr-${storyYear()}-${viewedProfile.username}.jpg` : `regal-${viewedProfile.username}.jpg`;
 }
 function downloadShareImage(){
   if(!shareBlob) return;
@@ -446,7 +459,7 @@ function downloadShareImage(){
 }
 document.getElementById('shareImageBtn').addEventListener('click', async ()=>{
   if(!shareBlob) return;
-  const file = new File([shareBlob], shareFileName(), { type: 'image/png' });
+  const file = new File([shareBlob], shareFileName(), { type: 'image/jpeg' });
   if(navigator.canShare && navigator.canShare({ files: [file] })){
     try { await navigator.share({ files: [file], title: document.title }); } catch(e){ /* abgebrochen */ }
     return;

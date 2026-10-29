@@ -440,11 +440,13 @@ async function coverProxy(request, env, ctx){
     const { success } = await env.BOOKS_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });
     if(!success) return json({ error: 'rate limited' }, 429, { 'Retry-After': '60' });
   }
-  let r;
-  try { r = await fetch(target.href, { redirect: 'follow' }); } catch(e){ return json({ error: 'upstream unreachable' }, 502); }
+  // Open Library hängt manchmal minutenlang; nach 8 Sekunden aufgeben, das Story-Bild zeichnet dann eine Farbfläche.
+  const signal = AbortSignal.timeout(8000);
+  let r, body;
+  try { r = await fetch(target.href, { redirect: 'follow', signal }); } catch(e){ return json({ error: 'upstream unreachable' }, 504); }
   const type = r.headers.get('Content-Type') || '';
   if(!r.ok || !type.startsWith('image/')) return json({ error: 'upstream', status: r.status }, 502);
-  const body = await r.arrayBuffer();
+  try { body = await r.arrayBuffer(); } catch(e){ return json({ error: 'upstream unreachable' }, 504); }
   if(body.byteLength > COVER_MAX_BYTES) return json({ error: 'too large' }, 413);
   const res = new Response(body, { headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=604800' } });
   ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
