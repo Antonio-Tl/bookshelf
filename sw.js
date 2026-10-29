@@ -1,12 +1,13 @@
 // Service Worker: macht die Seite installierbar und offline grundsätzlich lesbar.
 // Immer zuerst das Netz fragen, damit nach einem Deploy sofort die neue Version kommt;
 // der Cache ist nur der Rückfall ohne Verbindung.
-const CACHE = 'bookshelf-v4';
+const CACHE = 'bookshelf-v5';
 const SHELL = [
   './',
   'index.html',
   'css/style.css',
   'js/theme.js',
+  'js/monitor.js',
   'js/vendor/supabase-2.117.3.js',
   'js/config.js',
   'js/script.js',

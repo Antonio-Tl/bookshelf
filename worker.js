@@ -384,6 +384,27 @@ async function workerUsage(request, env){
   }, 200, { 'Cache-Control': 'no-store' });
 }
 
+// POST /api/log: Fehler aus dem Browser (js/monitor.js) landen in den Worker-Logs (wrangler.jsonc →
+// observability), damit kaputte Stellen auffallen, bevor jemand schreibt. Nur Fehlertext, Stelle, Seite und
+// Browser; keine Nutzerdaten. Höchstens 4 KB, und nur von der eigenen Seite.
+async function logClientError(request){
+  if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return new Response(null, { status: 403 });
+  const raw = (await request.text()).slice(0, 4096);
+  let e = {};
+  try { e = JSON.parse(raw); } catch(err){ return new Response(null, { status: 400 }); }
+  const str = (v, max)=>String(v ?? '').slice(0, max);
+  console.error(JSON.stringify({
+    type: 'client-error',
+    message: str(e.message, 500),
+    source: str(e.source, 300),
+    line: Number(e.line) || null,
+    stack: str(e.stack, 2000),
+    page: str(e.page, 300),
+    ua: str(request.headers.get('User-Agent'), 200),
+  }));
+  return new Response(null, { status: 204 });
+}
+
 // GET /api/cover?url=… liefert ein Cover von Open Library oder Google Books über die eigene Domain aus.
 // Nur für das Story-Bild (script.js): ein Canvas darf fremde Bilder ohne CORS-Freigabe nicht exportieren.
 // Nur diese Hosts, nur Bilder bis 5 MB, eine Woche im Edge-Cache.
@@ -523,7 +544,22 @@ async function sitemap(request, env, ctx){
   return res;
 }
 
+// Cloudflare Web Analytics: zählt Seitenaufrufe ohne Cookies und ohne Nutzerkennung. Nur wenn der Token aus
+// dem Cloudflare-Dashboard (Web Analytics → Site hinzufügen → „Manual setup“) als Variable CF_ANALYTICS_TOKEN
+// gesetzt ist; sonst bleibt die Seite unverändert.
+function withAnalytics(response, env){
+  const token = env.CF_ANALYTICS_TOKEN;
+  if(!token || !/^[0-9a-f]{32}$/i.test(token) || !(response.headers.get('Content-Type') || '').includes('text/html')) return response;
+  return new HTMLRewriter().on('body', { element(el){
+    el.append(`<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "${token}"}'></script>`, { html: true });
+  } }).transform(response);
+}
+
 async function servePage(request, env, ctx){
+  return withAnalytics(await routePage(request, env, ctx), env);
+}
+
+async function routePage(request, env, ctx){
   const url = new URL(request.url);
   if(url.pathname === '/sitemap.xml') return sitemap(request, env, ctx);
   if(url.pathname === '/'){
@@ -547,7 +583,7 @@ async function servePage(request, env, ctx){
 // Die eigentlichen Grenzen pro Konto stehen in der Datenbank (claim_scan); das hier hält nur Skripte auf,
 // die mit vielen Anfragen pro Sekunde kommen. GET /api/checkout fragt die App bei jedem Seitenaufruf, das
 // kostet nichts und bleibt frei.
-const LIMITED_PATHS = ['/api/scan', '/api/checkout', '/api/withdraw', '/api/usage'];
+const LIMITED_PATHS = ['/api/scan', '/api/checkout', '/api/withdraw', '/api/usage', '/api/log'];
 const isLimited = (pathname, method)=>LIMITED_PATHS.includes(pathname) && !(pathname === '/api/checkout' && method === 'GET');
 
 export default {
@@ -561,6 +597,10 @@ export default {
     if(pathname === '/api/books'){
       if(request.method !== 'GET') return json({ error: 'method not allowed' }, 405, { Allow: 'GET' });
       return searchBooks(request, env, ctx);
+    }
+    if(pathname === '/api/log'){
+      if(request.method !== 'POST') return json({ error: 'method not allowed' }, 405, { Allow: 'POST' });
+      return logClientError(request);
     }
     if(pathname === '/api/cover'){
       if(request.method !== 'GET') return json({ error: 'method not allowed' }, 405, { Allow: 'GET' });

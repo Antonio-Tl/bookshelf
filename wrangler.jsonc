@@ -5,6 +5,8 @@
   "name": "bookshelf",
   "main": "worker.js",
   "compatibility_date": "2026-10-19",
+  // Worker-Logs im Dashboard (Workers → bookshelf → Logs), u. a. Fehler aus dem Browser über POST /api/log.
+  "observability": { "enabled": true },
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
@@ -27,6 +29,9 @@
     "SUPABASE_URL": "https://zlbedwktggcdyfvaerop.supabase.co",
     "SUPABASE_ANON_KEY": "sb_publishable_Xr6uYfqtFsOy8pzgU4Tgvw_qpvol_Aj",
     // Cloudflare-Konto für GET /api/usage; die ID ist kein Geheimnis.
-    "CF_ACCOUNT_ID": "f66c793c42e2d05b83bd27de0531cbbe"
+    "CF_ACCOUNT_ID": "f66c793c42e2d05b83bd27de0531cbbe",
+    // Cloudflare Web Analytics (Dashboard → Web Analytics → Site hinzufügen → Manual setup → Token).
+    // Leer = keine Reichweitenmessung. Der Token ist kein Geheimnis, er steht später im Seitenquelltext.
+    "CF_ANALYTICS_TOKEN": ""
   }
 }
