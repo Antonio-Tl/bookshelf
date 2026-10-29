@@ -235,12 +235,24 @@ function storyBooks(kind, year){
 
 function loadStoryImage(url){
   return new Promise(resolve=>{
-    if(!url || !/^https:\/\/(covers\.openlibrary\.org|books\.google\.com|books\.googleusercontent\.com)\//.test(url)){ resolve(null); return; }
+    if(!url || !/^https:\/\//.test(url)){ resolve(null); return; }
     const img = new Image();
     img.onload = ()=>resolve(img);
     img.onerror = ()=>resolve(null);
     img.src = '/api/cover?url=' + encodeURIComponent(url);
   });
+}
+
+// Lieber scharf, aber nie Googles „image not available“: Google liefert für manche Bände statt der großen
+// Fassung dieses Platzhalterbild. Die große Fassung gilt darum nur, wenn ihr Seitenverhältnis zum kleinen
+// Cover passt (wie verifyLargeCover). Open Library hat zu jedem Cover eine echte große Fassung.
+async function storyCover(e){
+  if(!e || !e.src) return null;
+  const large = largeCoverUrl(e.src);
+  if(large === e.src || /covers\.openlibrary\.org/.test(e.src)) return (await loadStoryImage(large)) || loadStoryImage(e.src);
+  const [small, big] = await Promise.all([loadStoryImage(e.src), e.largeOk === false ? null : loadStoryImage(large)]);
+  const ratio = img=>img && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0;
+  return big && small && Math.abs(ratio(big) - ratio(small)) < 0.04 ? big : small;
 }
 
 function cssVar(name, fallback){
@@ -274,11 +286,7 @@ async function drawStory(kind){
     new Promise(r=>setTimeout(r, 4000)),
   ]);
   await document.fonts.load('800 80px Geist').catch(()=>{});
-  const images = await Promise.all(shown.map(b=>{
-    const e = coverCache[coverKey(b)];
-    return loadStoryImage(e && e.src ? (e.largeOk ? e.srcLarge : largeCoverUrl(e.src)) : null)
-      .then(img=>img || (e && e.src ? loadStoryImage(e.src) : null));
-  }));
+  const images = await Promise.all(shown.map(b=>storyCover(coverCache[coverKey(b)])));
 
   const canvas = document.createElement('canvas');
   canvas.width = STORY_W;
@@ -647,6 +655,7 @@ const PRIVATE_BADGE = `<span class="private-badge" title="Nur du siehst dieses B
 // ---- Lesestatus: gelesen, lese ich gerade, will ich lesen (books.status, supabase/024_reading_status.sql) ----
 const STATUS_LABELS = { read: 'Gelesen', reading: 'Lese ich gerade', want: 'Will ich lesen' };
 const STATUS_FILTERS = { read: 'Gelesen', reading: 'Lese gerade', want: 'Merkliste' };
+const STATUS_CHOICES = { read: 'Gelesen', reading: 'Lese gerade', want: 'Will ich lesen' };
 function bookStatus(b){
   return b.status === 'reading' || b.status === 'want' ? b.status : 'read';
 }
@@ -717,7 +726,6 @@ function render(){
   }
 
   renderFilterBar();
-  renderReadingNow(owner);
 
   if(books.length === 0){
     container.innerHTML = owner
@@ -783,29 +791,6 @@ function render(){
   updateBookDetailPanel();
   queueCovers((sc ? sc.items.map(x=>x.b) : []).concat(groups.flatMap(g=>g.items)));
   scheduleFit();
-}
-
-// „Lese ich gerade“: die angefangenen Bücher als kleine Leiste unter dem Kopf, ein Klick öffnet das Buch.
-function renderReadingNow(owner){
-  const el = document.getElementById('readingNow');
-  const list = viewedProfile ? books.filter(b=>bookStatus(b) === 'reading') : [];
-  el.classList.toggle('hidden', !list.length);
-  if(!list.length){ el.innerHTML = ''; return; }
-  const who = owner ? 'Lese ich gerade' : `${escapeHtml(shownName(viewedProfile))} liest gerade`;
-  el.innerHTML = `<span class="reading-now-label">${who}</span>` + list.slice(0, 4).map(b=>{
-    const g = { label: (shelves.find(s=>s.id === b.shelf_id) || {}).label || b.title, items: [b] };
-    return `<button type="button" class="reading-now-book" data-reading="${escapeHtml(b.id)}">${thumbHtml(b, g)}<span><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.author || '')}</small></span></button>`;
-  }).join('');
-  el.querySelectorAll('[data-reading]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const id = btn.getAttribute('data-reading');
-      if(activeStatus && activeStatus !== 'reading') activeStatus = null;
-      if(!bookIndex.has(String(id))){ activeCategory = null; searchQuery = ''; document.getElementById('searchInput').value = ''; render(); }
-      selectBook(id);
-      const target = document.querySelector(`#shelves [data-book="${CSS.escape(String(id))}"]`);
-      if(target) revealAfterTurn(target);
-    });
-  });
 }
 
 // Rückentitel dürfen nie über den Buchrand laufen: lange Titel werden schrittweise kleiner gesetzt.
@@ -916,8 +901,8 @@ function buildDetailCard(book, group, owner){
 
   const st = bookStatus(book);
   const statusBlockHtml = owner
-    ? `<div class="rating-row"><span class="row-label">Status</span><div class="seg seg-status" role="group" aria-label="Lesestatus">
-         ${Object.keys(STATUS_LABELS).map(k=>`<button type="button" data-book-status="${k}" aria-pressed="${st === k}">${STATUS_FILTERS[k] === 'Merkliste' ? 'Will ich lesen' : STATUS_FILTERS[k]}</button>`).join('')}
+    ? `<div class="status-row"><span class="row-label">Status</span><div class="seg seg-status" role="group" aria-label="Lesestatus">
+         ${Object.keys(STATUS_LABELS).map(k=>`<button type="button" data-book-status="${k}" aria-pressed="${st === k}">${STATUS_CHOICES[k]}</button>`).join('')}
        </div></div>`
     : (st === 'read' ? '' : `<p class="detail-row"><span class="row-label">Status</span><span class="row-value">${STATUS_LABELS[st]}</span></p>`);
 

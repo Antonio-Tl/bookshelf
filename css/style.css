@@ -6673,29 +6673,19 @@ body:has(#homeView:not(.hidden)) .site-legal {
 }
 
 /* ---------- Lesestatus ---------- */
-/* Merkliste: noch nicht gelesen, steht blass und gestrichelt umrandet im Regal. */
-.book.status-want:not(.open) .book-3d,
-.tile.status-want .tile-cover {
-  opacity: 0.5;
-  filter: saturate(0.6);
-}
-.book.status-want:not(.open):hover .book-3d,
-.book.status-want.selected .book-3d,
-.tile.status-want:hover .tile-cover {
-  opacity: 0.85;
-}
-/* Lesezeichen oben am Rücken (lese gerade) bzw. ein leerer Ring (Merkliste). */
+/* Beide Status hängen als Lesezeichen oben am Buch, in voller Farbe wie jedes andere Buch:
+   „Lese gerade“ als gefülltes Bändchen in der Akzentfarbe, „Will ich lesen“ als leeres, nur umrandetes. */
 .status-mark {
   position: absolute;
   top: 0;
   left: 50%;
   z-index: 3;
+  width: 14px;
+  height: 28px;
   transform: translateX(-50%);
   pointer-events: none;
 }
 .status-mark-reading {
-  width: 14px;
-  height: 28px;
   background: #fff;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
 }
@@ -6708,22 +6698,14 @@ body:has(#homeView:not(.hidden)) .site-legal {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
 }
 .status-mark-want {
-  top: auto;
-  bottom: 28px;
-  width: 12px;
-  height: 12px;
-  border: 2px dashed var(--surface);
-  border-radius: 50%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 28'%3E%3Cpath d='M1.25 0v26.2L7 21.6l5.75 4.6V0' fill='rgba(255,255,255,0.22)' stroke='%23fff' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.55));
 }
 .tile .status-mark,
 .book .face.front .status-mark {
   left: auto;
-  right: 10px;
+  right: 12px;
   transform: none;
-}
-.tile .status-mark-want {
-  top: 8px;
-  bottom: auto;
 }
 .filter-sep {
   flex: none;
@@ -6736,53 +6718,24 @@ body:has(#homeView:not(.hidden)) .site-legal {
   opacity: 0.6;
   font-variant-numeric: tabular-nums;
 }
+/* Status-Schalter: drei gleich breite Felder in einer Zeile, über die ganze Breite. */
 .seg-status {
-  flex-wrap: wrap;
-}
-.reading-now {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: -12px 0 24px;
-}
-.reading-now-label {
-  color: var(--dim);
-  font-size: 13px;
-  font-weight: 600;
-}
-.reading-now-book {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  max-width: 280px;
-  padding: 6px 14px 6px 6px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--ink);
-  text-align: left;
-  cursor: pointer;
-}
-.reading-now-book:hover {
-  border-color: var(--line-strong);
-}
-.reading-now-book span {
   display: grid;
-  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
 }
-.reading-now-book b,
-.reading-now-book small {
-  overflow: hidden;
+.seg-status button {
+  min-width: 0;
+  padding: 0 8px;
   white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
-.reading-now-book b {
-  font-size: 13px;
-}
-.reading-now-book small {
-  color: var(--dim);
-  font-size: 12px;
+.status-row {
+  display: grid;
+  gap: 10px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 /* ---------- Import aus Goodreads und StoryGraph ---------- */

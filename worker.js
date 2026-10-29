@@ -407,18 +407,35 @@ async function logClientError(request){
 
 // GET /api/cover?url=… liefert ein Cover von Open Library oder Google Books über die eigene Domain aus.
 // Nur für das Story-Bild (js/shelf.js): ein Canvas darf fremde Bilder ohne CORS-Freigabe nicht exportieren.
-// Nur diese Hosts, nur Bilder bis 5 MB, eine Woche im Edge-Cache.
+// Open Library und Google Books immer; jede andere https-Adresse nur, wenn sie genau so als Cover eines
+// öffentlichen Buchs gespeichert ist (selbst eingetragene Cover). So wird daraus kein offener Proxy.
+// Nur Bilder bis 5 MB, eine Woche im Edge-Cache.
 const COVER_HOSTS = ['covers.openlibrary.org', 'books.google.com', 'books.googleusercontent.com'];
 const COVER_MAX_BYTES = 5 * 1024 * 1024;
+async function isStoredCover(env, raw){
+  if(!env.SUPABASE_URL || !raw || raw.length > 2000) return false;
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/books?select=id&limit=1&cover_url=eq.${encodeURIComponent(raw)}`, {
+      headers: { apikey: env.SUPABASE_ANON_KEY },
+    });
+    return r.ok && (await r.json()).length > 0;
+  } catch(e){
+    return false;
+  }
+}
+
 async function coverProxy(request, env, ctx){
   if(request.headers.get('Sec-Fetch-Site') === 'cross-site') return json({ error: 'forbidden' }, 403);
   const url = new URL(request.url);
   let target;
   try { target = new URL(url.searchParams.get('url') || ''); } catch(e){ return json({ error: 'bad request' }, 400); }
-  if(target.protocol !== 'https:' || !COVER_HOSTS.includes(target.hostname)) return json({ error: 'host not allowed' }, 400);
+  if(target.protocol !== 'https:') return json({ error: 'host not allowed' }, 400);
   const cacheKey = new Request(`${url.origin}/api/cover?url=${encodeURIComponent(target.href)}`);
   const hit = await caches.default.match(cacheKey);
   if(hit) return hit;
+  if(!COVER_HOSTS.includes(target.hostname) && !await isStoredCover(env, url.searchParams.get('url'))){
+    return json({ error: 'host not allowed' }, 400);
+  }
   if(env.BOOKS_LIMITER){
     const { success } = await env.BOOKS_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });
     if(!success) return json({ error: 'rate limited' }, 429, { 'Retry-After': '60' });
