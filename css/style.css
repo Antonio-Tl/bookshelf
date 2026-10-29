@@ -236,8 +236,17 @@ body {
 }
 html {
   scrollbar-color: var(--scroll-thumb) var(--wall);
-  /* Kein Doppeltipp-Zoom auf dem Handy (Pinch-Zoom: Viewport-Tag und theme.js) */
+  /* Kein Doppeltipp-Zoom auf dem Handy; mit zwei Fingern zoomen bleibt erlaubt (Barrierefreiheit). */
   touch-action: manipulation;
+}
+/* iOS zoomt beim Antippen in jedes Feld unter 16 px hinein. Auf Touch-Geräten deshalb mindestens 16 px,
+   statt das Zoomen ganz zu sperren. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
 }
 body {
   min-height: 100vh;
