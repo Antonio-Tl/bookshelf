@@ -7,3 +7,4 @@ test-results
 playwright-report
 # Ergebnisse von supabase/audit.sql bleiben lokal
 supabase/*.csv
+.playwright-mcp

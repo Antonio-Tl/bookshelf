@@ -8,8 +8,9 @@
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
-    // Nur die API geht durch den Worker; Seiten, Bilder und Skripte liefert Cloudflare direkt aus.
-    "run_worker_first": ["/api/*"]
+    // Durch den Worker: die API, die Startseite (leitet alte ?u=-Links um), Regal-Adressen /@name (Link-Vorschau)
+    // und die Sitemap. Bilder, Skripte und alles andere liefert Cloudflare direkt aus.
+    "run_worker_first": ["/api/*", "/", "/@*", "/sitemap.xml"]
   },
   // /api/books: höchstens 60 Anfragen an Google pro IP und Minute (worker.js). /api/scan, /api/checkout,
   // /api/withdraw und /api/usage zusammen: 20 pro IP und Minute, damit Skripte nicht Supabase, Stripe und

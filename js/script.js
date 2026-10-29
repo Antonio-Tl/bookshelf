@@ -1203,10 +1203,9 @@ document.getElementById('loginHintClose').addEventListener('click', (e)=>{
 });
 
 async function signInWithGoogle(){
-  // Feste URL ohne Query-String (z.B. ?u=irgendwer), damit die Redirect-URL
-  // immer exakt zu einem Eintrag in Supabase -> Authentication -> Redirect URLs
-  // passt, egal von welcher Profilansicht aus man sich anmeldet.
-  const stableRedirect = window.location.origin + window.location.pathname;
+  // Immer die Startseite (ohne /@name und Query-String), damit die Redirect-URL exakt zu einem Eintrag in
+  // Supabase -> Authentication -> Redirect URLs passt, egal von welchem Regal aus man sich anmeldet.
+  const stableRedirect = window.location.origin + '/';
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: stableRedirect }
@@ -1628,16 +1627,24 @@ document.addEventListener('click', e=>{
 });
 
 // ---- Regal-Routing (welches Profil wird angezeigt) ----
+// Regal-Adresse /@name (alte Links ?u=name leitet der Worker um; lokal ohne Worker gehen beide).
+const SHELF_PATH = /^\/@([a-z0-9_]{3,20})\/?$/i;
+function shelfPath(username){
+  return '/@' + encodeURIComponent(String(username).toLowerCase());
+}
+function usernameFromPath(){
+  const m = window.location.pathname.match(SHELF_PATH);
+  return m ? m[1] : new URLSearchParams(window.location.search).get('u');
+}
 function usernameFromURL(){
-  const params = new URLSearchParams(window.location.search);
-  return (params.get('u') || getPref(LAST_USER_KEY, DEFAULT_USERNAME)).toLowerCase();
+  return (usernameFromPath() || getPref(LAST_USER_KEY, DEFAULT_USERNAME)).toLowerCase();
 }
 
-// Drei Ansichten: Startseite (ohne Parameter), Übersicht aller Regale (?view=regale), ein Regal (?u=name).
+// Drei Ansichten: Startseite (/), Übersicht aller Regale (/?view=regale), ein Regal (/@name).
 // Die installierte App startet weiter direkt im zuletzt angesehenen Regal.
 function routeFromURL(){
   const params = new URLSearchParams(window.location.search);
-  if(params.get('u')) return 'shelf';
+  if(usernameFromPath()) return 'shelf';
   if(params.get('view') === 'regale') return 'browse';
   if(params.get('view') === 'admin') return 'admin';
   if(params.get('source') === 'app' && getPref(LAST_USER_KEY, '')) return 'shelf';
@@ -1672,7 +1679,7 @@ async function applyRoute(){
 }
 
 function navigate(search){
-  history.pushState({}, '', window.location.pathname + search);
+  history.pushState({}, '', '/' + search);
   window.scrollTo(0, 0);
   applyRoute();
 }
@@ -1724,7 +1731,7 @@ async function loadViewedUserFromURL(){
 }
 
 async function goToUser(username){
-  history.pushState({}, '', window.location.pathname + '?u=' + encodeURIComponent(username.toLowerCase()));
+  history.pushState({}, '', shelfPath(username));
   if(currentRoute !== 'shelf') window.scrollTo(0, 0);
   showRoute('shelf');
   await loadViewedUserByUsername(username);
@@ -1896,7 +1903,7 @@ function readerRowHtml(entry){
     : '';
   // Auch leer vorhanden, damit der Pfeil in jeder Zeile an derselben Stelle steht.
   const covers = `<span class="reader-covers" aria-hidden="true">${entry.picks.map(({ b, g })=>thumbHtml(b, g)).join('')}</span>`;
-  return `<a class="reader-row ${entry.bookCount ? '' : 'is-empty'}" href="?u=${encodeURIComponent(p.username)}" data-user="${escapeHtml(p.username)}">
+  return `<a class="reader-row ${entry.bookCount ? '' : 'is-empty'}" href="${shelfPath(p.username)}" data-user="${escapeHtml(p.username)}">
     ${avatarHtml(p)}
     <span class="reader-text"><b>${escapeHtml(possessive(shownName(p)))} Regal</b><small>@${escapeHtml(p.username)} · ${meta}</small>${seriesLine}</span>
     ${covers}
@@ -1952,7 +1959,7 @@ function renderHero(entry){
   const groups = heroGroups(entry).slice(0, count);
   shelf.innerHTML = `<div class="ledge-wrap"><div class="display-row">${displayShelfHtml(groups, count)}</div></div>`;
   const u = entry.profile.username;
-  caption.innerHTML = `Aus dem Regal von <a href="?u=${encodeURIComponent(u)}">${escapeHtml(shownName(entry.profile))}</a>`;
+  caption.innerHTML = `Aus dem Regal von <a href="${shelfPath(u)}">${escapeHtml(shownName(entry.profile))}</a>`;
   caption.querySelector('a').addEventListener('click', e=>{ e.preventDefault(); goToUser(u); });
 
   // Schritt 1 und 2 zeigen echte Bücher aus diesem Regal.
@@ -2617,7 +2624,7 @@ function adminUserHtml(u){
     <div class="admin-user-body">
       ${u.banned_at ? `<p class="admin-note">Gesperrt seit ${fmtDate(u.banned_at)}${u.ban_reason ? ': ' + escapeHtml(u.ban_reason) : ''}</p>` : ''}
       <div class="admin-actions">
-        ${u.username ? `<a class="btn btn-secondary" href="?u=${encodeURIComponent(u.username)}" data-act="open">Regal öffnen</a>` : ''}
+        ${u.username ? `<a class="btn btn-secondary" href="${shelfPath(u.username)}" data-act="open">Regal öffnen</a>` : ''}
         <button type="button" class="btn btn-secondary" data-act="rename">Umbenennen</button>
         <button type="button" class="btn btn-secondary" data-act="premium">${u.is_premium ? 'Premium entziehen' : 'Premium geben'}</button>
         ${u.is_admin ? '' : `<button type="button" class="btn btn-secondary" data-act="ban">${u.banned_at ? 'Sperre aufheben' : 'Sperren'}</button>`}
@@ -3296,9 +3303,7 @@ function renderHeader(owner){
 
 async function shareShelf(){
   if(!viewedProfile) return;
-  const url = new URL(window.location.origin + window.location.pathname);
-  url.searchParams.set('u', viewedProfile.username);
-  const shareUrl = url.toString();
+  const shareUrl = window.location.origin + shelfPath(viewedProfile.username);
 
   if(navigator.share){
     try { await navigator.share({ title: `${possessive(shownName(viewedProfile))} Bücherregal`, url: shareUrl }); }
@@ -5286,10 +5291,11 @@ async function startCheckout(){
     // Zurück auf dieselbe Ansicht (z. B. das eigene Regal), ohne alte Kauf-Parameter.
     const from = new URLSearchParams(window.location.search);
     from.delete('kauf');
+    const fromPath = SHELF_PATH.test(window.location.pathname) ? window.location.pathname.replace(/\/$/, '') : '';
     const res = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-      body: JSON.stringify({ from: from.toString() ? `?${from}` : '' }),
+      body: JSON.stringify({ from: fromPath + (from.toString() ? `?${from}` : '') }),
     });
     const body = await res.json().catch(()=>({}));
     if(res.ok && body.url){ window.location.href = body.url; return; }

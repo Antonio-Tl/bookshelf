@@ -1,5 +1,5 @@
-// Cloudflare Worker vor den statischen Dateien. Läuft nur für /api/* (siehe wrangler.jsonc),
-// alles andere liefert Cloudflare direkt aus.
+// Cloudflare Worker vor den statischen Dateien. Läuft für /api/*, die Startseite, Regal-Adressen /@name und
+// die Sitemap (siehe wrangler.jsonc); Skripte, Bilder und alles andere liefert Cloudflare direkt aus.
 //
 // GET /api/books?q=… leitet die Buchsuche an Google Books weiter (POST /api/scan und den Supporter-Kauf siehe unten).
 // Der API-Key liegt als Laufzeit-Secret GOOGLE_BOOKS_API_KEY am Worker und kommt so nie in den Browser.
@@ -214,9 +214,10 @@ async function startCheckout(request, env){
   // Zurück dorthin, wo der Kauf gestartet wurde. Nur eine Query auf der eigenen Seite, nie eine fremde Adresse.
   let from = '';
   try { ({ from = '' } = await request.json()); } catch(e){}
-  if(typeof from !== 'string' || from.length > 200 || !/^\?[\w=&%.~-]*$/.test(from)) from = '';
+  if(typeof from !== 'string' || from.length > 200 || !/^(\/@[a-z0-9_]{3,20})?(\?[\w=&%.~-]*)?$/.test(from)) from = '';
   const { origin } = new URL(request.url);
-  const back = (status)=>`${origin}/${from ? `${from}&` : '?'}kauf=${status}`;
+  const [, path = '', query = ''] = from.match(/^([^?]*)(.*)$/);
+  const back = (status)=>`${origin}${path || '/'}${query ? `${query}&` : '?'}kauf=${status}`;
 
   const params = {
     mode: 'payment',
@@ -383,6 +384,134 @@ async function workerUsage(request, env){
   }, 200, { 'Cache-Control': 'no-store' });
 }
 
+// ---- Seiten: Regal-Adressen /@name mit eigener Link-Vorschau, Sitemap ----
+// Die App ist eine einzige Seite (index.html). Für /@name schreibt der Worker Titel, Beschreibung und Bild
+// des Regals in die Kopfzeilen, damit ein geteilter Link in WhatsApp, Instagram oder bei Google zeigt,
+// wessen Regal es ist. Die Daten kommen aus shelf_preview() (supabase/023_shelf_preview.sql) und bleiben
+// fünf Minuten im Edge-Cache. Alte Links ?u=name leiten dauerhaft auf /@name um.
+const PROFILE_PATH = /^\/@([a-z0-9_]{3,20})\/?$/i;
+const PREVIEW_SECONDS = 300;
+const DEFAULT_OG_IMAGE = '/img/og-image.jpg';
+
+// „Antonios Regal“, aber „Orientdreams’ Regal“ (wie in script.js).
+const possessive = (name)=>/[sßxz]$/i.test(name) ? name + '’' : name + 's';
+const shownName = (p)=>(p.display_name && p.display_name.trim()) || p.username.charAt(0).toUpperCase() + p.username.slice(1);
+
+// null = kein solches Regal, undefined = gerade nicht feststellbar.
+async function shelfPreview(env, ctx, origin, username){
+  const cacheKey = new Request(`${origin}/__preview/${username}`);
+  const hit = await caches.default.match(cacheKey);
+  if(hit) return hit.json();
+  let preview = null;
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/shelf_preview`, {
+      method: 'POST',
+      headers: { apikey: env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_username: username }),
+    });
+    if(!r.ok) return undefined; // Datenbank gerade nicht erreichbar: Seite ohne Vorschau, nichts merken
+    preview = (await r.json())[0] || null;
+  } catch(e){
+    return undefined;
+  }
+  const res = new Response(JSON.stringify(preview), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${PREVIEW_SECONDS}` } });
+  ctx.waitUntil(caches.default.put(cacheKey, res));
+  return preview;
+}
+
+function previewText(p){
+  const n = p.book_count;
+  if(!n) return `${possessive(shownName(p))} Bücherregal ist noch leer. Leg dir auch eins an: alles, was du gelesen hast, in einem Regal.`;
+  const series = p.series || [];
+  const list = series.length > 1 ? `${series.slice(0, -1).join(', ')} und ${series[series.length - 1]}` : series[0];
+  return `${n} ${n === 1 ? 'Buch' : 'Bücher'} im Regal${list ? `, darunter ${list}` : ''}. Schau rein, ganz ohne Anmeldung.`;
+}
+
+// Open Library liefert zu -M.jpg auch eine große Fassung; für die Vorschau lieber die.
+const previewImage = (url)=>url.replace(/^(https:\/\/covers\.openlibrary\.org\/.+)-M\.jpg$/, '$1-L.jpg');
+
+async function shelfPage(request, env, ctx, username){
+  const { origin } = new URL(request.url);
+  const [page, preview] = await Promise.all([
+    env.ASSETS.fetch(new Request(`${origin}/`, { headers: request.headers })),
+    env.SUPABASE_URL ? shelfPreview(env, ctx, origin, username) : undefined,
+  ]);
+  const headers = new Headers(page.headers);
+  headers.delete('ETag');
+  headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
+  if(!preview){
+    // Unbekannter Name: die App zeigt ihre eigene Meldung, Suchmaschinen sollen nichts merken.
+    // Datenbank gerade weg (undefined): die Seite ganz normal, nur ohne Vorschau.
+    if(preview === null) headers.set('X-Robots-Tag', 'noindex');
+    return new Response(page.body, { status: preview === null ? 404 : 200, headers });
+  }
+  const url = `${origin}/@${preview.username}`;
+  const title = `${possessive(shownName(preview))} Bücherregal`;
+  const text = previewText(preview);
+  const image = preview.cover_url ? previewImage(preview.cover_url) : origin + DEFAULT_OG_IMAGE;
+  const set = (value)=>({ element(el){ el.setAttribute('content', value); } });
+  const rewriter = new HTMLRewriter()
+    .on('title', { element(el){ el.setInnerContent(title); } })
+    .on('meta[name="description"]', set(text))
+    .on('meta[property="og:title"]', set(title))
+    .on('meta[property="og:description"]', set(text))
+    .on('meta[property="og:url"]', set(url))
+    .on('meta[property="og:image"]', set(image))
+    .on('meta[property="og:image:width"]', { element(el){ if(preview.cover_url) el.remove(); } })
+    .on('meta[property="og:image:height"]', { element(el){ if(preview.cover_url) el.remove(); } })
+    .on('meta[name="twitter:title"]', set(title))
+    .on('meta[name="twitter:description"]', set(text))
+    .on('meta[name="twitter:image"]', set(image))
+    .on('meta[name="twitter:card"]', set(preview.cover_url ? 'summary' : 'summary_large_image'))
+    .on('link[rel="canonical"]', { element(el){ el.setAttribute('href', url); } });
+  // In Suchmaschinen nur Regale, die auch in der Übersicht stehen wollen.
+  if(preview.is_private || !preview.listed){
+    rewriter.on('head', { element(el){ el.append('<meta name="robots" content="noindex">', { html: true }); } });
+  }
+  return rewriter.transform(new Response(page.body, { status: 200, headers }));
+}
+
+// Sitemap: Startseite, Übersicht und alle Regale, die in der Übersicht stehen wollen. Eine Stunde im Edge-Cache.
+async function sitemap(request, env, ctx){
+  const { origin } = new URL(request.url);
+  const cacheKey = new Request(`${origin}/sitemap.xml`);
+  const hit = await caches.default.match(cacheKey);
+  if(hit) return hit;
+  let names = [];
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/profiles?select=username&listed=eq.true&is_private=eq.false&username=not.is.null&order=username&limit=5000`, {
+      headers: { apikey: env.SUPABASE_ANON_KEY },
+    });
+    if(r.ok) names = (await r.json()).map(p=>p.username).filter(u=>/^[a-z0-9_]{3,20}$/.test(u));
+  } catch(e){}
+  const urls = [`${origin}/`, `${origin}/?view=regale`].concat(names.map(u=>`${origin}/@${u}`));
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
+    urls.map(u=>`  <url><loc>${u.replace(/&/g, '&amp;')}</loc></url>`).join('\n')}\n</urlset>\n`;
+  const res = new Response(xml, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  if(names.length) ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
+  return res;
+}
+
+async function servePage(request, env, ctx){
+  const url = new URL(request.url);
+  if(url.pathname === '/sitemap.xml') return sitemap(request, env, ctx);
+  if(url.pathname === '/'){
+    const u = url.searchParams.get('u');
+    if(u && /^[a-z0-9_]{3,20}$/i.test(u)){
+      url.searchParams.delete('u');
+      const rest = url.searchParams.toString();
+      return Response.redirect(`${url.origin}/@${u.toLowerCase()}${rest ? `?${rest}` : ''}`, 301);
+    }
+    return env.ASSETS.fetch(request);
+  }
+  const m = url.pathname.match(PROFILE_PATH);
+  if(!m) return env.ASSETS.fetch(request);
+  const username = m[1].toLowerCase();
+  // Eine Schreibweise pro Regal: klein und ohne Schrägstrich am Ende (sonst laden relative Pfade falsch).
+  if(url.pathname !== `/@${username}`) return Response.redirect(`${url.origin}/@${username}${url.search}`, 301);
+  return shelfPage(request, env, ctx, username);
+}
+
 // Endpunkte, hinter denen Supabase, Stripe oder Gemini stecken (nicht der Webhook: der kommt von Stripe).
 // Die eigentlichen Grenzen pro Konto stehen in der Datenbank (claim_scan); das hier hält nur Skripte auf,
 // die mit vielen Anfragen pro Sekunde kommen. GET /api/checkout fragt die App bei jedem Seitenaufruf, das
@@ -424,6 +553,7 @@ export default {
       return stripeWebhook(request, env);
     }
     if(pathname.startsWith('/api/')) return json({ error: 'not found' }, 404);
+    if(request.method === 'GET' || request.method === 'HEAD') return servePage(request, env, ctx);
     return env.ASSETS.fetch(request);
   },
 };
