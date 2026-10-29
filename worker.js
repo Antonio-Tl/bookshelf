@@ -420,6 +420,8 @@ async function coverProxy(request, env, ctx){
 // fünf Minuten im Edge-Cache. Alte Links ?u=name leiten dauerhaft auf /@name um.
 const PROFILE_PATH = /^\/@([a-z0-9_]{3,20})\/?$/i;
 const PREVIEW_SECONDS = 300;
+// Erfundene Beispielregale (wie DEMO_USERNAMES in script.js): nicht in die Sitemap, nicht in Suchmaschinen.
+const DEMO_USERNAMES = ['lenamarie', 'jonas_kr', 'sophie_liest'];
 const DEFAULT_OG_IMAGE = '/img/og-image.jpg';
 
 // „Antonios Regal“, aber „Orientdreams’ Regal“ (wie in script.js).
@@ -475,7 +477,7 @@ async function shelfPage(request, env, ctx, username){
     return new Response(page.body, { status: preview === null ? 404 : 200, headers });
   }
   const url = `${origin}/@${preview.username}`;
-  const title = `${possessive(shownName(preview))} Bücherregal`;
+  const title = `${possessive(shownName(preview))} Bücherregal${DEMO_USERNAMES.includes(preview.username) ? ' (Beispiel)' : ''}`;
   const text = previewText(preview);
   const image = preview.cover_url ? previewImage(preview.cover_url) : origin + DEFAULT_OG_IMAGE;
   const set = (value)=>({ element(el){ el.setAttribute('content', value); } });
@@ -494,7 +496,7 @@ async function shelfPage(request, env, ctx, username){
     .on('meta[name="twitter:card"]', set(preview.cover_url ? 'summary' : 'summary_large_image'))
     .on('link[rel="canonical"]', { element(el){ el.setAttribute('href', url); } });
   // In Suchmaschinen nur Regale, die auch in der Übersicht stehen wollen.
-  if(preview.is_private || !preview.listed){
+  if(preview.is_private || !preview.listed || DEMO_USERNAMES.includes(preview.username)){
     rewriter.on('head', { element(el){ el.append('<meta name="robots" content="noindex">', { html: true }); } });
   }
   return rewriter.transform(new Response(page.body, { status: 200, headers }));
@@ -511,7 +513,7 @@ async function sitemap(request, env, ctx){
     const r = await fetch(`${env.SUPABASE_URL}/rest/v1/profiles?select=username&listed=eq.true&is_private=eq.false&username=not.is.null&order=username&limit=5000`, {
       headers: { apikey: env.SUPABASE_ANON_KEY },
     });
-    if(r.ok) names = (await r.json()).map(p=>p.username).filter(u=>/^[a-z0-9_]{3,20}$/.test(u));
+    if(r.ok) names = (await r.json()).map(p=>p.username).filter(u=>/^[a-z0-9_]{3,20}$/.test(u) && !DEMO_USERNAMES.includes(u));
   } catch(e){}
   const urls = [`${origin}/`, `${origin}/?view=regale`].concat(names.map(u=>`${origin}/@${u}`));
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${

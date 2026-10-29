@@ -1,6 +1,11 @@
 const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
 const DEFAULT_USERNAME = 'antonio';
+// Erfundene Beispielregale (supabase/011_demo_accounts.sql). Sie zeigen, wie ein Regal aussehen kann, und
+// werden überall als Beispiel gekennzeichnet, damit niemand sie für echte Leser hält.
+const DEMO_USERNAMES = new Set(['lenamarie', 'jonas_kr', 'sophie_liest']);
+const isDemo = p=>!!(p && DEMO_USERNAMES.has(p.username));
+const DEMO_BADGE = '<span class="demo-badge" title="Erfundenes Beispielregal">Beispiel</span>';
 
 let currentUser = null;    // eingeloggter Auth-User (oder null)
 let currentProfile = null; // profiles-Zeile des eingeloggten Users
@@ -965,7 +970,7 @@ applyTheme(savedTheme());
 // Demo-Regale (ohne Premium), wählbar in den Einstellungen. Alle Änderungen landen in einer Kopie je
 // Regal im localStorage; die echte Datenbank wird nie beschrieben (RLS würde es ohnehin ablehnen).
 const DEV_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || location.hostname.endsWith('.localhost');
-const DEV_IDENTITIES = [DEFAULT_USERNAME, 'lenamarie', 'jonas_kr', 'sophie_liest'];
+const DEV_IDENTITIES = [DEFAULT_USERNAME, ...DEMO_USERNAMES];
 const DEV_AS_KEY = 'bookshelf-dev-as';
 const SANDBOX_KEY = 'bookshelf-dev-sandbox-v1';
 let devAs = DEFAULT_USERNAME;
@@ -1399,7 +1404,7 @@ async function runUserSearch(q){
   userSearchResults.innerHTML = data.map(p=>`
     <button type="button" class="user-search-item" data-username="${escapeHtml(p.username)}">
       ${p.avatar_url ? `<img src="${escapeHtml(p.avatar_url)}" alt="" referrerpolicy="no-referrer">` : '<span class="user-search-avatar-fallback"></span>'}
-      <span class="user-search-names"><b>${escapeHtml(shownName(p))}</b><small>@${escapeHtml(p.username)}</small></span>
+      <span class="user-search-names"><b>${escapeHtml(shownName(p))}${isDemo(p) ? DEMO_BADGE : ''}</b><small>@${escapeHtml(p.username)}</small></span>
     </button>
   `).join('');
   userSearchResults.classList.remove('hidden');
@@ -1954,7 +1959,7 @@ function readerRowHtml(entry){
   const covers = `<span class="reader-covers" aria-hidden="true">${entry.picks.map(({ b, g })=>thumbHtml(b, g)).join('')}</span>`;
   return `<a class="reader-row ${entry.bookCount ? '' : 'is-empty'}" href="${shelfPath(p.username)}" data-user="${escapeHtml(p.username)}">
     ${avatarHtml(p)}
-    <span class="reader-text"><b>${escapeHtml(possessive(shownName(p)))} Regal</b><small>@${escapeHtml(p.username)} · ${meta}</small>${seriesLine}</span>
+    <span class="reader-text"><b>${escapeHtml(possessive(shownName(p)))} Regal${isDemo(p) ? DEMO_BADGE : ''}</b><small>@${escapeHtml(p.username)} · ${meta}</small>${seriesLine}</span>
     ${covers}
     <span class="reader-go" aria-hidden="true">→</span>
   </a>`;
@@ -2050,7 +2055,11 @@ async function renderBrowse(more = false){
     document.getElementById('browseRetry').addEventListener('click', ()=>renderBrowse());
     return;
   }
-  if(!q) document.getElementById('browseCount').textContent = `${list.total} ${list.total === 1 ? 'Regal' : 'Regale'}`;
+  if(!q){
+    const demos = list.entries.filter(e=>isDemo(e.profile)).length;
+    const real = list.total - demos;
+    document.getElementById('browseCount').textContent = `${real} ${real === 1 ? 'Regal' : 'Regale'}${demos ? `, dazu ${demos} ${demos === 1 ? 'Beispiel' : 'Beispiele'}` : ''}`;
+  }
   const moreBtn = list.entries.length < list.total
     ? `<button type="button" class="btn btn-secondary browse-more" id="browseMore">Weitere Regale laden</button>`
     : '';
@@ -3343,7 +3352,10 @@ function renderHeader(owner){
   shareBtn.classList.remove('hidden');
   document.title = owner ? 'Mein Bücherregal' : `${displayName} Bücherregal`;
 
-  if(owner){
+  if(isDemo(viewedProfile)){
+    banner.innerHTML = `${DEMO_BADGE}<span>Erfundenes Beispielregal: so kann ein Regal aussehen.</span>`;
+    banner.classList.remove('hidden');
+  } else if(owner){
     banner.classList.add('hidden');
   } else {
     const ownButBanned = ownBan && currentUser && viewedProfile.id === currentUser.id;
