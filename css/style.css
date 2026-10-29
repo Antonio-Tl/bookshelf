@@ -6612,11 +6612,15 @@ body:has(#homeView:not(.hidden)) .site-legal {
   }
   .modal {
     max-height: calc(100vh - 20px);
-    max-height: calc(100dvh - 20px - env(safe-area-inset-bottom));
+    max-height: calc(var(--vv-h, 100dvh) - 20px - env(safe-area-inset-bottom));
     padding: 24px 20px;
     border-radius: 20px;
   }
+  /* Nur den sichtbaren Teil füllen, damit der Dialog bei offener Tastatur darüber sitzt (js/core.js). */
   .modal-overlay {
+    top: var(--vv-top, 0px);
+    bottom: auto;
+    height: var(--vv-h, 100%);
     align-items: flex-end;
     padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   }

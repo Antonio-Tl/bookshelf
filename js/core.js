@@ -972,6 +972,23 @@ function renderThemeChoices(el){
 darkQuery.addEventListener('change', ()=>{ if(savedTheme() === 'auto') applyTheme('auto'); });
 applyTheme(savedTheme());
 
+// ---- Bildschirmtastatur ----
+// iOS verkleinert bei offener Tastatur nur den sichtbaren Ausschnitt, nicht das Layout: Dialoge, die auf dem
+// Handy unten kleben, lägen dann hinter der Tastatur. --vv-top/--vv-h beschreiben den sichtbaren Teil,
+// .modal-overlay richtet sich danach (css/style.css). Beim Zoomen mit zwei Fingern nicht, das soll normal bleiben.
+if(window.visualViewport){
+  const vv = window.visualViewport;
+  const root = document.documentElement.style;
+  const syncViewport = ()=>{
+    if(vv.scale > 1.01){ root.removeProperty('--vv-top'); root.removeProperty('--vv-h'); return; }
+    root.setProperty('--vv-top', vv.offsetTop + 'px');
+    root.setProperty('--vv-h', vv.height + 'px');
+  };
+  vv.addEventListener('resize', syncViewport);
+  vv.addEventListener('scroll', syncViewport);
+  syncViewport();
+}
+
 // ---- Lokaler Testmodus ----
 // Auf localhost ist man ohne Login Besitzer eines Regals: Antonios (Admin mit Premium) oder eines der
 // Demo-Regale (ohne Premium), wählbar in den Einstellungen. Alle Änderungen landen in einer Kopie je
