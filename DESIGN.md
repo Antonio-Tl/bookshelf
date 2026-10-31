@@ -229,13 +229,13 @@ These are computed per book in the browser and must never be authored as fixed v
 
 ## Layout
 
-A single centered column (max 1320px) with a 28px gutter (16px on phones), under a 64px sticky top bar. The page reads top-down: header (owner name left, stats right), a toolbar bounded by a hairline (shelf search, a horizontally scrolling single-line row of filter pills that fades at its end when overflowing, the Regal/Cover segmented toggle, the owner's primary button), then the series.
+A single centered column (max 1320px) with a 28px gutter (16px on phones), under a 64px sticky top bar. The page reads top-down: header (owner name left, stats right), a toolbar bounded by a hairline (shelf search, the Regal/Cover segmented toggle and the owner's actions on the first row; the filters on their own second row: a reading-status segmented toggle, a Kategorie menu button and, while filtered, a dim "n von m Büchern · Zurücksetzen" summary at the right), then the series. Nothing in the toolbar scrolls sideways.
 
 In Regal view, series flow as wrapping blocks sized to their books (60px row gap, 72px column gap); each ledge scrolls horizontally without a visible scrollbar. In Cover view, every series spans the full width and holds an auto-fill grid of 2:3 covers (min 132px, 26px × 22px gaps; 100px and 20px × 14px on phones). The chosen view persists locally.
 
 Spines are sized from the book: width from page count (24–64px; hashed 26–39px when unknown), height 90–99% of the 210px ledge height (172px and 0.86 width scale on phones). The face-out cover takes the cover's real aspect ratio.
 
-Responsive behaviour: at ≤900px the toolbar reflows (search and actions first, filters last and bleeding to the edge). At ≤640px the brand name, button labels and stat spacing compress, the people search collapses to a 40px icon that expands to 170px, ledges bleed to the screen edge and category tags on the shelf hide. At ≥1024px the detail drawer sits beside the shelf: no scrim, the page gains right padding of the drawer width so the turned book stays visible, and the drawer starts below the top bar.
+Responsive behaviour: at ≤900px the toolbar reflows (search and actions first, filters last). At ≤640px the brand name, button labels and stat spacing compress, the people search collapses to a 40px icon that expands to 170px, ledges bleed to the screen edge and category tags on the shelf hide. At ≥1024px the detail drawer sits beside the shelf: no scrim, the page gains right padding of the drawer width so the turned book stays visible, and the drawer starts below the top bar.
 
 ## Elevation & Depth
 
@@ -267,7 +267,10 @@ Compact, confident, 40px tall.
 - **Icon buttons:** 40px square (32px small), 20px stroke SVG icons, 6% ink fill on hover.
 
 ### Chips
-- **Filter pills:** 32px pills, white with line border and soft-ink 13px/600 text; active is an ink fill with white text. The same style serves the category toggles in modals.
+- **Filter pills:** 32px pills, white with line border and soft-ink 13px/600 text; active is an ink fill with white text. The same style serves the category toggles in modals and the admin filters.
+- **Status filter:** the segmented toggle (Alle / Gelesen / Lese gerade / Merkliste) with dim tabular counts; on phones it spans the full width below the view toggle, and the counts drop when the four options would not fit in one line.
+- **Category filter:** a 40px white menu button ("Kategorie" with a chevron) opening a 260px popover of categories with counts; the chosen one is set bold with a check. Active, the button turns ink and shows the category name plus a clear ×. Counts in both filters are faceted: each counts under the other filter.
+- **Category management:** not in the shelf view; owners set categories in the book detail drawer and in the series dialog, both as toggle chips. In the drawer they sit in a collapsible row ("Kategorien" with the assigned names in one ellipsized line and a chevron) that is closed by default and stays open across re-renders. A dashed "+ Neue Kategorie" chip turns into a pill-shaped field that creates the category and assigns it at once. A category no series uses carries a 24px round × inside its chip that turns soft red and deletes it; used categories are deleted by unassigning them first.
 - **Category tags:** 22px pills in a 5% ink tint, 12px/600, beneath series titles.
 - **Category chips (editable):** soft card pills with a 24px circular remove button that turns soft red on hover.
 

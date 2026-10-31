@@ -371,10 +371,6 @@
           </button>
         </div>
         <div class="header-actions hidden" id="headerActions">
-          <button class="btn btn-secondary" id="openCatBtn" aria-label="Kategorien">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor"/></svg>
-            <span>Kategorien</span>
-          </button>
           <button class="btn btn-secondary" id="openScanBtn" aria-label="Regal fotografieren und Bücher erkennen">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.5-2h5.6l1.5 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
             <span>Scannen</span>
@@ -693,7 +689,6 @@
       <h3>Mein Regal</h3>
       <div class="setting-actions">
         <button type="button" class="btn btn-secondary" id="setImportBtn">Bücher importieren</button>
-        <button type="button" class="btn btn-secondary" id="setCategoriesBtn">Kategorien verwalten</button>
         <button type="button" class="btn btn-secondary hidden" id="setUsernameBtn">Profil und Konto</button>
         <button type="button" class="btn btn-secondary" id="setShareBtn">Regal-Link teilen</button>
         <button type="button" class="btn btn-secondary" id="setTourBtn">Einführung ansehen</button>
@@ -742,21 +737,6 @@
 
 <div class="modal-overlay cover-zoom hidden" id="coverZoomOverlay" role="dialog" aria-modal="true" aria-label="Cover, zum Schließen klicken" tabindex="-1">
   <img id="coverZoomImg" alt="">
-</div>
-
-<div class="modal-overlay hidden" id="catModalOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="catModalTitle">
-    <h2 id="catModalTitle">Kategorien</h2>
-    <p class="modal-lede">Kategorien gelten für ganze Reihen und erscheinen als Filter über dem Regal.</p>
-    <div class="cat-chip-list" id="catChipList"></div>
-    <div class="add-cat-row">
-      <input type="text" id="newCatInput" placeholder="Neue Kategorie" aria-label="Neue Kategorie">
-      <button type="button" class="btn btn-primary" id="addCatBtn">Hinzufügen</button>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" id="closeCatBtn">Schließen</button>
-    </div>
-  </div>
 </div>
 
 <div class="modal-overlay hidden" id="shelfCatModalOverlay">

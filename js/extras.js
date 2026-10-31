@@ -211,10 +211,6 @@ settingsOverlay.querySelectorAll('[data-set-view]').forEach(btn=>{
     render();
   });
 });
-document.getElementById('setCategoriesBtn').addEventListener('click', ()=>{
-  settingsOverlay.classList.add('hidden');
-  document.getElementById('openCatBtn').click();
-});
 document.getElementById('setUsernameBtn').addEventListener('click', ()=>{
   settingsOverlay.classList.add('hidden');
   openAccount();
@@ -272,13 +268,8 @@ const TOUR_STEPS = [
     // In der Cover-Ansicht gibt es keine Bretter, nur Raster pro Reihe.
     title: ()=>viewMode === 'grid' ? 'Sortiert nach Reihen' : 'Ein Brett pro Reihe',
     text: ()=>viewMode === 'grid'
-      ? 'Bände einer Reihe stehen zusammen, ein Einzelband ist eine Reihe mit einem Buch. Über „Regal“ stellst du sie als Buchrücken ins Regal. Tipp ein Buch an, um Sterne, Notizen und Lesedatum zu setzen.'
-      : 'Jede Reihe bekommt ihr eigenes Regalbrett, ein Einzelband ist eine Reihe mit einem Buch. Tipp ein Buch an, um Sterne, Notizen und Lesedatum zu setzen.',
-  },
-  {
-    target: ()=>document.getElementById('openCatBtn'),
-    title: 'Kategorien',
-    text: 'Lege Kategorien wie Fantasy oder Krimi an. Sie gelten für ganze Reihen und erscheinen als Filter über dem Regal.',
+      ? 'Bände einer Reihe stehen zusammen, ein Einzelband ist eine Reihe mit einem Buch. Über „Regal“ stellst du sie als Buchrücken ins Regal. Tipp ein Buch an, um Sterne, Notizen, Lesedatum und Kategorien zu setzen.'
+      : 'Jede Reihe bekommt ihr eigenes Regalbrett, ein Einzelband ist eine Reihe mit einem Buch. Tipp ein Buch an, um Sterne, Notizen, Lesedatum und Kategorien zu setzen.',
   },
   {
     target: ()=>document.getElementById('userSearchBox'),

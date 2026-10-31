@@ -77,37 +77,122 @@ function groupAuthor(group){
   return Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0] || '';
 }
 
+let catMenuOpen = false;
+
+// Zwei Fragen, zwei Bedienelemente: der Lesestatus als feste Mulde, die Kategorien in einem Menü.
+// So passt die Leiste immer in eine Zeile und muss nie seitlich gescrollt werden.
+// Die Zahlen zählen jeweils unter dem anderen Filter: „Merkliste 1“ heißt in Fantasy auch eins in Fantasy.
+// Kategorien anlegen und zuordnen geht in den Buchdetails; hier wird nur gefiltert.
 function renderFilterBar(){
   const bar = document.getElementById('filterBar');
   const allGroups = buildGroups();
   const cats = [...new Set(allGroups.flatMap(g=>g.categories.map(c=>c.name)))].sort((a,b)=>a.localeCompare(b,'de'));
+  const entries = allGroups.flatMap(g=>g.items.map(b=>({ status: bookStatus(b), cats: g.categories.map(c=>c.name) })));
+  const inCat = e=>!activeCategory || e.cats.includes(activeCategory);
+  const inStatus = e=>!activeStatus || e.status === activeStatus;
   // Status-Filter nur, wenn es neben gelesenen Büchern auch andere gibt.
-  const counts = { read: 0, reading: 0, want: 0 };
-  books.forEach(b=>counts[bookStatus(b)]++);
-  const statuses = counts.reading || counts.want ? Object.keys(STATUS_FILTERS).filter(st=>counts[st]) : [];
+  const totals = { read: 0, reading: 0, want: 0 };
+  entries.forEach(e=>totals[e.status]++);
+  const statuses = totals.reading || totals.want ? Object.keys(STATUS_FILTERS).filter(st=>totals[st]) : [];
   if(activeStatus && !statuses.includes(activeStatus)) activeStatus = null;
-  if(cats.length === 0 && !statuses.length){ bar.innerHTML = ''; return; }
-  const all = activeCategory === null && activeStatus === null;
-  const pills = [`<button class="filter-pill ${all?'active':''}" data-cat="" aria-pressed="${all}">Alle</button>`]
-    .concat(statuses.map(st=>`<button class="filter-pill filter-status ${activeStatus===st?'active':''}" data-status="${st}" aria-pressed="${activeStatus===st}">${STATUS_FILTERS[st]} <span class="filter-count">${counts[st]}</span></button>`))
-    .concat(statuses.length && cats.length ? ['<span class="filter-sep" aria-hidden="true"></span>'] : [])
-    .concat(cats.map(c=>`<button class="filter-pill ${activeCategory===c?'active':''}" data-cat="${escapeHtml(c)}" aria-pressed="${activeCategory===c}">${escapeHtml(c)}</button>`));
-  bar.innerHTML = pills.join('');
-  bar.querySelectorAll('.filter-pill').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const st = btn.getAttribute('data-status');
-      if(st){
-        activeStatus = activeStatus === st ? null : st;
-      } else {
-        const cat = btn.getAttribute('data-cat');
-        activeCategory = cat === '' ? null : cat;
-        if(cat === '') activeStatus = null;
-      }
-      selectedId = null;
-      render();
-    });
-  });
+  if(activeCategory && !cats.includes(activeCategory)) activeCategory = null;
+  if(!cats.length && !statuses.length){ bar.innerHTML = ''; catMenuOpen = false; return; }
+
+  const count = test=>entries.filter(test).length;
+  const statusBtn = (st, label)=>`<button type="button" data-status="${st}" aria-pressed="${(activeStatus || '') === st}">${label} <span class="filter-count">${count(e=>inCat(e) && (!st || e.status === st))}</span></button>`;
+  const statusSeg = statuses.length
+    ? `<div class="seg status-filter" role="group" aria-label="Nach Lesestatus filtern">${statusBtn('', 'Alle')}${statuses.map(st=>statusBtn(st, STATUS_FILTERS[st])).join('')}</div>`
+    : '';
+
+  const catOption = (c, label, n)=>`<button type="button" class="cat-menu-item" data-cat="${escapeHtml(c)}" aria-pressed="${(activeCategory || '') === c}"${n === 0 ? ' data-empty' : ''}><span>${label}</span>${n === null ? '' : `<span class="filter-count">${n}</span>`}</button>`;
+  const catFilter = cats.length ? `
+    <div class="cat-filter${activeCategory ? ' active' : ''}">
+      <button type="button" class="cat-filter-trigger" aria-haspopup="true" aria-expanded="${catMenuOpen}" aria-controls="catMenu"${activeCategory ? ` aria-label="Kategorie: ${escapeHtml(activeCategory)}"` : ''}>
+        <span>${activeCategory ? escapeHtml(activeCategory) : 'Kategorie'}</span>${ICON_CHEVRON}
+      </button>
+      ${activeCategory ? `<button type="button" class="cat-filter-clear" aria-label="Kategorie-Filter aufheben">${ICON_CLOSE}</button>` : ''}
+      <div class="cat-menu${catMenuOpen ? '' : ' hidden'}" id="catMenu" role="group" aria-label="Nach Kategorie filtern">
+        ${catOption('', 'Alle Kategorien', null)}
+        <div class="cat-menu-list">${cats.map(c=>catOption(c, escapeHtml(c), count(e=>inStatus(e) && e.cats.includes(c)))).join('')}</div>
+      </div>
+    </div>` : '';
+
+  const filtered = activeStatus || activeCategory;
+  const summary = filtered
+    ? `<p class="filter-summary"><span>${count(e=>inStatus(e) && inCat(e))} von ${entries.length} Büchern</span><button type="button" class="link-btn" data-reset>Zurücksetzen</button></p>`
+    : '';
+  bar.innerHTML = statusSeg + catFilter + summary;
+  fitStatusFilter();
 }
+
+// Am schmalen Handy passen die vier Reiter samt Zahlen nicht immer in eine Zeile; dann fallen die Zahlen weg.
+function fitStatusFilter(){
+  const seg = document.querySelector('#filterBar .status-filter');
+  if(!seg) return;
+  seg.classList.remove('compact');
+  if(seg.scrollWidth > seg.clientWidth + 1) seg.classList.add('compact');
+}
+
+function setCatMenu(open){
+  catMenuOpen = open;
+  const menu = document.getElementById('catMenu');
+  if(!menu) return;
+  menu.classList.toggle('hidden', !open);
+  document.querySelector('#filterBar .cat-filter-trigger').setAttribute('aria-expanded', open);
+  if(!open) return;
+  (menu.querySelector('.cat-menu-item[aria-pressed="true"]') || menu.querySelector('.cat-menu-item')).focus({ preventScroll: true });
+  // Am Handy reicht das Menü leicht unter den Bildschirmrand; dann so weit scrollen, dass es ganz zu sehen ist.
+  const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  menu.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'nearest' });
+}
+
+function applyFilter(){
+  catMenuOpen = false;
+  selectedId = null;
+  render();
+}
+
+const filterBarEl = document.getElementById('filterBar');
+filterBarEl.addEventListener('click', e=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  if(btn.matches('[data-status]')){
+    activeStatus = btn.getAttribute('data-status') || null;
+    applyFilter();
+  } else if(btn.matches('[data-cat]')){
+    activeCategory = btn.getAttribute('data-cat') || null;
+    applyFilter();
+    filterBarEl.querySelector('.cat-filter-trigger')?.focus();
+  } else if(btn.matches('.cat-filter-trigger')){
+    setCatMenu(!catMenuOpen);
+  } else if(btn.matches('.cat-filter-clear')){
+    activeCategory = null;
+    applyFilter();
+    filterBarEl.querySelector('.cat-filter-trigger')?.focus();
+  } else if(btn.matches('[data-reset]')){
+    activeStatus = null;
+    activeCategory = null;
+    applyFilter();
+  }
+});
+filterBarEl.addEventListener('keydown', e=>{
+  if(!catMenuOpen) return;
+  if(e.key === 'Escape'){
+    e.stopPropagation();
+    setCatMenu(false);
+    filterBarEl.querySelector('.cat-filter-trigger').focus();
+    return;
+  }
+  if(e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const items = [...filterBarEl.querySelectorAll('.cat-menu-item')];
+  const i = items.indexOf(document.activeElement);
+  if(i < 0) return;
+  e.preventDefault();
+  items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+});
+document.addEventListener('click', e=>{
+  if(catMenuOpen && e.target instanceof Element && e.target.isConnected && !e.target.closest('.cat-filter')) setCatMenu(false);
+});
 
 function renderHeader(owner){
   const h1 = document.getElementById('pageTitle');
@@ -819,17 +904,9 @@ function scheduleFit(){
         t.style.fontSize = size + 'px';
       }
     });
-    updateFilterFade();
+    fitStatusFilter();
   });
 }
-
-function updateFilterFade(){
-  const bar = document.getElementById('filterBar');
-  const overflowing = bar.scrollWidth > bar.clientWidth + 1;
-  const atEnd = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 2;
-  bar.classList.toggle('fade-end', overflowing && !atEnd);
-}
-document.getElementById('filterBar').addEventListener('scroll', updateFilterFade, { passive: true });
 new ResizeObserver(scheduleFit).observe(document.getElementById('appContent'));
 
 function selectBook(id){
@@ -892,6 +969,10 @@ function missingDetailsHtml(book){
   return `<p class="fill-missing"><span>${what} noch.</span><button type="button" class="btn btn-secondary fill-missing-btn">Automatisch einfügen</button></p>`;
 }
 
+// Die Kategorien-Chips nehmen viel Platz ein und sind eingeklappt. Offen bleiben sie über das Neuzeichnen
+// der Buchdetails hinweg, damit ein Tipp auf einen Chip sie nicht gleich wieder zuklappt.
+let catDetailsOpen = false;
+
 function buildDetailCard(book, group, owner){
   const wrap = document.createElement('div');
   wrap.className = 'detail';
@@ -906,10 +987,13 @@ function buildDetailCard(book, group, owner){
     : `<span aria-label="${book.rating} von 5 Sternen" style="display:flex;gap:2px">${[1,2,3,4,5].map(i=>starsSVG(i<=book.rating)).join('')}</span>`;
 
   const categoryBlockHtml = owner
-    ? `<div class="detail-block"><span class="row-label">Kategorien der Reihe</span>
-         <div class="cat-toggle-list f-shelf-category-list"></div>
-         <small>Gilt für alle Bände von „${escapeHtml(group.label)}“.</small>
-       </div>`
+    ? `<details class="cat-details"${catDetailsOpen ? ' open' : ''}>
+         <summary><span class="row-label">Kategorien</span><span class="cat-details-value${group.categories.length ? '' : ' is-empty'}">${group.categories.length ? escapeHtml(group.categories.map(c=>c.name).sort((a,b)=>a.localeCompare(b,'de')).join(', ')) : 'Keine'}</span></summary>
+         <div class="cat-details-body">
+           <div class="cat-toggle-list f-shelf-category-list"></div>
+           <small>Gilt für alle Bände von „${escapeHtml(group.label)}“.</small>
+         </div>
+       </details>`
     : `<p class="detail-row"><span class="row-label">Kategorien</span><span class="row-value">${escapeHtml(group.categories.map(c=>c.name).join(', '))}</span></p>`;
 
   const st = bookStatus(book);
@@ -998,7 +1082,10 @@ function buildDetailCard(book, group, owner){
   });
 
   if(owner){
-    renderCategoryToggleList(wrap.querySelector('.f-shelf-category-list'), group.key, group.categoryIds);
+    wrap.querySelector('.cat-details').addEventListener('toggle', e=>{ catDetailsOpen = e.target.open; });
+    // render() baut die Buchdetails nach jeder Änderung neu; danach steht der Fokus wieder auf „+ Neue Kategorie“.
+    mountCategoryEditor(wrap.querySelector('.f-shelf-category-list'), group.key, group.categoryIds,
+      ()=>document.querySelector('#bookDetailPanel .f-shelf-category-list .cat-new')?.focus());
 
     const coverBtn = wrap.querySelector('.cover-btn');
     if(coverBtn) coverBtn.addEventListener('click', ()=>openCoverModal(book));

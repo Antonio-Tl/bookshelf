@@ -1143,21 +1143,183 @@ h1 {
 .shelf-search {
   width: 260px;
 }
+/* Filter in eigener Zeile unter Suche und Aktionen: Status-Mulde, Kategorie-Menü, rechts die Trefferzahl. */
 .filter-bar {
+  order: 3;
   display: flex;
-  gap: 6px;
-  flex: 1;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 1 1 100%;
   min-width: 0;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.filter-bar::-webkit-scrollbar {
+.filter-bar:empty {
   display: none;
 }
-.filter-bar.fade-end {
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+.status-filter button {
+  white-space: nowrap;
+}
+.status-filter .filter-count {
+  margin-left: 3px;
+}
+.cat-filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink-2);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+@media (hover: hover) {
+  .cat-filter:not(.active):hover {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+}
+.cat-filter.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+.cat-filter-trigger,
+.cat-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.cat-filter-trigger {
+  gap: 6px;
+  max-width: 220px;
+  padding: 0 12px 0 14px;
+  border-radius: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cat-filter-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-filter-trigger svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+.cat-filter-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.cat-filter.active .cat-filter-trigger {
+  padding-right: 8px;
+}
+.cat-filter-clear {
+  justify-content: center;
+  width: 32px;
+  padding: 0 6px 0 0;
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  opacity: 0.7;
+}
+.cat-filter-clear:hover {
+  opacity: 1;
+}
+.cat-filter-clear svg {
+  width: 14px;
+  height: 14px;
+}
+.cat-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: 260px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  color: var(--ink);
+  animation: pop-in 0.18s var(--ease-out);
+  transform-origin: top left;
+  /* Beim Hineinscrollen Abstand zur festen Kopfleiste und zum unteren Rand. */
+  scroll-margin: 80px 0 16px;
+}
+.cat-menu-list {
+  max-height: min(360px, calc(100vh - 260px));
+  max-height: min(360px, calc(100dvh - 260px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+}
+.cat-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.cat-menu-item span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-menu-item:hover,
+.cat-menu-item:focus-visible {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.cat-menu-item[data-empty] {
+  color: var(--dim);
+}
+/* Gewählte Kategorie: fett mit Haken, wie ein Häkchen im Menü und nicht als zweite Farbe. */
+.cat-menu-item[aria-pressed="true"] {
+  color: var(--ink);
+  font-weight: 650;
+}
+.cat-menu-item[aria-pressed="true"]::after {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 10px;
+  margin: 0 3px 3px 0;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.filter-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 0 auto;
+  color: var(--dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.filter-summary .link-btn {
+  font-size: 13px;
 }
 .toolbar-end {
   display: flex;
@@ -1306,8 +1468,7 @@ h1 {
   box-shadow: 0 1px 2px rgba(20, 20, 20, 0.12);
 }
 /* Symbole nur auf dem Handy, dort ersetzen sie die Beschriftung. */
-.seg svg,
-#openCatBtn svg {
+.seg svg {
   display: none;
 }
 
@@ -2477,6 +2638,61 @@ input[type="date"]::-webkit-date-and-time-value {
   line-height: 1.5;
 }
 .detail-block small {
+  display: block;
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 13px;
+}
+/* Kategorien in den Buchdetails: eingeklappt eine Zeile wie die anderen, aufgeklappt die Chips. */
+.cat-details {
+  border-bottom: 1px solid var(--line-soft);
+}
+.cat-details summary {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  list-style: none;
+  cursor: pointer;
+}
+.cat-details summary::-webkit-details-marker {
+  display: none;
+}
+.cat-details summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin: -4px 4px 0 0;
+  border-right: 1.6px solid var(--dim);
+  border-bottom: 1.6px solid var(--dim);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.cat-details[open] summary::after {
+  margin-top: 4px;
+  transform: rotate(-135deg);
+}
+.cat-details summary:hover::after {
+  border-color: var(--ink);
+}
+.cat-details-value {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-details-value.is-empty {
+  color: var(--dim);
+  font-weight: 400;
+}
+.cat-details[open] .cat-details-value {
+  visibility: hidden;
+}
+.cat-details-body {
+  padding: 2px 0 16px;
+}
+.cat-details-body small {
   display: block;
   margin-top: 8px;
   color: var(--dim);
@@ -3864,6 +4080,39 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
 .cat-toggle.cat-new:hover:not(:disabled) {
   color: var(--ink);
 }
+/* Kategorie, die keine Reihe nutzt: im Chip ein × zum Löschen. */
+.cat-unused {
+  position: relative;
+  display: inline-flex;
+}
+.cat-unused .cat-toggle {
+  padding-right: 32px;
+}
+.cat-delete {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.cat-delete svg {
+  width: 12px;
+  height: 12px;
+}
+.cat-delete:hover,
+.cat-delete:focus-visible {
+  background: var(--red-soft);
+  color: var(--red-hover);
+}
 .suggest-genres {
   display: flex;
   flex-wrap: wrap;
@@ -3891,65 +4140,6 @@ html[data-theme="oak"] .btn-support:hover:not(:disabled) {
     opacity: 0;
     transform: translateY(14px) scale(0.98);
   }
-}
-
-.cat-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 18px;
-}
-.field .cat-chip-list {
-  margin-top: 0;
-}
-.cat-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  height: 32px;
-  padding: 0 4px 0 12px;
-  border-radius: var(--r-pill);
-  background: var(--surface-2);
-  border: 1px solid var(--line-soft);
-  font-size: 13px;
-  font-weight: 600;
-}
-.cat-chip button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 50%;
-  background: none;
-  color: var(--dim);
-  cursor: pointer;
-  padding: 0;
-}
-.cat-chip button svg {
-  width: 12px;
-  height: 12px;
-}
-.cat-chip button:hover {
-  background: var(--red-soft);
-  color: var(--red-hover);
-}
-.cat-empty {
-  margin: 0;
-  color: var(--dim);
-  font-size: 14px;
-}
-.add-cat-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-}
-.field .add-cat-row {
-  margin-top: 0;
-}
-.add-cat-row input {
-  flex: 1;
 }
 
 /* ---------- empty states ---------- */
@@ -6075,14 +6265,8 @@ body:has(#homeView:not(.hidden)) .site-legal {
   .header-actions {
     order: 1;
   }
-  .toolbar .seg {
+  .toolbar-end .seg {
     order: 2;
-  }
-  .filter-bar {
-    order: 3;
-    flex: 1 1 0;
-    margin-right: -28px;
-    padding-right: 28px;
   }
 }
 
@@ -6108,10 +6292,6 @@ body:has(#homeView:not(.hidden)) .site-legal {
   .page {
     padding: 18px 16px 80px;
   }
-  .filter-bar {
-    margin-right: -16px;
-    padding-right: 16px;
-  }
   .shelf-head {
     align-items: flex-start;
     flex-direction: column;
@@ -6124,10 +6304,10 @@ body:has(#homeView:not(.hidden)) .site-legal {
   /* Zwei feste Zeilen: Suche mit den Aktionen, darunter Ansicht und Filter. */
   .toolbar {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "search search cat scan add"
-      "view   chips  chips chips chips";
+      "search search scan add"
+      "view   catf   catf catf";
     gap: 12px 8px;
     align-items: center;
     padding: 8px 0 14px;
@@ -6139,37 +6319,55 @@ body:has(#homeView:not(.hidden)) .site-legal {
   .shelf-search {
     grid-area: search;
   }
-  #openCatBtn {
-    grid-area: cat;
-  }
   #openScanBtn {
     grid-area: scan;
   }
   #openAddBtn {
     grid-area: add;
   }
-  .toolbar .seg {
+  .toolbar-end .seg {
     grid-area: view;
   }
+  /* Am Handy: Kategorie neben der Ansicht, darunter der Status als Reiter über die volle Breite. */
   .filter-bar {
-    grid-area: chips;
+    display: contents;
   }
-  .filter-bar .filter-pill {
+  .cat-filter {
+    grid-area: catf;
     height: 36px;
   }
-  #openCatBtn,
+  .cat-filter-trigger {
+    flex: 1;
+    justify-content: space-between;
+    max-width: none;
+    min-width: 0;
+  }
+  .cat-menu {
+    right: 0;
+    width: auto;
+  }
+  .status-filter {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: flex;
+  }
+  .status-filter button {
+    flex: 1 1 auto;
+    padding: 0 8px;
+  }
+  .filter-summary {
+    display: none;
+  }
   #openScanBtn,
   #openAddBtn {
     width: 40px;
     padding: 0;
   }
-  #openCatBtn span,
   #openScanBtn span,
   #openAddBtn span,
-  .toolbar .seg span {
+  .toolbar-end .seg span {
     display: none;
   }
-  #openCatBtn svg,
   #openScanBtn svg {
     display: block;
     width: 18px;
@@ -6179,7 +6377,7 @@ body:has(#homeView:not(.hidden)) .site-legal {
     width: 18px;
     height: 18px;
   }
-  .toolbar .seg button {
+  .toolbar-end .seg button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -6188,7 +6386,7 @@ body:has(#homeView:not(.hidden)) .site-legal {
     padding: 0;
     border-radius: 8px;
   }
-  .toolbar .seg svg {
+  .toolbar-end .seg svg {
     display: block;
     width: 17px;
     height: 17px;
@@ -6548,6 +6746,9 @@ body:has(#homeView:not(.hidden)) .site-legal {
   .detail-row {
     grid-template-columns: 96px minmax(0, 1fr);
   }
+  .cat-details summary {
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+  }
   .detail-block textarea {
     min-height: 140px;
   }
@@ -6659,6 +6860,9 @@ body:has(#homeView:not(.hidden)) .site-legal {
     bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
+.status-filter.compact .filter-count {
+  display: none;
+}
 
 @media (min-width: 1024px) {
   /* Auf großen Screens steht die Schublade neben dem Regal statt davor: keine Abdunklung,
@@ -6718,12 +6922,6 @@ body:has(#homeView:not(.hidden)) .site-legal {
   left: auto;
   right: 12px;
   transform: none;
-}
-.filter-sep {
-  flex: none;
-  width: 1px;
-  margin: 6px 4px;
-  background: var(--line);
 }
 .filter-count {
   margin-left: 2px;

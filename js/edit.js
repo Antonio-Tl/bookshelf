@@ -1048,59 +1048,6 @@ function closeCoverZoom(){
 }
 coverZoomOverlay.addEventListener('click', closeCoverZoom);
 
-// ---- Category management modal ----
-const catOverlay = document.getElementById('catModalOverlay');
-
-function renderCatChips(containerId, afterDelete){
-  const list = document.getElementById(containerId);
-  if(categories.length === 0){
-    list.innerHTML = '<p class="cat-empty">Noch keine Kategorien angelegt.</p>';
-    return;
-  }
-  list.innerHTML = categories.map(c=>`<span class="cat-chip">${escapeHtml(c.name)}<button type="button" data-id="${escapeHtml(c.id)}" aria-label="${escapeHtml(c.name)} löschen">${ICON_CLOSE}</button></span>`).join('');
-  list.querySelectorAll('button').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const id = btn.getAttribute('data-id');
-      const cat = categories.find(c=>c.id===id);
-      const { error } = await db('categories').delete().eq('id', id);
-      if(error){ showToast('Fehler beim Löschen'); return; }
-      if(cat && activeCategory === cat.name) activeCategory = null;
-      await loadShelfData(viewedProfile.id);
-      renderCatChips(containerId, afterDelete);
-      render();
-      if(afterDelete) afterDelete();
-    });
-  });
-}
-
-document.getElementById('openCatBtn').addEventListener('click', ()=>{
-  if(!isOwnerView()) return;
-  renderCatChips('catChipList');
-  document.getElementById('newCatInput').value='';
-  catOverlay.classList.remove('hidden');
-});
-document.getElementById('closeCatBtn').addEventListener('click', ()=>catOverlay.classList.add('hidden'));
-catOverlay.addEventListener('click', (e)=>{ if(e.target===catOverlay) catOverlay.classList.add('hidden'); });
-
-document.getElementById('addCatBtn').addEventListener('click', async ()=>{
-  const input = document.getElementById('newCatInput');
-  const val = input.value.trim();
-  if(!val) return;
-  if(categories.some(c=>c.name.toLowerCase()===val.toLowerCase())){
-    showToast('Kategorie existiert bereits');
-    return;
-  }
-  const { error } = await db('categories').insert({ name: val });
-  if(error){ showToast('Fehler beim Anlegen'); return; }
-  input.value='';
-  await loadShelfData(viewedProfile.id);
-  renderCatChips('catChipList');
-  render();
-});
-document.getElementById('newCatInput').addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('addCatBtn').click(); }
-});
-
 // ---- Reihen-Modal (Titel + Kategorien), geöffnet über den Bearbeiten-Knopf einer Reihe ----
 const shelfCatOverlay = document.getElementById('shelfCatModalOverlay');
 const shelfCatToggleList = document.getElementById('shelfCatToggleList');
@@ -1224,37 +1171,61 @@ function openShelfCatModal(key, label){
   shelfCatOverlay.classList.remove('hidden');
 }
 
-// Eine Liste: antippen ordnet zu, „+ Neue Kategorie“ legt direkt eine an und ordnet sie gleich zu.
-// Löschen geht im Kategorien-Fenster der Werkzeugleiste.
 function refreshShelfCatToggleList(){
   const shelf = shelves.find(s=>s.id===currentShelfKey);
-  renderCategoryToggleList(shelfCatToggleList, currentShelfKey, shelf ? shelf.categoryIds : []);
-  const empty = shelfCatToggleList.querySelector('.cat-toggle-empty');
-  if(empty) empty.remove();
-  shelfCatToggleList.insertAdjacentHTML('beforeend', '<button type="button" class="cat-toggle cat-new">+ Neue Kategorie</button>');
-  shelfCatToggleList.querySelector('.cat-new').addEventListener('click', openShelfNewCat);
+  mountCategoryEditor(shelfCatToggleList, currentShelfKey, shelf ? shelf.categoryIds : [], refreshShelfCatToggleList);
 }
 
-function openShelfNewCat(){
-  const chip = shelfCatToggleList.querySelector('.cat-new');
+// Kategorien einer Reihe, in den Buchdetails und im Reihen-Fenster: antippen ordnet zu,
+// „+ Neue Kategorie“ legt eine an und ordnet sie gleich zu. Nutzt keine Reihe eine Kategorie mehr,
+// trägt sie ein × zum Löschen; benutzte werden erst an allen Reihen abgewählt.
+// afterChange baut die Liste nach dem Speichern neu auf, falls render() sie nicht ohnehin neu zeichnet.
+function mountCategoryEditor(listEl, shelfId, currentIds, afterChange){
+  renderCategoryToggleList(listEl, shelfId, currentIds);
+  listEl.querySelector('.cat-toggle-empty')?.remove();
+  listEl.querySelectorAll('.cat-toggle[data-id]').forEach(btn=>{
+    const id = btn.getAttribute('data-id');
+    if(shelves.some(s=>s.categoryIds.includes(id))) return;
+    const name = categoryNameById(id);
+    const wrap = document.createElement('span');
+    wrap.className = 'cat-unused';
+    btn.replaceWith(wrap);
+    wrap.append(btn);
+    wrap.insertAdjacentHTML('beforeend', `<button type="button" class="cat-delete" aria-label="„${escapeHtml(name)}“ löschen" title="Löschen, keine Reihe nutzt sie">${ICON_CLOSE}</button>`);
+    wrap.querySelector('.cat-delete').addEventListener('click', async ()=>{
+      const { error } = await db('categories').delete().eq('id', id);
+      if(error){ showToast('Fehler beim Löschen'); return; }
+      if(activeCategory === name) activeCategory = null;
+      await refreshAndRender();
+      if(afterChange) afterChange();
+      showToast(`„${name}“ gelöscht`);
+    });
+  });
+  listEl.insertAdjacentHTML('beforeend', '<button type="button" class="cat-toggle cat-new">+ Neue Kategorie</button>');
+  listEl.querySelector('.cat-new').addEventListener('click', ()=>openNewCategoryField(listEl, shelfId, afterChange));
+}
+
+function openNewCategoryField(listEl, shelfId, afterChange){
+  const chip = listEl.querySelector('.cat-new');
   const form = document.createElement('form');
   form.className = 'cat-new-form';
   form.innerHTML = `<input type="text" maxlength="30" placeholder="Name" aria-label="Neue Kategorie" enterkeyhint="done"><button type="submit" aria-label="Anlegen">${ICON_CHECK}</button>`;
   chip.replaceWith(form);
   const input = form.querySelector('input');
+  const restore = ()=>{ form.replaceWith(chip); chip.focus(); };
   input.focus();
   input.addEventListener('keydown', e=>{
-    if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); refreshShelfCatToggleList(); }
+    if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); restore(); }
   });
   // Leer verlassen: wieder der Chip. Ein Tipp auf den Haken zählt nicht als Verlassen.
   input.addEventListener('blur', ()=>setTimeout(()=>{
-    if(form.isConnected && !input.value.trim() && !form.contains(document.activeElement)) refreshShelfCatToggleList();
+    if(form.isConnected && !input.value.trim() && !form.contains(document.activeElement)) form.replaceWith(chip);
   }, 150));
   form.addEventListener('submit', async e=>{
     e.preventDefault();
     const name = input.value.trim();
     if(!name){ input.focus(); return; }
-    const shelf = shelves.find(s=>s.id===currentShelfKey);
+    const shelf = shelves.find(s=>s.id===shelfId);
     let cat = categories.find(c=>c.name.toLowerCase() === name.toLowerCase());
     if(!cat){
       const { data, error } = await db('categories').insert({ name }).select().single();
@@ -1262,10 +1233,10 @@ function openShelfNewCat(){
       cat = data;
     }
     if(!(shelf && shelf.categoryIds.includes(cat.id))){
-      if(!await toggleShelfCategory(currentShelfKey, cat.id, true)) return;
+      if(!await toggleShelfCategory(shelfId, cat.id, true)) return;
     }
     await refreshAndRender();
-    refreshShelfCatToggleList();
+    if(afterChange) afterChange();
     showToast(`„${cat.name}“ zugeordnet`);
   });
 }
